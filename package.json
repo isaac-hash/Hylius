@@ -1,11 +1,11 @@
 {
-  "name": "anvil",
+  "name": "hylis",
   "version": "1.0.0",
   "type": "module",
   "description": "A CLI tool to initialize and manage Docker configurations for development",
   "main": "dist/index.js",
   "bin": {
-    "anvil": "./dist/index.js"
+    "hylis": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -24,11 +24,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/isaac-hash/anvil.git"
+    "url": "https://github.com/isaac-hash/hylis.git"
   },
-  "homepage": "https://github.com/isaac-hash/anvil#readme",
+  "homepage": "https://github.com/isaac-hash/hylis#readme",
   "bugs": {
-    "url": "https://github.com/isaac-hash/anvil/issues"
+    "url": "https://github.com/isaac-hash/hylis/issues"
   },
   "engines": {
     "node": ">=18.0.0"

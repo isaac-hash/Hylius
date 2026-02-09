@@ -9,7 +9,7 @@ import { writeConfig, getProjectName } from '../utils/config.js';
 import * as templates from '../templates/index.js';
 
 export const initCommand = new Command('init')
-  .description('Initialize a new anvil project')
+  .description('Initialize a new hylis project')
   .option('--skip-docker', "Don't run docker init")
   .option('--skip-ci', "Don't generate GitHub Actions workflow")
   .action(async (options) => {
@@ -23,7 +23,7 @@ export const initCommand = new Command('init')
     // Run docker init unless skipped
     if (!options.skipDocker) {
       if (projectType !== 'unknown') {
-        console.log(chalk.green(`✨ ${capitalize(projectType)} detected. Using anvil optimized setup...\n`));
+        console.log(chalk.green(`✨ ${capitalize(projectType)} detected. Using hylis optimized setup...\n`));
         
         const spinner = ora('Generating Docker configuration...').start();
         try {
@@ -45,14 +45,14 @@ export const initCommand = new Command('init')
       }
     }
 
-    // Generate anvil.yaml
-    const spinner = ora('Creating anvil.yaml...').start();
+    // Generate hylis.yaml
+    const spinner = ora('Creating hylis.yaml...').start();
     const config = {
       project_name: getProjectName(),
       type: projectType,
     };
     writeConfig(config);
-    spinner.succeed(chalk.green('Created anvil.yaml'));
+    spinner.succeed(chalk.green('Created hylis.yaml'));
 
     // Generate basic GitHub Actions CI
     if (!options.skipCi) {
@@ -76,10 +76,10 @@ jobs:
       ciSpinner.succeed(chalk.green('Created .github/workflows/ci.yaml'));
     }
 
-    console.log(chalk.green.bold('\n🚀 anvil initialization complete!'));
+    console.log(chalk.green.bold('\n🚀 hylis initialization complete!'));
     console.log(chalk.cyan(`\nNext steps:`));
-    console.log(chalk.white(`  $ ${chalk.bold('anvil dev')}  ${chalk.dim('# Start development environment')}`));
-    console.log(chalk.white(`  $ ${chalk.bold('anvil build')} ${chalk.dim('# Build production image')}\n`));
+    console.log(chalk.white(`  $ ${chalk.bold('hylis dev')}  ${chalk.dim('# Start development environment')}`));
+    console.log(chalk.white(`  $ ${chalk.bold('hylis build')} ${chalk.dim('# Build production image')}\n`));
   });
 
 function capitalize(str: string): string {

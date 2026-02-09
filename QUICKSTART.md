@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-This guide will help you get anvil TypeScript up and running and pushed to GitHub.
+This guide will help you get hylis TypeScript up and running and pushed to GitHub.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ This guide will help you get anvil TypeScript up and running and pushed to GitHu
 
 ```bash
 # Create project directory
-mkdir anvil-ts
-cd anvil-ts
+mkdir hylis-ts
+cd hylis-ts
 
 # Download all the files from the outputs folder
 # Place them in the correct structure as shown in README.md
@@ -66,17 +66,17 @@ git init
 git add .
 
 # Create initial commit
-git commit -m "Initial commit: anvil TypeScript CLI"
+git commit -m "Initial commit: hylis TypeScript CLI"
 
 # Create repository on GitHub, then:
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/anvil.git
+git remote add origin https://github.com/isaac-hash/hylis.git
 git push -u origin main
 ```
 
 ### 4. Install Globally (Optional)
 
-To use `anvil` command anywhere on your system:
+To use `hylis` command anywhere on your system:
 
 ```bash
 npm link
@@ -84,21 +84,21 @@ npm link
 
 Now you can run:
 ```bash
-anvil --help
-anvil init
-anvil dev
-anvil build
+hylis --help
+hylis init
+hylis dev
+hylis build
 ```
 
 ### 5. Publish to npm (Optional)
 
-If you want others to install via `npm install -g anvil`:
+If you want others to install via `npm install -g hylis`:
 
 ```bash
 # Login to npm
 npm login
 
-# Publish (make sure to update package name if 'anvil' is taken)
+# Publish (make sure to update package name if 'hylis' is taken)
 npm publish
 ```
 
@@ -112,11 +112,11 @@ mkdir test-project
 cd test-project
 npm init -y
 
-# Initialize with anvil
-anvil init
+# Initialize with hylis
+hylis init
 
 # Start development
-anvil dev
+hylis dev
 ```
 
 ## Troubleshooting

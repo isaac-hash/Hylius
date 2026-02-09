@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# anvil TypeScript - GitHub Setup Script
+# hylis TypeScript - GitHub Setup Script
 # This script helps you initialize git and push to GitHub
 
-echo "🚀 anvil TypeScript - GitHub Setup"
+echo "🚀 hylis TypeScript - GitHub Setup"
 echo "===================================="
 echo ""
 
@@ -28,7 +28,7 @@ git add .
 
 # Create initial commit
 echo "💾 Creating initial commit..."
-git commit -m "Initial commit: anvil TypeScript CLI
+git commit -m "Initial commit: hylis TypeScript CLI
 
 - Converted from Go to TypeScript
 - Using Commander.js for CLI framework

@@ -1,4 +1,4 @@
-# anvil
+# hylis
 
 A CLI tool to initialize and manage Docker configurations for development projects with beautiful colored terminal output.
 
@@ -18,8 +18,8 @@ A CLI tool to initialize and manage Docker configurations for development projec
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/anvil.git
-cd anvil
+git clone https://github.com/isaac-hash/hylis.git
+cd hylis
 
 # Install dependencies
 npm install
@@ -34,7 +34,7 @@ npm link
 ### Using npm (once published)
 
 ```bash
-npm install -g anvil
+npm install -g hylis
 ```
 
 ## Usage
@@ -43,32 +43,32 @@ npm install -g anvil
 
 ```bash
 # Initialize with automatic detection
-anvil init
+hylis init
 
 # Skip Docker initialization
-anvil init --skip-docker
+hylis init --skip-docker
 
 # Skip CI workflow generation
-anvil init --skip-ci
+hylis init --skip-ci
 ```
 
 ### Start Development Environment
 
 ```bash
 # Start in foreground
-anvil dev
+hylis dev
 
 # Start in detached mode
-anvil dev -d
+hylis dev -d
 
 # Enable hot-reload (watch mode)
-anvil dev --watch
+hylis dev --watch
 ```
 
 ### Build Production Image
 
 ```bash
-anvil build
+hylis build
 ```
 
 This will create Docker images with tags:
@@ -88,7 +88,7 @@ This will create Docker images with tags:
 ## Project Structure
 
 ```
-anvil/
+hylis/
 ├── src/
 │   ├── commands/
 │   │   ├── root.ts      # Main CLI program
@@ -137,7 +137,7 @@ See `examples/colored-output.ts` for comprehensive examples of all coloring opti
 
 ## Configuration
 
-anvil creates a `anvil.yaml` file in your project:
+hylis creates a `hylis.yaml` file in your project:
 
 ```yaml
 project_name: my-app
