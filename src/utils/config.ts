@@ -9,7 +9,7 @@ export interface Config {
 
 export function loadConfig(): Config | null {
   try {
-    const data = fs.readFileSync('hylis.yaml', 'utf8');
+    const data = fs.readFileSync('hylius.yaml', 'utf8');
     return yaml.load(data) as Config;
   } catch (error) {
     return null;
@@ -18,7 +18,7 @@ export function loadConfig(): Config | null {
 
 export function writeConfig(config: Config): void {
   const yamlStr = yaml.dump(config);
-  fs.writeFileSync('hylis.yaml', yamlStr, 'utf8');
+  fs.writeFileSync('hylius.yaml', yamlStr, 'utf8');
 }
 
 export function getProjectName(): string {

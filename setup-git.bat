@@ -1,9 +1,9 @@
 @echo off
-REM hylis TypeScript - GitHub Setup Script (Windows)
+REM hylius TypeScript - GitHub Setup Script (Windows)
 REM This script helps you initialize git and push to GitHub
 
 echo.
-echo 🚀 hylis TypeScript - GitHub Setup
+echo 🚀 hylius TypeScript - GitHub Setup
 echo ====================================
 echo.
 
@@ -29,7 +29,7 @@ git add .
 
 REM Create initial commit
 echo 💾 Creating initial commit...
-git commit -m "Initial commit: hylis TypeScript CLI" -m "" -m "- Converted from Go to TypeScript" -m "- Using Commander.js for CLI framework" -m "- Added chalk for colored output" -m "- Added ora for loading spinners" -m "- Supports Node.js, Python, Go, Java, PHP projects" -m "- Auto-generates Docker configs and GitHub Actions workflows"
+git commit -m "Initial commit: hylius TypeScript CLI" -m "" -m "- Converted from Go to TypeScript" -m "- Using Commander.js for CLI framework" -m "- Added chalk for colored output" -m "- Added ora for loading spinners" -m "- Supports Node.js, Python, Go, Java, PHP projects" -m "- Auto-generates Docker configs and GitHub Actions workflows"
 
 echo.
 echo ✅ Local repository ready!

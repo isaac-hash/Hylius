@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# hylis TypeScript - GitHub Setup Script
+# hylius TypeScript - GitHub Setup Script
 # This script helps you initialize git and push to GitHub
 
-echo "🚀 hylis TypeScript - GitHub Setup"
+echo "🚀 hylius TypeScript - GitHub Setup"
 echo "===================================="
 echo ""
 
@@ -28,7 +28,7 @@ git add .
 
 # Create initial commit
 echo "💾 Creating initial commit..."
-git commit -m "Initial commit: hylis TypeScript CLI
+git commit -m "Initial commit: hylius TypeScript CLI
 
 - Converted from Go to TypeScript
 - Using Commander.js for CLI framework

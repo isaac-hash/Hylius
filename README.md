@@ -1,4 +1,4 @@
-# hylis
+# hylius
 
 A CLI tool to initialize and manage Docker configurations for development projects with beautiful colored terminal output.
 
@@ -14,12 +14,19 @@ A CLI tool to initialize and manage Docker configurations for development projec
 
 ## Installation
 
+
+### Using npm
+
+```bash
+npm install -g hylius
+```
+
 ### From Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/isaac-hash/hylis.git
-cd hylis
+git clone https://github.com/isaac-hash/hylius.git
+cd hylius
 
 # Install dependencies
 npm install
@@ -31,11 +38,6 @@ npm run build
 npm link
 ```
 
-### Using npm (once published)
-
-```bash
-npm install -g hylis
-```
 
 ## Usage
 
@@ -43,32 +45,32 @@ npm install -g hylis
 
 ```bash
 # Initialize with automatic detection
-hylis init
+hylius init
 
 # Skip Docker initialization
-hylis init --skip-docker
+hylius init --skip-docker
 
 # Skip CI workflow generation
-hylis init --skip-ci
+hylius init --skip-ci
 ```
 
 ### Start Development Environment
 
 ```bash
 # Start in foreground
-hylis dev
+hylius dev
 
 # Start in detached mode
-hylis dev -d
+hylius dev -d
 
 # Enable hot-reload (watch mode)
-hylis dev --watch
+hylius dev --watch
 ```
 
 ### Build Production Image
 
 ```bash
-hylis build
+hylius build
 ```
 
 This will create Docker images with tags:
@@ -88,7 +90,7 @@ This will create Docker images with tags:
 ## Project Structure
 
 ```
-hylis/
+hylius/
 ├── src/
 │   ├── commands/
 │   │   ├── root.ts      # Main CLI program
@@ -137,7 +139,7 @@ See `examples/colored-output.ts` for comprehensive examples of all coloring opti
 
 ## Configuration
 
-hylis creates a `hylis.yaml` file in your project:
+hylius creates a `hylius.yaml` file in your project:
 
 ```yaml
 project_name: my-app

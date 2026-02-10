@@ -35,14 +35,14 @@ console.log(chalk.bgGreen.black(' Success '));
 console.log(chalk.bgYellow.black(' Warning '));
 
 // Template literals
-const name = 'hylis';
+const name = 'hylius';
 const version = '1.0.0';
 console.log(chalk.blue(`\nRunning ${chalk.bold(name)} v${version}`));
 
 // Complex formatting
 console.log(chalk.cyan('\nNext steps:'));
-console.log(chalk.white(`  $ ${chalk.bold('hylis dev')}  ${chalk.dim('# Start development')}`));
-console.log(chalk.white(`  $ ${chalk.bold('hylis build')} ${chalk.dim('# Build production image')}`));
+console.log(chalk.white(`  $ ${chalk.bold('hylius dev')}  ${chalk.dim('# Start development')}`));
+console.log(chalk.white(`  $ ${chalk.bold('hylius build')} ${chalk.dim('# Build production image')}`));
 
 // RGB colors (for more precise colors)
 console.log(chalk.rgb(123, 45, 67)('\nCustom RGB color'));
@@ -94,7 +94,7 @@ async function example4() {
     color: 'cyan',
     spinner: 'dots'
   }).start();
-  
+
   await new Promise(resolve => setTimeout(resolve, 2000));
   spinner.succeed(chalk.green('Download complete!'));
 }
@@ -105,7 +105,7 @@ async function example4() {
   await example2();
   await example3();
   await example4();
-  
+
   console.log(chalk.green.bold('\n✨ All examples complete!\n'));
 })();
 
