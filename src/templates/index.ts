@@ -246,3 +246,74 @@ export const phpCompose = `services:
     volumes:
       - .:/var/www/html
 `;
+// Laravel Template
+export const laravelDockerfile = `# Development stage
+FROM php:8.4-apache AS development
+WORKDIR /var/www/html
+COPY composer.json composer.lock ./
+COPY artisan ./
+COPY . .
+RUN apt-get update && apt-get install -y unzip
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+RUN composer install --no-interaction --optimize-autoloader
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
+ && a2enmod rewrite \
+ && echo "ServerName localhost" >> /etc/apache2/apache2.conf \
+ && chown -R www-data:www-data /var/www/html
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["apache2-foreground"]
+
+# Production stage
+FROM php:8.4-apache AS production
+WORKDIR /var/www/html
+COPY . .
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
+ && a2enmod rewrite \
+ && echo "ServerName localhost" >> /etc/apache2/apache2.conf \
+ && chown -R www-data:www-data /var/www/html
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["apache2-foreground"]
+`;
+
+export const laravelCompose = `services:
+  app:
+    build:
+      context: .
+      target: development
+    ports:
+      - "80:80"
+    volumes:
+      - .:/var/www/html
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+`;
+
+export const laravelEntrypoint = `#!/bin/sh
+set -e
+
+# Fix permissions for Laravel writable directories and database when the
+# project is bind-mounted into the container so the webserver can write files.
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database 2>/dev/null || true
+chmod -R 0775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database 2>/dev/null || true
+
+# Ensure sqlite database file exists and is writable
+if [ -d /var/www/html/database ]; then
+	if [ ! -f /var/www/html/database/database.sqlite ]; then
+		touch /var/www/html/database/database.sqlite || true
+	fi
+	chown www-data:www-data /var/www/html/database/database.sqlite 2>/dev/null || true
+	chmod 0664 /var/www/html/database/database.sqlite 2>/dev/null || true
+fi
+
+# Execute the container command (e.g. apache2-foreground)
+exec "$@"
+`;

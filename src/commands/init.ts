@@ -117,10 +117,15 @@ function generateConfig(projectType: string): void {
       compose = templates.javaCompose;
       break;
     case 'php':
-    case 'laravel':
     case 'laravel-package':
       dockerfile = templates.phpDockerfile;
       compose = templates.phpCompose;
+      break;
+    case 'laravel':
+      dockerfile = templates.laravelDockerfile;
+      compose = templates.laravelCompose;
+      fs.writeFileSync('docker-entrypoint.sh', templates.laravelEntrypoint, 'utf8');
+      console.log(chalk.gray(`   Created: docker-entrypoint.sh`));
       break;
     default:
       throw new Error(`Unsupported project type: ${projectType}`);
