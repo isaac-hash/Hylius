@@ -220,7 +220,7 @@ export const javaCompose = `services:
 
 // PHP Template (Apache)
 export const phpDockerfile = `# Development stage
-FROM php:8.2-apache AS development
+FROM php:8.4-apache AS development
 WORKDIR /var/www/html
 COPY composer.json composer.lock ./
 RUN apt-get update && apt-get install -y unzip

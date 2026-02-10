@@ -7,7 +7,8 @@ import { buildCommand } from './build.js';
 export const program = new Command()
   .name('hylius')
   .description(chalk.cyan('A CLI tool to initialize and manage Docker configurations for development'))
-  .version('1.0.0');
+  .version('1.0.4')
+  .helpOption('-h, --help', 'Display help information');
 
 // Add subcommands
 program.addCommand(initCommand);
