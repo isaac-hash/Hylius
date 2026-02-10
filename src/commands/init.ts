@@ -24,7 +24,7 @@ export const initCommand = new Command('init')
     if (!options.skipDocker) {
       if (projectType !== 'unknown') {
         console.log(chalk.green(`✨ ${capitalize(projectType)} detected. Using hylis optimized setup...\n`));
-        
+
         const spinner = ora('Generating Docker configuration...').start();
         try {
           generateConfig(projectType);
@@ -59,7 +59,7 @@ export const initCommand = new Command('init')
       const ciSpinner = ora('Creating GitHub Actions workflow...').start();
       const workflowDir = '.github/workflows';
       fs.mkdirSync(workflowDir, { recursive: true });
-      
+
       const ciContent = `name: CI
 on: [push, pull_request]
 jobs:
@@ -70,7 +70,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t \${{ secrets.DOCKER_REPO }} .
 `;
-      
+
       const ciPath = path.join(workflowDir, 'ci.yaml');
       fs.writeFileSync(ciPath, ciContent, 'utf8');
       ciSpinner.succeed(chalk.green('Created .github/workflows/ci.yaml'));
@@ -83,7 +83,7 @@ jobs:
   });
 
 function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  return str.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 
 function generateConfig(projectType: string): void {
@@ -117,6 +117,8 @@ function generateConfig(projectType: string): void {
       compose = templates.javaCompose;
       break;
     case 'php':
+    case 'laravel':
+    case 'laravel-package':
       dockerfile = templates.phpDockerfile;
       compose = templates.phpCompose;
       break;

@@ -10,6 +10,16 @@ export function checkFileExists(filename: string): boolean {
 }
 
 export function detectProjectType(): string {
+  if (checkFileExists('composer.json')) {
+    if (isLaravelApp()) {
+      return 'laravel';
+    }
+    if (isLaravelPackage()) {
+      return 'laravel-package';
+    }
+    return 'php';
+  }
+
   if (checkFileExists('package.json')) {
     // Differentiate between JS frameworks based on build tools
     if (isNextApp()) {
@@ -29,9 +39,6 @@ export function detectProjectType(): string {
   if (checkFileExists('pom.xml') || checkFileExists('build.gradle')) {
     return 'java';
   }
-  if (checkFileExists('composer.json')) {
-    return 'php';
-  }
   return 'unknown';
 }
 
@@ -43,6 +50,20 @@ function isViteApp(): boolean {
   return checkDependency('vite');
 }
 
+function isLaravelApp(): boolean {
+  return checkFileExists('artisan');
+}
+
+function isLaravelPackage(): boolean {
+  try {
+    const data = fs.readFileSync('composer.json', 'utf8');
+    const composer = JSON.parse(data);
+    return !!(composer.extra && composer.extra.laravel);
+  } catch {
+    return false;
+  }
+}
+
 function checkDependency(depName: string): boolean {
   try {
     const data = fs.readFileSync('package.json', 'utf8');
@@ -50,7 +71,7 @@ function checkDependency(depName: string): boolean {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
-    
+
     if (pkg.dependencies) {
       for (const key in pkg.dependencies) {
         if (key.includes(depName)) {
@@ -58,7 +79,7 @@ function checkDependency(depName: string): boolean {
         }
       }
     }
-    
+
     if (pkg.devDependencies) {
       for (const key in pkg.devDependencies) {
         if (key.includes(depName)) {
@@ -66,7 +87,7 @@ function checkDependency(depName: string): boolean {
         }
       }
     }
-    
+
     return false;
   } catch {
     return false;
