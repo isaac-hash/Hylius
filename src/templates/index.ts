@@ -1,11 +1,24 @@
 // --- JavaScript / TypeScript Ecosystem ---
 
 // Vite Template (React, Vue, Svelte, etc.) - CSR
-export const viteDockerfile = `# Development stage
+export const viteDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
 FROM node:22-alpine AS development
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.npm \\
+    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package-lock.json,target=package-lock.json \\
+    npm install
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY . .
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host"]
@@ -36,11 +49,24 @@ export const viteCompose = `services:
 `;
 
 // Next.js Template - SSR
-export const nextDockerfile = `# Development stage
+export const nextDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
 FROM node:22-alpine AS development
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.npm \\
+    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package-lock.json,target=package-lock.json \\
+    npm install
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY . .
 EXPOSE 3000
 # Ensure Host is 0.0.0.0 for Docker
@@ -49,8 +75,19 @@ CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
 # Production stage
 FROM node:22-alpine AS production
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.npm \\
+    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package-lock.json,target=package-lock.json \\
+    npm ci --omit=dev
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY . .
 RUN npm run build
 CMD ["npm", "start"]
@@ -71,11 +108,24 @@ export const nextCompose = `services:
 `;
 
 // Generic Node Template (Express, NestJS, etc.)
-export const nodeDockerfile = `# Development stage
+export const nodeDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
 FROM node:22-alpine AS development
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.npm \\
+    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package-lock.json,target=package-lock.json \\
+    npm install
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY . .
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
@@ -83,8 +133,19 @@ CMD ["npm", "run", "dev"]
 # Production stage
 FROM node:22-alpine AS production
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.npm \\
+    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package-lock.json,target=package-lock.json \\
+    npm ci --omit=dev
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY . .
 CMD ["npm", "start"]
 `;
@@ -114,11 +175,37 @@ dist
 // --- Generic Language Families ---
 
 // Python Template (Flask, Django, FastAPI)
-export const pythonDockerfile = `# Development stage
-FROM python:3.11-slim AS development
+export const pythonDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
+FROM python:3.12-slim AS development
+
+# Prevents Python from writing pyc files.
+ENV PYTHONDONTWRITEBYTECODE=1
+# Keeps Python from buffering stdout and stderr.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Create a non-privileged user.
+ARG UID=10001
+RUN adduser \
+    --disabled-password \\
+    --gecos "" \\
+    --home "/nonexistent" \\
+    --shell "/sbin/nologin" \\
+    --no-create-home \\
+    --uid "\${UID}" \\
+    appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.cache/pip \\
+    --mount=type=bind,source=requirements.txt,target=requirements.txt \\
+    python -m pip install -r requirements.txt
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY . .
 EXPOSE 8000
 # Adjust CMD based on your framework:
@@ -128,10 +215,29 @@ EXPOSE 8000
 CMD ["python", "-m", "http.server", "8000"]
 
 # Production stage
-FROM python:3.11-slim AS production
+FROM python:3.12-slim AS production
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+ARG UID=10001
+RUN adduser \
+    --disabled-password \\
+    --gecos "" \\
+    --home "/nonexistent" \\
+    --shell "/sbin/nologin" \\
+    --no-create-home \\
+    --uid "\${UID}" \\
+    appuser
+
+RUN --mount=type=cache,target=/root/.cache/pip \\
+    --mount=type=bind,source=requirements.txt,target=requirements.txt \\
+    python -m pip install -r requirements.txt
+
+USER appuser
+
 COPY . .
 # Adjust CMD for production:
 # FastAPI:  CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -150,31 +256,57 @@ export const pythonCompose = `services:
     volumes:
       - .:/app
     environment:
-      - FLASK_ENV=development
+      - PYTHON_ENV=development
       - PYTHONUNBUFFERED=1
 `;
 
 // Go Template (Generic)
-export const goDockerfile = `# Development stage
-FROM golang:1.22-alpine AS development
+export const goDockerfile = `# syntax=docker/dockerfile:1
+
+FROM golang:1.22-alpine AS base
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Development stage
+FROM base AS development
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/go/pkg/mod \\
+    --mount=type=bind,source=go.mod,target=go.mod \\
+    --mount=type=bind,source=go.sum,target=go.sum \\
+    go mod download
+
 # Install Air for hot reload
 RUN go install github.com/air-verse/air@latest
+
+# Switch to non-privileged user.
+USER appuser
+
+COPY . .
 CMD ["air"]
 
 # Build stage
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
+FROM base AS builder
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/go/pkg/mod \\
+    --mount=type=bind,source=go.mod,target=go.mod \\
+    --mount=type=bind,source=go.sum,target=go.sum \\
+    go mod download
+
 COPY . .
 RUN go build -o main .
 
 # Production stage
 FROM alpine:latest AS production
 WORKDIR /app
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
 COPY --from=builder /app/main .
+
+# Switch to non-privileged user.
+USER appuser
+
 CMD ["./main"]
 `;
 
@@ -191,18 +323,38 @@ export const goCompose = `services:
 `;
 
 // Java Template (Maven/Gradle generic-ish)
-export const javaDockerfile = `# Development stage
+export const javaDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
 FROM maven:3.9-eclipse-temurin-21 AS development
 WORKDIR /app
-COPY pom.xml .
-RUN mvn dependency:go-offline
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
+# Download dependencies using cache and bind mounts.
+RUN --mount=type=cache,target=/root/.m2 \\
+    --mount=type=bind,source=pom.xml,target=pom.xml \\
+    mvn dependency:go-offline
+
+# Switch to non-privileged user.
+USER appuser
+
 COPY src ./src
 CMD ["mvn", "spring-boot:run"]
 
 # Production stage
 FROM eclipse-temurin:21-jre-alpine AS production
 WORKDIR /app
+
+# Create a non-privileged user.
+RUN adduser -D -u 10001 appuser
+
 COPY --from=development /app/target/*.jar app.jar
+
+# Switch to non-privileged user.
+USER appuser
+
 CMD ["java", "-jar", "app.jar"]
 `;
 
@@ -219,21 +371,51 @@ export const javaCompose = `services:
 `;
 
 // PHP Template (Apache)
-export const phpDockerfile = `# Development stage
+export const phpDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
 FROM php:8.4-apache AS development
 WORKDIR /var/www/html
-COPY composer.json composer.lock ./
+
+# Create a non-privileged user.
+ARG UID=10001
+RUN adduser \\
+    --disabled-password \\
+    --gecos "" \\
+    --home "/nonexistent" \\
+    --shell "/sbin/nologin" \\
+    --no-create-home \\
+    --uid "\${UID}" \\
+    appuser
+
+# Download dependencies using cache and bind mounts.
 RUN apt-get update && apt-get install -y unzip
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-RUN composer install
+RUN --mount=type=cache,target=/root/.composer/cache \\
+    --mount=type=bind,source=composer.json,target=composer.json \\
+    --mount=type=bind,source=composer.lock,target=composer.lock \\
+    composer install
+
 COPY . .
 CMD ["apache2-foreground"]
 
 # Production stage
-FROM php:8.2-apache AS production
+FROM php:8.4-apache AS production
 WORKDIR /var/www/html
+
+# Create a non-privileged user.
+ARG UID=10001
+RUN adduser \\
+    --disabled-password \\
+    --gecos "" \\
+    --home "/nonexistent" \\
+    --shell "/sbin/nologin" \\
+    --no-create-home \\
+    --uid "\${UID}" \\
+    appuser
+
 COPY . .
-RUN chown -R www-data:www-data /var/www/html
+RUN chown -R appuser:appuser /var/www/html
 `;
 
 export const phpCompose = `services:
@@ -247,20 +429,39 @@ export const phpCompose = `services:
       - .:/var/www/html
 `;
 // Laravel Template
-export const laravelDockerfile = `# Development stage
+export const laravelDockerfile = `# syntax=docker/dockerfile:1
+
+# Development stage
 FROM php:8.4-apache AS development
 WORKDIR /var/www/html
-COPY composer.json composer.lock ./
-COPY artisan ./
-COPY . .
+
+# Create a non-privileged user.
+ARG UID=10001
+RUN adduser \\
+    --disabled-password \\
+    --gecos "" \\
+    --home "/nonexistent" \\
+    --shell "/sbin/nologin" \\
+    --no-create-home \\
+    --uid "\${UID}" \\
+    appuser
+
+# Download dependencies using cache and bind mounts.
 RUN apt-get update && apt-get install -y unzip
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-RUN composer install --no-interaction --optimize-autoloader
+RUN --mount=type=cache,target=/root/.composer/cache \\
+    --mount=type=bind,source=composer.json,target=composer.json \\
+    --mount=type=bind,source=composer.lock,target=composer.lock \\
+    composer install --no-interaction --optimize-autoloader
+
+COPY . .
+
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
-RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
- && a2enmod rewrite \
- && echo "ServerName localhost" >> /etc/apache2/apache2.conf \
- && chown -R www-data:www-data /var/www/html
+RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \\
+ && a2enmod rewrite \\
+ && echo "ServerName localhost" >> /etc/apache2/apache2.conf \\
+ && chown -R appuser:appuser /var/www/html
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
@@ -270,12 +471,26 @@ CMD ["apache2-foreground"]
 # Production stage
 FROM php:8.4-apache AS production
 WORKDIR /var/www/html
+
+# Create a non-privileged user.
+ARG UID=10001
+RUN adduser \\
+    --disabled-password \\
+    --gecos "" \\
+    --home "/nonexistent" \\
+    --shell "/sbin/nologin" \\
+    --no-create-home \\
+    --uid "\${UID}" \\
+    appuser
+
 COPY . .
+
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
-RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
- && a2enmod rewrite \
- && echo "ServerName localhost" >> /etc/apache2/apache2.conf \
- && chown -R www-data:www-data /var/www/html
+RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \\
+ && a2enmod rewrite \\
+ && echo "ServerName localhost" >> /etc/apache2/apache2.conf \\
+ && chown -R appuser:appuser /var/www/html
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
