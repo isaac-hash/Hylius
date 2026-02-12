@@ -19,11 +19,11 @@ RUN --mount=type=cache,target=/root/.npm \\
     npm install --no-save` : `\\
     npm install`}
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host"]
 
@@ -69,11 +69,11 @@ RUN --mount=type=cache,target=/root/.npm \\
     npm install --no-save` : `\\
     npm install`}
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 EXPOSE 3000
 # Ensure Host is 0.0.0.0 for Docker
 CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
@@ -92,11 +92,12 @@ RUN --mount=type=cache,target=/root/.npm \\
     npm ci --omit=dev` : `\\
     npm install --omit=dev`}
 
+COPY . .
+RUN chown -R appuser:appuser /app
+
 # Switch to non-privileged user.
 USER appuser
 
-COPY . .
-RUN chown -R appuser:appuser /app
 RUN npm run build
 CMD ["npm", "start"]
 `;
@@ -132,11 +133,11 @@ RUN --mount=type=cache,target=/root/.npm \\
     npm install --no-save` : `\\
     npm install`}
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
@@ -154,11 +155,11 @@ RUN --mount=type=cache,target=/root/.npm \\
     npm ci --omit=dev` : `\\
     npm install --omit=dev`}
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 CMD ["npm", "start"]
 `;
 
@@ -215,11 +216,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \\
     --mount=type=bind,source=requirements.txt,target=requirements.txt \\
     python -m pip install -r requirements.txt
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 EXPOSE 8000
 # Adjust CMD based on your framework:
 # FastAPI:  CMD ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
@@ -249,10 +250,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \\
     --mount=type=bind,source=requirements.txt,target=requirements.txt \\
     python -m pip install -r requirements.txt
 
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 # Adjust CMD for production:
 # FastAPI:  CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 # Flask:    CMD ["gunicorn", "-b", "0.0.0.0:8000", "app:app"]
@@ -293,11 +295,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \\
 # Install Air for hot reload
 RUN go install github.com/air-verse/air@latest
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY . .
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 CMD ["air"]
 
 # Build stage
@@ -318,6 +320,7 @@ WORKDIR /app
 RUN adduser -D -u 10001 appuser
 
 COPY --from=builder /app/main .
+RUN chown -R appuser:appuser /app
 
 # Switch to non-privileged user.
 USER appuser
@@ -352,11 +355,11 @@ RUN --mount=type=cache,target=/root/.m2 \\
     --mount=type=bind,source=pom.xml,target=pom.xml \\
     mvn dependency:go-offline
 
-# Switch to non-privileged user.
-USER appuser
-
 COPY src ./src
 RUN chown -R appuser:appuser /app
+
+# Switch to non-privileged user.
+USER appuser
 CMD ["mvn", "spring-boot:run"]
 
 # Production stage
@@ -367,6 +370,7 @@ WORKDIR /app
 RUN adduser -D -u 10001 appuser
 
 COPY --from=development /app/target/*.jar app.jar
+RUN chown -R appuser:appuser /app
 
 # Switch to non-privileged user.
 USER appuser
@@ -414,6 +418,9 @@ RUN --mount=type=cache,target=/root/.composer/cache \\
 
 COPY . .
 RUN chown -R appuser:appuser /var/www/html
+
+# Switch to non-privileged user.
+USER appuser
 CMD ["apache2-foreground"]
 
 # Production stage
@@ -433,6 +440,9 @@ RUN adduser \\
 
 COPY . .
 RUN chown -R appuser:appuser /var/www/html
+
+# Switch to non-privileged user.
+USER appuser
 `;
 
 export const phpCompose = `services:
@@ -445,7 +455,6 @@ export const phpCompose = `services:
     volumes:
       - .:/var/www/html
 `;
-// Laravel Template
 export const getLaravelDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
@@ -479,6 +488,9 @@ RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-avai
  && echo "ServerName localhost" >> /etc/apache2/apache2.conf \\
  && chown -R appuser:appuser /var/www/html
 
+# Switch to non-privileged user.
+USER appuser
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
@@ -507,6 +519,9 @@ RUN sed -ri "s!/var/www/html!\${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-avai
  && a2enmod rewrite \\
  && echo "ServerName localhost" >> /etc/apache2/apache2.conf \\
  && chown -R appuser:appuser /var/www/html
+
+# Switch to non-privileged user.
+USER appuser
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
