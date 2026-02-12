@@ -158,6 +158,10 @@ function generateConfig(projectType: string): void {
       dockerfile = templates.getPythonDockerfile(options);
       compose = templates.pythonCompose;
       break;
+    case 'fastapi':
+      dockerfile = templates.getFastApiDockerfile(options);
+      compose = templates.pythonCompose; // Re-use python compose for now
+      break;
     case 'go':
       dockerfile = templates.getGoDockerfile(options);
       compose = templates.goCompose;
