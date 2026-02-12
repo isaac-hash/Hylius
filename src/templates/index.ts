@@ -1,7 +1,9 @@
+import { DockerTemplateOptions } from './types.js';
+
 // --- JavaScript / TypeScript Ecosystem ---
 
 // Vite Template (React, Vue, Svelte, etc.) - CSR
-export const viteDockerfile = `# syntax=docker/dockerfile:1
+export const getViteDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM node:22-alpine AS development
@@ -12,14 +14,16 @@ RUN adduser -D -u 10001 appuser
 
 # Download dependencies using cache and bind mounts.
 RUN --mount=type=cache,target=/root/.npm \\
-    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package.json,target=package.json ${options.hasLockfile ? `\\
     --mount=type=bind,source=package-lock.json,target=package-lock.json \\
-    npm install
+    npm install --no-save` : `\\
+    npm install`}
 
 # Switch to non-privileged user.
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host"]
 
@@ -49,7 +53,7 @@ export const viteCompose = `services:
 `;
 
 // Next.js Template - SSR
-export const nextDockerfile = `# syntax=docker/dockerfile:1
+export const getNextDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM node:22-alpine AS development
@@ -60,14 +64,16 @@ RUN adduser -D -u 10001 appuser
 
 # Download dependencies using cache and bind mounts.
 RUN --mount=type=cache,target=/root/.npm \\
-    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package.json,target=package.json ${options.hasLockfile ? `\\
     --mount=type=bind,source=package-lock.json,target=package-lock.json \\
-    npm install
+    npm install --no-save` : `\\
+    npm install`}
 
 # Switch to non-privileged user.
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 EXPOSE 3000
 # Ensure Host is 0.0.0.0 for Docker
 CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
@@ -81,14 +87,16 @@ RUN adduser -D -u 10001 appuser
 
 # Download dependencies using cache and bind mounts.
 RUN --mount=type=cache,target=/root/.npm \\
-    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package.json,target=package.json ${options.hasLockfile ? `\\
     --mount=type=bind,source=package-lock.json,target=package-lock.json \\
-    npm ci --omit=dev
+    npm ci --omit=dev` : `\\
+    npm install --omit=dev`}
 
 # Switch to non-privileged user.
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 RUN npm run build
 CMD ["npm", "start"]
 `;
@@ -108,7 +116,7 @@ export const nextCompose = `services:
 `;
 
 // Generic Node Template (Express, NestJS, etc.)
-export const nodeDockerfile = `# syntax=docker/dockerfile:1
+export const getNodeDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM node:22-alpine AS development
@@ -119,14 +127,16 @@ RUN adduser -D -u 10001 appuser
 
 # Download dependencies using cache and bind mounts.
 RUN --mount=type=cache,target=/root/.npm \\
-    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package.json,target=package.json ${options.hasLockfile ? `\\
     --mount=type=bind,source=package-lock.json,target=package-lock.json \\
-    npm install
+    npm install --no-save` : `\\
+    npm install`}
 
 # Switch to non-privileged user.
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
@@ -139,14 +149,16 @@ RUN adduser -D -u 10001 appuser
 
 # Download dependencies using cache and bind mounts.
 RUN --mount=type=cache,target=/root/.npm \\
-    --mount=type=bind,source=package.json,target=package.json \\
+    --mount=type=bind,source=package.json,target=package.json ${options.hasLockfile ? `\\
     --mount=type=bind,source=package-lock.json,target=package-lock.json \\
-    npm ci --omit=dev
+    npm ci --omit=dev` : `\\
+    npm install --omit=dev`}
 
 # Switch to non-privileged user.
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 CMD ["npm", "start"]
 `;
 
@@ -175,7 +187,7 @@ dist
 // --- Generic Language Families ---
 
 // Python Template (Flask, Django, FastAPI)
-export const pythonDockerfile = `# syntax=docker/dockerfile:1
+export const getPythonDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM python:3.12-slim AS development
@@ -189,7 +201,7 @@ WORKDIR /app
 
 # Create a non-privileged user.
 ARG UID=10001
-RUN adduser \
+RUN adduser \\
     --disabled-password \\
     --gecos "" \\
     --home "/nonexistent" \\
@@ -207,6 +219,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \\
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 EXPOSE 8000
 # Adjust CMD based on your framework:
 # FastAPI:  CMD ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
@@ -223,7 +236,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 ARG UID=10001
-RUN adduser \
+RUN adduser \\
     --disabled-password \\
     --gecos "" \\
     --home "/nonexistent" \\
@@ -239,6 +252,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \\
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 # Adjust CMD for production:
 # FastAPI:  CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 # Flask:    CMD ["gunicorn", "-b", "0.0.0.0:8000", "app:app"]
@@ -261,7 +275,7 @@ export const pythonCompose = `services:
 `;
 
 // Go Template (Generic)
-export const goDockerfile = `# syntax=docker/dockerfile:1
+export const getGoDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 FROM golang:1.22-alpine AS base
 WORKDIR /app
@@ -283,6 +297,7 @@ RUN go install github.com/air-verse/air@latest
 USER appuser
 
 COPY . .
+RUN chown -R appuser:appuser /app
 CMD ["air"]
 
 # Build stage
@@ -323,7 +338,7 @@ export const goCompose = `services:
 `;
 
 // Java Template (Maven/Gradle generic-ish)
-export const javaDockerfile = `# syntax=docker/dockerfile:1
+export const getJavaDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM maven:3.9-eclipse-temurin-21 AS development
@@ -341,6 +356,7 @@ RUN --mount=type=cache,target=/root/.m2 \\
 USER appuser
 
 COPY src ./src
+RUN chown -R appuser:appuser /app
 CMD ["mvn", "spring-boot:run"]
 
 # Production stage
@@ -371,7 +387,7 @@ export const javaCompose = `services:
 `;
 
 // PHP Template (Apache)
-export const phpDockerfile = `# syntax=docker/dockerfile:1
+export const getPhpDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM php:8.4-apache AS development
@@ -397,6 +413,7 @@ RUN --mount=type=cache,target=/root/.composer/cache \\
     composer install
 
 COPY . .
+RUN chown -R appuser:appuser /var/www/html
 CMD ["apache2-foreground"]
 
 # Production stage
@@ -429,7 +446,7 @@ export const phpCompose = `services:
       - .:/var/www/html
 `;
 // Laravel Template
-export const laravelDockerfile = `# syntax=docker/dockerfile:1
+export const getLaravelDockerfile = (options: DockerTemplateOptions) => `# syntax=docker/dockerfile:1
 
 # Development stage
 FROM php:8.4-apache AS development

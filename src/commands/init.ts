@@ -91,41 +91,54 @@ function generateConfig(projectType: string): void {
   let compose: string;
   let dockerignore = templates.nodeDockerignore; // Default ignore list
 
+  const hasPackageLock = fs.existsSync('package-lock.json');
+  const hasRequirements = fs.existsSync('requirements.txt');
+  const hasGoMod = fs.existsSync('go.mod');
+  const hasPom = fs.existsSync('pom.xml');
+  const hasComposerLock = fs.existsSync('composer.lock');
+
+  const options = {
+    hasLockfile: hasPackageLock || hasRequirements || hasGoMod || hasPom || hasComposerLock,
+    projectType
+  };
+
   switch (projectType) {
     case 'vite':
-      dockerfile = templates.viteDockerfile;
+      dockerfile = templates.getViteDockerfile(options);
       compose = templates.viteCompose;
       break;
     case 'next':
-      dockerfile = templates.nextDockerfile;
+      dockerfile = templates.getNextDockerfile(options);
       compose = templates.nextCompose;
       break;
     case 'node':
-      dockerfile = templates.nodeDockerfile;
+      dockerfile = templates.getNodeDockerfile(options);
       compose = templates.nodeCompose;
       break;
     case 'python':
-      dockerfile = templates.pythonDockerfile;
+      dockerfile = templates.getPythonDockerfile(options);
       compose = templates.pythonCompose;
       break;
     case 'go':
-      dockerfile = templates.goDockerfile;
+      dockerfile = templates.getGoDockerfile(options);
       compose = templates.goCompose;
       break;
     case 'java':
-      dockerfile = templates.javaDockerfile;
+      dockerfile = templates.getJavaDockerfile(options);
       compose = templates.javaCompose;
       break;
     case 'php':
     case 'laravel-package':
-      dockerfile = templates.phpDockerfile;
+      dockerfile = templates.getPhpDockerfile(options);
       compose = templates.phpCompose;
       break;
     case 'laravel':
-      dockerfile = templates.laravelDockerfile;
+      dockerfile = templates.getLaravelDockerfile(options);
       compose = templates.laravelCompose;
-      fs.writeFileSync('docker-entrypoint.sh', templates.laravelEntrypoint, 'utf8');
-      console.log(chalk.gray(`   Created: docker-entrypoint.sh`));
+      if (!fs.existsSync('docker-entrypoint.sh')) {
+        fs.writeFileSync('docker-entrypoint.sh', templates.laravelEntrypoint, 'utf8');
+        console.log(chalk.gray(`   Created: docker-entrypoint.sh`));
+      }
       break;
     default:
       throw new Error(`Unsupported project type: ${projectType}`);
@@ -133,6 +146,8 @@ function generateConfig(projectType: string): void {
 
   fs.writeFileSync('Dockerfile', dockerfile, 'utf8');
   fs.writeFileSync('compose.yaml', compose, 'utf8');
-  fs.writeFileSync('.dockerignore', dockerignore, 'utf8');
-  console.log(chalk.gray(`   Created: Dockerfile, compose.yaml, .dockerignore`));
+  if (!fs.existsSync('.dockerignore')) {
+    fs.writeFileSync('.dockerignore', dockerignore, 'utf8');
+  }
+  console.log(chalk.gray(`   Created: Dockerfile, compose.yaml`));
 }
