@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
-import { detectProjectType } from '../utils/detect.js';
+import { detectProjectType, getRailpackPlan } from '../utils/detect.js';
 import { writeConfig, getProjectName } from '../utils/config.js';
 import * as templates from '../templates/index.js';
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import { program } from './commands/root.js';
-import { deploy } from './commands/deploy.js';
+import { deployCommand } from './commands/deploy.js';
+import { setupCommand } from './commands/setup.js';
 
-program.command('deploy')
-    .description('Deploy your application to a remote VPS')
-    .action(deploy);
+program.addCommand(deployCommand);
+program.addCommand(setupCommand);
 
 program.parse(process.argv);

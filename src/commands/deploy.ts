@@ -1,10 +1,13 @@
 import { NodeSSH } from 'node-ssh';
 import inquirer from 'inquirer';
+import { execSync } from 'child_process';
+import { Command } from 'commander';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import chalk from 'chalk';
 import ora from 'ora';
+import { detectProjectType } from '../utils/detect.js';
 
 dotenv.config();
 
@@ -120,32 +123,27 @@ export async function deploy(options: any) {
         spinner.succeed('Connected to server');
 
         // 1. Prepare Paths
-        const distPath = path.resolve(process.cwd(), 'dist'); // Assuming 'dist' is the build output
-        if (!fs.existsSync(distPath)) {
-            throw new Error('Dist folder not found! Please run build first.');
-        }
-
+        const distPath = path.resolve(process.cwd(), 'dist');
         const remoteTempPath = `${config.targetPath}_temp_${Date.now()}`;
         const remoteCurrentPath = config.targetPath!;
 
-        // 2. Upload Files
-        spinner.start(`Uploading files to ${remoteTempPath}...`);
-
-        let localPath = distPath;
+        // 2. Detection & Prep
+        spinner.start('Detecting framework and preparing build...');
+        const projectType = detectProjectType();
         const hasCompose = fs.existsSync(path.join(process.cwd(), 'compose.yaml')) ||
             fs.existsSync(path.join(process.cwd(), 'docker-compose.yml')) ||
-            fs.existsSync(path.join(process.cwd(), 'docker-compose.yaml'));
+            fs.existsSync(path.join(process.cwd(), 'docker-compose.yaml')) ||
+            fs.existsSync(path.join(process.cwd(), 'Dockerfile'));
 
         const nextStandalonePath = path.join(process.cwd(), '.next', 'standalone');
         const hasNextStandalone = fs.existsSync(nextStandalonePath);
 
-        // Detect project type to determine what to upload
-        if (hasCompose || fs.existsSync(path.join(process.cwd(), 'requirements.txt')) || fs.existsSync(path.join(process.cwd(), 'composer.json'))) {
-            localPath = process.cwd(); // Upload root for Docker or interpreted languages
-        } else if (hasNextStandalone) {
-            // Optimizing Next.js Standalone build
-            spinner.text = 'Preparing Next.js standalone build...';
+        let localPath = process.cwd(); // Default to root for Railpack/Docker
 
+        if (hasCompose) {
+            spinner.text = 'Using existing Docker configuration...';
+        } else if (hasNextStandalone && projectType === 'next') {
+            spinner.text = 'Preparing Next.js standalone build...';
             // Copy public
             const publicDir = path.join(process.cwd(), 'public');
             const standalonePublic = path.join(nextStandalonePath, 'public');
@@ -160,64 +158,63 @@ export async function deploy(options: any) {
                 fs.mkdirSync(path.dirname(standaloneStatic), { recursive: true });
                 fs.cpSync(staticDir, standaloneStatic, { recursive: true, force: true });
             }
-
             localPath = nextStandalonePath;
+        } else {
+            // Zero-Config / Railpack Mode
+            spinner.text = `Zero-config: Auto-containerizing ${projectType} project via Railpack...`;
+            try {
+                // We use railpack to generate a Dockerfile if one doesn't exist
+                // This is a simplified implementation for the MVP
+                execSync('railpack build -o .', { stdio: 'ignore' });
+                // Note: In a real scenario, we might want to build locally and push, 
+                // or upload and build on remote. For now, we assume local build + upload root.
+            } catch (error) {
+                // If railpack isn't installed or fails, we fall back to manual detection logic for upload paths
+                if (projectType === 'node' && fs.existsSync(distPath)) {
+                    localPath = distPath;
+                }
+            }
         }
 
+        // 3. Upload Files
+        spinner.start(`Uploading files to ${remoteTempPath}...`);
         await ssh.putDirectory(localPath, remoteTempPath, {
             recursive: true,
             concurrency: 10,
             validate: (itemPath) => {
                 const baseName = path.basename(itemPath);
                 return !['node_modules', '.git', '.env', 'venv', '__pycache__', 'vendor', 'dist'].includes(baseName);
-            },
-            tick: (localPath, remotePath, error) => {
-                // optional progress updates
             }
         });
         spinner.succeed('Files uploaded');
 
-        // 3. Atomic Swap
+        // 4. Atomic Swap & Execute
         spinner.start('Swapping directories and restarting...');
+        const userResult = await ssh.execCommand('whoami');
+        const currentUser = userResult.stdout.trim();
+        const isRoot = currentUser === 'root';
+        const sudoPrefix = isRoot ? '' :
+            (config.password ? `echo '${config.password}' | sudo -S ` : 'sudo ');
 
-        // Ensure parent dir exists
-        await ssh.execCommand(`mkdir -p ${path.dirname(remoteCurrentPath)}`);
+        await ssh.execCommand(`${sudoPrefix}mkdir -p ${path.dirname(remoteCurrentPath)}`);
 
-        // Prepare swap commands (basic version)
         const commands = [
-            `rm -rf ${remoteCurrentPath}`,
-            `mv ${remoteTempPath} ${remoteCurrentPath}`,
+            `${sudoPrefix}rm -rf ${remoteCurrentPath}`,
+            `${sudoPrefix}mv ${remoteTempPath} ${remoteCurrentPath}`,
         ];
 
-        // Add install/restart commands
-        if (hasCompose) {
-            commands.push(`cd ${remoteCurrentPath} && docker compose up -d --build --remove-orphans`);
+        if (hasCompose || !hasNextStandalone) {
+            // If we have compose OR we use railpack (which generates a Dockerfile), use Docker
+            commands.push(`cd ${remoteCurrentPath} && ${sudoPrefix}docker compose up -d --build --remove-orphans || (${sudoPrefix}docker build -t app . && ${sudoPrefix}docker run -d --name app -p 3000:3000 app)`);
         } else if (hasNextStandalone) {
             commands.push(`cd ${remoteCurrentPath} && node server.js`);
-        } else if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) {
-            commands.push(`cd ${remoteCurrentPath} && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt`);
-            // commands.push(`cd ${remoteCurrentPath} && pm2 reload all || pm2 start "uvicorn main:app --host 0.0.0.0 --port 8000" --name "app"`); // PM2 example
-        } else if (fs.existsSync(path.join(process.cwd(), 'composer.json'))) {
-            commands.push(`cd ${remoteCurrentPath} && composer install --no-dev --optimize-autoloader`);
-            // Laravel specific
-            if (fs.existsSync(path.join(process.cwd(), 'artisan'))) {
-                commands.push(`cd ${remoteCurrentPath} && php artisan config:cache && php artisan route:cache && php artisan view:cache`);
-                commands.push(`chmod -R 775 ${path.join(remoteCurrentPath, 'storage')} ${path.join(remoteCurrentPath, 'bootstrap/cache')}`);
-                // Try to set ownership, but don't fail if we can't (user might not be root)
-                commands.push(`chown -R www-data:www-data ${path.join(remoteCurrentPath, 'storage')} ${path.join(remoteCurrentPath, 'bootstrap/cache')} || true`);
-            }
-        } else if (fs.existsSync(path.join(process.cwd(), 'package.json'))) {
-            commands.push(`cd ${remoteCurrentPath} && npm install --production`);
-            // commands.push(`cd ${remoteCurrentPath} && pm2 reload all || pm2 start npm --name "app" -- start`); // PM2 example
         }
 
         for (const cmd of commands) {
-            spinner.text = `Executing: ${cmd}`;
+            spinner.text = `Executing: ${cmd.replace(config.password || '', '***')}`;
             const result = await ssh.execCommand(cmd);
             if (result.code !== 0) {
-                // Warning only for now, as restart commands might fail on first run
-                // throw new Error(`Command failed: ${cmd}\n${result.stderr}`);
-                spinner.warn(`Command failed (non-fatal?): ${cmd}\n${result.stderr}`);
+                spinner.warn(`Command failed (non-fatal?): ${cmd.replace(config.password || '', '***')}\n${result.stderr}`);
             }
         }
 
@@ -231,3 +228,7 @@ export async function deploy(options: any) {
         process.exit(1);
     }
 }
+
+export const deployCommand = new Command('deploy')
+    .description('Deploy your application to a remote VPS')
+    .action(deploy);
