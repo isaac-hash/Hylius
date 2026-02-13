@@ -1,0 +1,74 @@
+# Hylius Full Pipeline (Setup + Deploy)
+# This workflow provisions your VPS (first time) and deploys your app.
+# Add this file to your project at: .github/workflows/hylius-pipeline.yml
+#
+# Required GitHub Secrets:
+#   HYLIUS_HOST       - Your VPS IP address
+#   HYLIUS_USER       - SSH username (e.g., root)
+#   HYLIUS_SSH_KEY    - Full SSH private key content
+#   HYLIUS_TARGET_PATH - Remote deploy path (e.g., /var/www/my-app)
+#
+# Optional Secrets:
+#   HYLIUS_PASSWORD   - SSH password (only if not using SSH keys)
+#   HYLIUS_PORT       - SSH port (defaults to 22)
+
+name: Hylius Full Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_setup:
+        description: "Run server provisioning (hylius setup)?"
+        type: boolean
+        default: false
+
+env:
+  CI: "true"
+  HYLIUS_HOST: ${{ secrets.HYLIUS_HOST }}
+  HYLIUS_USER: ${{ secrets.HYLIUS_USER }}
+  HYLIUS_SSH_KEY: ${{ secrets.HYLIUS_SSH_KEY }}
+  HYLIUS_PASSWORD: ${{ secrets.HYLIUS_PASSWORD }}
+  HYLIUS_PORT: ${{ secrets.HYLIUS_PORT }}
+  HYLIUS_TARGET_PATH: ${{ secrets.HYLIUS_TARGET_PATH }}
+
+jobs:
+  setup:
+    # Only runs on manual trigger with "run_setup" checked
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_setup == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Provision Server
+        run: npx hylius setup
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [setup]
+    # Always run deploy, even if setup was skipped
+    if: always() && (needs.setup.result == 'success' || needs.setup.result == 'skipped')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Deploy with Hylius
+        run: npx hylius deploy

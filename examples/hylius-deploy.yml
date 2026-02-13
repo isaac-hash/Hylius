@@ -1,0 +1,45 @@
+# Hylius Deploy Workflow
+# Add this file to your project at: .github/workflows/hylius-deploy.yml
+#
+# Required GitHub Secrets:
+#   HYLIUS_HOST       - Your VPS IP address (e.g., 192.168.1.100)
+#   HYLIUS_USER       - SSH username (e.g., root)
+#   HYLIUS_SSH_KEY    - Full SSH private key content (copy from ~/.ssh/id_rsa)
+#   HYLIUS_TARGET_PATH - Remote deploy path (e.g., /var/www/my-app)
+#
+# Optional Secrets:
+#   HYLIUS_PASSWORD   - SSH password (only if not using SSH keys)
+#   HYLIUS_PORT       - SSH port (defaults to 22)
+
+name: Deploy with Hylius
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Deploy with Hylius
+        run: npx hylius deploy
+        env:
+          CI: "true"
+          HYLIUS_HOST: ${{ secrets.HYLIUS_HOST }}
+          HYLIUS_USER: ${{ secrets.HYLIUS_USER }}
+          HYLIUS_SSH_KEY: ${{ secrets.HYLIUS_SSH_KEY }}
+          HYLIUS_PASSWORD: ${{ secrets.HYLIUS_PASSWORD }}
+          HYLIUS_PORT: ${{ secrets.HYLIUS_PORT }}
+          HYLIUS_TARGET_PATH: ${{ secrets.HYLIUS_TARGET_PATH }}
