@@ -8,7 +8,9 @@ A CLI tool to initialize and manage Docker configurations for development projec
 - 🐳 Optimized Docker configurations for different frameworks
 - 🚀 Quick development environment setup
 - 📦 Production-ready build configurations
-- ⚙️ Automatic CI/CD workflow generation
+- 🛠️ **Server Provisioning** (`hylius setup`) - Automatic Docker/Firewall setup
+- 🚢 **Atomic Deployment** (`hylius deploy`) - Zero-downtime push to VPS
+- 🤖 **CI/CD Automation** (`hylius ci-generate`) - Quick GitHub Actions scaffolding
 - 🎨 **Beautiful colored terminal output with spinners**
 - 📊 **Real-time streaming command output**
 
@@ -72,6 +74,23 @@ hylius dev --watch
 ```bash
 hylius build
 ```
+
+### Deploy to VPS
+
+Hylius allows you to manage your own servers with ease.
+
+```bash
+# Prepare a fresh VPS
+hylius setup
+
+# Deploy code directly
+hylius deploy
+
+# Generate GitHub Actions workflow
+hylius ci-generate
+```
+
+For detailed instructions on server setup and automation, see the [CI/CD & Deployment Guide](docs/CI-CD.md).
 
 This will create Docker images with tags:
 - `<project-name>:latest`

@@ -138,6 +138,25 @@ hylius dev
 - On Mac/Linux: `chmod +x setup-git.sh`
 - On Windows: Run as administrator if needed
 
+### 6. Deployment & CI/CD
+
+Ready to go live? Hylius makes it easy.
+
+1. **Provision your server:**
+   ```bash
+   hylius setup
+   ```
+2. **Deploy manually:**
+   ```bash
+   hylius deploy
+   ```
+3. **Automate with GitHub Actions:**
+   ```bash
+   hylius ci-generate
+   ```
+
+Check out the [CI/CD Guide](docs/CI-CD.md) for full details on setting up GitHub Secrets.
+
 ## Next Steps
 
 1. ⭐ Star the repository

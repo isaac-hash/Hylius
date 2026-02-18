@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
-import { detectProjectType } from '../utils/detect.js';
+import { detectProjectType, getRailpackPlan } from '../utils/detect.js';
 import { writeConfig, getProjectName } from '../utils/config.js';
 import * as templates from '../templates/index.js';
 
@@ -157,6 +157,10 @@ function generateConfig(projectType: string): void {
     case 'python':
       dockerfile = templates.getPythonDockerfile(options);
       compose = templates.pythonCompose;
+      break;
+    case 'fastapi':
+      dockerfile = templates.getFastApiDockerfile(options);
+      compose = templates.pythonCompose; // Re-use python compose for now
       break;
     case 'go':
       dockerfile = templates.getGoDockerfile(options);
