@@ -1,6 +1,6 @@
 {
   "name": "hylius",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "type": "module",
   "description": "A CLI tool to initialize and manage Docker configurations for development",
   "main": "dist/index.js",
