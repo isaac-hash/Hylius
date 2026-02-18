@@ -39,6 +39,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Build Project
+        run: npm run build
+
       - name: Deploy with Hylius
         run: npx hylius deploy
         env:
@@ -98,89 +101,91 @@ jobs:
         with:
           node-version: '18'
       - run: npm ci
+      - name: Build Project
+        run: npm run build
       - name: Deploy with Hylius
         run: npx hylius deploy
 `;
 
 export const ciGenerateCommand = new Command('ci-generate')
-    .description('Generate GitHub Actions workflow files for CI/CD deployment')
-    .option('--full', 'Generate the full pipeline (setup + deploy) workflow')
-    .action(async (options) => {
-        console.log(chalk.blue.bold('\n🔧 Hylius CI/CD Workflow Generator\n'));
+  .description('Generate GitHub Actions workflow files for CI/CD deployment')
+  .option('--full', 'Generate the full pipeline (setup + deploy) workflow')
+  .action(async (options) => {
+    console.log(chalk.blue.bold('\n🔧 Hylius CI/CD Workflow Generator\n'));
 
-        const workflowDir = path.join(process.cwd(), '.github', 'workflows');
+    const workflowDir = path.join(process.cwd(), '.github', 'workflows');
 
-        // Ask which workflow template
-        let workflowType = options.full ? 'Full Pipeline (Setup + Deploy)' : undefined;
+    // Ask which workflow template
+    let workflowType = options.full ? 'Full Pipeline (Setup + Deploy)' : undefined;
 
-        if (!workflowType) {
-            const answers = await inquirer.prompt([
-                {
-                    type: 'list',
-                    name: 'workflowType',
-                    message: 'Which workflow template?',
-                    choices: [
-                        'Deploy Only (recommended)',
-                        'Full Pipeline (Setup + Deploy)'
-                    ]
-                }
-            ]);
-            workflowType = answers.workflowType;
+    if (!workflowType) {
+      const answers = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'workflowType',
+          message: 'Which workflow template?',
+          choices: [
+            'Deploy Only (recommended)',
+            'Full Pipeline (Setup + Deploy)'
+          ]
         }
+      ]);
+      workflowType = answers.workflowType;
+    }
 
-        const isFullPipeline = workflowType!.includes('Full Pipeline');
-        const fileName = isFullPipeline ? 'hylius-pipeline.yml' : 'hylius-deploy.yml';
-        const content = isFullPipeline ? FULL_PIPELINE_WORKFLOW : DEPLOY_WORKFLOW;
-        const filePath = path.join(workflowDir, fileName);
+    const isFullPipeline = workflowType!.includes('Full Pipeline');
+    const fileName = isFullPipeline ? 'hylius-pipeline.yml' : 'hylius-deploy.yml';
+    const content = isFullPipeline ? FULL_PIPELINE_WORKFLOW : DEPLOY_WORKFLOW;
+    const filePath = path.join(workflowDir, fileName);
 
-        // Check if file already exists
-        if (fs.existsSync(filePath)) {
-            const { overwrite } = await inquirer.prompt([
-                {
-                    type: 'confirm',
-                    name: 'overwrite',
-                    message: `${fileName} already exists. Overwrite?`,
-                    default: false
-                }
-            ]);
-            if (!overwrite) {
-                console.log(chalk.yellow('Aborted.'));
-                return;
-            }
+    // Check if file already exists
+    if (fs.existsSync(filePath)) {
+      const { overwrite } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'overwrite',
+          message: `${fileName} already exists. Overwrite?`,
+          default: false
         }
+      ]);
+      if (!overwrite) {
+        console.log(chalk.yellow('Aborted.'));
+        return;
+      }
+    }
 
-        // Create directory and write file
-        fs.mkdirSync(workflowDir, { recursive: true });
-        fs.writeFileSync(filePath, content, 'utf-8');
+    // Create directory and write file
+    fs.mkdirSync(workflowDir, { recursive: true });
+    fs.writeFileSync(filePath, content, 'utf-8');
 
-        console.log(chalk.green(`\n✅ Created ${chalk.bold(`.github/workflows/${fileName}`)}\n`));
+    console.log(chalk.green(`\n✅ Created ${chalk.bold(`.github/workflows/${fileName}`)}\n`));
 
-        // Print setup instructions
-        console.log(chalk.cyan.bold('📋 Next Steps:\n'));
-        console.log(chalk.white('  1. Go to your GitHub repo → Settings → Secrets and variables → Actions'));
-        console.log(chalk.white('  2. Add the following repository secrets:\n'));
+    // Print setup instructions
+    console.log(chalk.cyan.bold('📋 Next Steps:\n'));
+    console.log(chalk.white('  1. Go to your GitHub repo → Settings → Secrets and variables → Actions'));
+    console.log(chalk.white('  2. Add the following repository secrets:\n'));
 
-        const secrets = [
-            { name: 'HYLIUS_HOST', desc: 'Your VPS IP address (e.g., 192.168.1.100)', required: true },
-            { name: 'HYLIUS_USER', desc: 'SSH username (e.g., root)', required: true },
-            { name: 'HYLIUS_SSH_KEY', desc: 'Full SSH private key content', required: true },
-            { name: 'HYLIUS_TARGET_PATH', desc: 'Remote deploy path (e.g., /var/www/my-app)', required: true },
-            { name: 'HYLIUS_PASSWORD', desc: 'SSH password (if not using SSH keys)', required: false },
-            { name: 'HYLIUS_PORT', desc: 'SSH port (defaults to 22)', required: false },
-        ];
+    const secrets = [
+      { name: 'HYLIUS_HOST', desc: 'Your VPS IP address (e.g., 192.168.1.100)', required: true },
+      { name: 'HYLIUS_USER', desc: 'SSH username (e.g., root)', required: true },
+      { name: 'HYLIUS_SSH_KEY', desc: 'Full SSH private key content', required: true },
+      { name: 'HYLIUS_TARGET_PATH', desc: 'Remote deploy path (e.g., /var/www/my-app)', required: true },
+      { name: 'HYLIUS_PASSWORD', desc: 'SSH password (if not using SSH keys)', required: false },
+      { name: 'HYLIUS_PORT', desc: 'SSH port (defaults to 22)', required: false },
+    ];
 
-        for (const secret of secrets) {
-            const tag = secret.required
-                ? chalk.red('REQUIRED')
-                : chalk.dim('optional');
-            console.log(`     ${chalk.yellow(secret.name)} [${tag}]`);
-            console.log(`     ${chalk.dim(secret.desc)}\n`);
-        }
+    for (const secret of secrets) {
+      const tag = secret.required
+        ? chalk.red('REQUIRED')
+        : chalk.dim('optional');
+      console.log(`     ${chalk.yellow(secret.name)} [${tag}]`);
+      console.log(`     ${chalk.dim(secret.desc)}\n`);
+    }
 
-        console.log(chalk.cyan.bold('💡 Tip:'));
-        console.log(chalk.white('  To get your SSH key content, run:'));
-        console.log(chalk.gray('  cat ~/.ssh/id_rsa'));
-        console.log(chalk.white('\n  Then paste the entire output (including BEGIN/END lines) as the HYLIUS_SSH_KEY secret.\n'));
+    console.log(chalk.cyan.bold('💡 Tip:'));
+    console.log(chalk.white('  To get your SSH key content, run:'));
+    console.log(chalk.gray('  cat ~/.ssh/id_rsa'));
+    console.log(chalk.white('\n  Then paste the entire output (including BEGIN/END lines) as the HYLIUS_SSH_KEY secret.\n'));
 
-        console.log(chalk.green('  Once configured, every push to ') + chalk.white.bold('main') + chalk.green(' will auto-deploy! 🚀\n'));
-    });
+    console.log(chalk.green('  Once configured, every push to ') + chalk.white.bold('main') + chalk.green(' will auto-deploy! 🚀\n'));
+  });
