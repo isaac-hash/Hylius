@@ -9,7 +9,11 @@
         "build": "tsc"
     },
     "devDependencies": {
-        "typescript": "^5.3.3",
-        "@types/node": "^20.11.0"
+        "@types/node": "^20.11.0",
+        "typescript": "^5.3.3"
+    },
+    "dependencies": {
+        "@types/ssh2": "^1.15.5",
+        "ssh2": "^1.17.0"
     }
 }

@@ -1,0 +1,119 @@
+// Hylius Dashboard — Managed-Hosted Control Plane Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // SQLite for dev, switch to "postgresql" for prod
+  url      = env("DATABASE_URL")
+}
+
+// ─── Multi-Tenancy ─────────────────────────────────────────
+
+model Organization {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  users     User[]
+  servers   Server[]
+  projects  Project[]
+  apiTokens ApiToken[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// ─── Auth ───────────────────────────────────────────────────
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  password       String       // bcrypt hashed
+  role           String       @default("OWNER") // OWNER | ADMIN | MEMBER
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  sessions       Session[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model ApiToken {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  hashedToken    String       @unique
+  lastUsedAt     DateTime?
+  createdAt      DateTime     @default(now())
+}
+
+// ─── Infrastructure ─────────────────────────────────────────
+
+model Server {
+  id                  String       @id @default(cuid())
+  name                String
+  ip                  String
+  port                Int          @default(22)
+  username            String
+  privateKeyEncrypted String?      // AES-256-GCM encrypted SSH key (managed)
+  keyIv               String?      // Initialization vector for decryption
+  osType              String?      // e.g. "Ubuntu", "Alpine"
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  organizationId      String
+  projects            Project[]
+  metrics             Metric[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model Project {
+  id             String       @id @default(cuid())
+  name           String
+  repoUrl        String
+  branch         String       @default("main")
+  deployPath     String
+  buildCommand   String?
+  startCommand   String?
+  envVars        String?      // JSON string of env vars
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  server         Server       @relation(fields: [serverId], references: [id])
+  serverId       String
+  deployments    Deployment[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Deployment {
+  id            String    @id @default(cuid())
+  releaseId     String    // Core-generated timestamp ID
+  commitHash    String?
+  status        String    // "PENDING" | "BUILDING" | "SUCCESS" | "FAILED"
+  triggerSource String    // "CLI" | "DASHBOARD" | "WEBHOOK"
+  durationMs    Int?
+  logPath       String?   // Path to log file / object storage key
+  project       Project   @relation(fields: [projectId], references: [id])
+  projectId     String
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+}
+
+model Metric {
+  id        String   @id @default(cuid())
+  server    Server   @relation(fields: [serverId], references: [id])
+  serverId  String
+  cpu       Float
+  memory    Float
+  disk      Float
+  uptime    Float
+  createdAt DateTime @default(now())
+}

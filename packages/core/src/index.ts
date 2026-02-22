@@ -1,10 +1,7 @@
-export interface HyliusConfig {
-    host: string;
-    username: string;
-    path: string;
-}
-
-export function deploy(config: HyliusConfig) {
-    console.log(`Deploying to ${config.host}...`);
-    // Core deploy logic will be moved here from the CLI
-}
+export type * from './types.js';
+export * from './ssh/client.js';
+// export * from './ssh/stream.js'; // Internal use mostly, but export if needed
+export * from './deploy.js';
+export * from './rollback.js';
+export * from './monitoring.js';
+export * from './setup.js';
