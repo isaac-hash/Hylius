@@ -5,6 +5,7 @@ import { requireAuth } from '../../../services/auth.service';
 export async function GET(request: Request) {
     try {
         const auth = await requireAuth(request);
+        if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
 
         const projects = await prisma.project.findMany({
             where: { organizationId: auth.organizationId },
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const auth = await requireAuth(request);
+        if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
         const body = await request.json();
         const { name, repoUrl, branch, deployPath, buildCommand, startCommand, serverId } = body;
 

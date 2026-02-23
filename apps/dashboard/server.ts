@@ -1,4 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { createServer } from 'node:http';
 import next from 'next';
 import { Server } from 'socket.io';
@@ -9,7 +12,7 @@ import { decrypt } from './services/crypto.service';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
-const port = 3000;
+const port = 80;
 // when using middleware `hostname` and `port` must be provided below
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();

@@ -42,7 +42,7 @@ async function main() {
     const result = await deploy({
         server: serverConfig,
         project: projectConfig,
-        trigger: 'cli-test',
+        trigger: 'cli',
         onLog: (chunk) => process.stdout.write(chunk),
     });
 

@@ -21,9 +21,17 @@ export default function Home() {
               <Link href="/deployments" className="hover:text-white transition-colors">
                 Deployments
               </Link>
+              <Link href="/billing" className="hover:text-white transition-colors">
+                Billing
+              </Link>
               <a href="https://github.com/isaac-hash/hylius" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
                 Documentation
               </a>
+              {user?.role === 'PLATFORM_ADMIN' && (
+                <Link href="/admin" className="text-red-400 font-medium hover:text-red-300 transition-colors ml-4 border-l border-gray-800 pl-4">
+                  Admin
+                </Link>
+              )}
 
               <div className="flex items-center gap-3 pl-4 border-l border-gray-800">
                 <span className="text-gray-300">{user?.email}</span>

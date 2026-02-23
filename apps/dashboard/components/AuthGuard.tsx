@@ -4,15 +4,19 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth.provider";
 
-export function AuthGuard({ children }: { children: React.ReactNode }) {
-    const { token, isLoading } = useAuth();
+export function AuthGuard({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) {
+    const { token, user, isLoading } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-        if (!isLoading && !token) {
-            router.push("/login"); // Redirect unauthenticated users
+        if (!isLoading) {
+            if (!token) {
+                router.push("/login");
+            } else if (requireAdmin && user?.role !== 'PLATFORM_ADMIN') {
+                router.push("/"); // Redirect non-admins to dashboard
+            }
         }
-    }, [token, isLoading, router]);
+    }, [token, user, isLoading, router, requireAdmin]);
 
 
     // Show loading state while checking auth against local storage and API

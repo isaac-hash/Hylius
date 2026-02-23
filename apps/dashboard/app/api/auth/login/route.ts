@@ -47,11 +47,11 @@ export async function POST(request: Request) {
                 email: user.email,
                 role: user.role,
             },
-            organization: {
+            organization: user.organization ? {
                 id: user.organization.id,
                 name: user.organization.name,
                 slug: user.organization.slug,
-            },
+            } : null,
         });
 
     } catch (error: unknown) {

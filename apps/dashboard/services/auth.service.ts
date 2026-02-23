@@ -61,7 +61,7 @@ export interface AuthContext {
     userId: string;
     email: string;
     role: string;
-    organizationId: string;
+    organizationId: string | null;
 }
 
 /**
@@ -96,6 +96,17 @@ export async function requireAuth(request: Request): Promise<AuthContext> {
     return ctx;
 }
 
+/**
+ * Require PLATFORM_ADMIN role — throws if not authorized.
+ */
+export async function requirePlatformAdmin(request: Request): Promise<AuthContext> {
+    const ctx = await requireAuth(request);
+    if (ctx.role !== 'PLATFORM_ADMIN') {
+        throw new Error('Forbidden: Platform Admin access required');
+    }
+    return ctx;
+}
+
 export const AuthService = {
     hashPassword,
     verifyPassword,
@@ -103,4 +114,5 @@ export const AuthService = {
     validateSession,
     getAuthContext,
     requireAuth,
+    requirePlatformAdmin,
 };

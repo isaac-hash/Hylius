@@ -6,6 +6,7 @@ import { encrypt } from '../../../services/crypto.service';
 export async function GET(request: Request) {
     try {
         const auth = await requireAuth(request);
+        if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
 
         const servers = await prisma.server.findMany({
             where: { organizationId: auth.organizationId },
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const auth = await requireAuth(request);
+        if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
         const body = await request.json();
         const { name, ip, username, port, privateKey, osType } = body;
 
