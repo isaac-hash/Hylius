@@ -9,20 +9,34 @@ export async function GET(request: Request) {
         const url = new URL(request.url);
         const page = parseInt(url.searchParams.get('page') || '1', 10);
         const limitStr = url.searchParams.get('limit');
-        let limit = limitStr ? parseInt(limitStr, 10) : 50; // Activity feeds can have a higher default
+        const orgId = url.searchParams.get('orgId');
+        const action = url.searchParams.get('action');
+        let limit = limitStr ? parseInt(limitStr, 10) : 50;
 
         if (limit > 200) limit = 200;
         if (limit < 1) limit = 20;
 
         const skip = (page - 1) * limit;
 
+        const where: any = {};
+        if (orgId) where.organizationId = orgId;
+        if (action) where.action = action;
+
         const [activity, total] = await Promise.all([
             prisma.auditLog.findMany({
+                where,
                 skip,
                 take: limit,
                 orderBy: { createdAt: 'desc' },
+                include: {
+                    organization: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
             }),
-            prisma.auditLog.count()
+            prisma.auditLog.count({ where })
         ]);
 
         return NextResponse.json({

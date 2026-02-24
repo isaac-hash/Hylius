@@ -74,6 +74,15 @@ export async function POST(request: Request) {
             },
         });
 
+        // Log the action
+        await prisma.auditLog.create({
+            data: {
+                action: 'PROJECT_CREATED',
+                organizationId: auth.organizationId,
+                metadata: JSON.stringify({ projectId: project.id, name: project.name, serverId: project.serverId })
+            }
+        });
+
         return NextResponse.json(project);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';

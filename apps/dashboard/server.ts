@@ -11,7 +11,7 @@ import { deploy, setup, DeployOptions, ServerConfig, ProjectConfig, SetupOptions
 import { decrypt } from './services/crypto.service';
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
+const hostname = '0.0.0.0';
 const port = 80;
 // when using middleware `hostname` and `port` must be provided below
 const app = next({ dev, hostname, port });
@@ -67,6 +67,15 @@ app.prepare().then(() => {
 
                 socket.emit('deploy_start', { deploymentId: deployment.id });
 
+                // Audit Log
+                await prisma.auditLog.create({
+                    data: {
+                        action: 'DEPLOYMENT_STARTED',
+                        organizationId: project.organizationId,
+                        metadata: JSON.stringify({ projectId: project.id, deploymentId: deployment.id })
+                    }
+                });
+
                 // 3. Prepare Core Config
                 // Decrypt SSH key in-memory — key never leaves backend
                 let privateKey = '';
@@ -120,6 +129,20 @@ app.prepare().then(() => {
                     }
                 });
 
+                // Audit Log Completion
+                await prisma.auditLog.create({
+                    data: {
+                        action: result.success ? 'DEPLOYMENT_COMPLETED' : 'DEPLOYMENT_FAILED',
+                        organizationId: project.organizationId,
+                        metadata: JSON.stringify({
+                            projectId: project.id,
+                            deploymentId: deployment.id,
+                            releaseId: result.releaseId,
+                            error: result.error
+                        })
+                    }
+                });
+
                 if (result.success) {
                     socket.emit('deploy_success', result);
                     socket.emit('log', `\n\x1b[32mDeployment Successful! Release: ${result.releaseId}\x1b[0m\n`);
@@ -161,6 +184,15 @@ app.prepare().then(() => {
 
                 socket.emit('setup_start', { serverId: serverRecord.id });
 
+                // Audit Log
+                await prisma.auditLog.create({
+                    data: {
+                        action: 'SERVER_PROVISION_STARTED',
+                        organizationId: serverRecord.organizationId,
+                        metadata: JSON.stringify({ serverId: serverRecord.id, name: serverRecord.name })
+                    }
+                });
+
                 // 2. Prepare Core Config
                 let privateKey = '';
                 if (serverRecord.privateKeyEncrypted && serverRecord.keyIv) {
@@ -193,6 +225,19 @@ app.prepare().then(() => {
                 } else {
                     socket.emit('setup_error', result.error);
                 }
+
+                // Audit Log Completion
+                await prisma.auditLog.create({
+                    data: {
+                        action: result.success ? 'SERVER_PROVISION_COMPLETED' : 'SERVER_PROVISION_FAILED',
+                        organizationId: serverRecord.organizationId,
+                        metadata: JSON.stringify({
+                            serverId: serverRecord.id,
+                            name: serverRecord.name,
+                            error: result.error
+                        })
+                    }
+                });
 
             } catch (error: any) {
                 console.error('Setup error:', error);

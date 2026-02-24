@@ -60,6 +60,15 @@ export async function POST(request: Request) {
             },
         });
 
+        // Log the action
+        await prisma.auditLog.create({
+            data: {
+                action: 'SERVER_CREATED',
+                organizationId: auth.organizationId,
+                metadata: JSON.stringify({ serverId: server.id, name: server.name, ip: server.ip })
+            }
+        });
+
         // Never return encrypted key data to the client
         const { privateKeyEncrypted: _, keyIv: __, ...safeServer } = server;
         return NextResponse.json(safeServer);

@@ -90,7 +90,12 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
 
     verifyWebhookSignature(payload: string, signature: string): boolean {
         // Flutterwave passes the signature verif-hash in the headers
-        return signature === this.webhookSecret;
+        const isValid = signature === this.webhookSecret;
+        console.log(`[FlutterwaveAdapter] Signature verification: ${isValid ? 'PASSED' : 'FAILED'}`);
+        if (!isValid) {
+            console.log(`[FlutterwaveAdapter] Expected: ${this.webhookSecret}, Received: ${signature}`);
+        }
+        return isValid;
     }
 
     parseWebhookEvent(payload: any): ParsedWebhookEvent {
@@ -98,28 +103,58 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
         const event = payload.event || payload.type;
         const data = payload.data;
 
-        if (!data || (event !== 'charge.completed' && event !== 'charge.succeeded')) {
+        console.log(`[FlutterwaveAdapter] Parsing event: ${event}`);
+
+        const isChargeEvent = event === 'charge.completed' || event === 'charge.succeeded';
+        const isSubscriptionEvent = event === 'subscription.cancelled' || event === 'subscription.activated';
+
+        if (!data || (!isChargeEvent && !isSubscriptionEvent)) {
+            console.log(`[FlutterwaveAdapter] Event ignored: missing data or unsupported event type`);
             return { isSubscriptionChange: false, isPayment: false };
         }
 
-        // Handle both 'successful' (v3) and 'succeeded' (v4)
+        // Handle both 'successful' (v3), 'succeeded' (v4), and 'cancelled'
         const isSuccessful = data.status === 'successful' || data.status === 'succeeded';
-        const isSubscription = !!data.payment_plan;
+        const isCancelled = data.status === 'cancelled' || event === 'subscription.cancelled';
+
+        // Extract metadata which can be in data.meta or top-level meta_data (with underscore)
+        const meta = data.meta || payload.meta || payload.meta_data;
+        const organizationId = meta?.organizationId;
+        const planId = meta?.planId;
+
+        // A subscription charge usually has payment_plan, but we can also infer it from our custom planId in meta
+        const isSubscription = !!(data.payment_plan || planId || isSubscriptionEvent);
+
+        console.log(`[FlutterwaveAdapter] Event details:`, {
+            isSuccessful,
+            isCancelled,
+            isSubscription,
+            txRef: data.tx_ref,
+            amount: data.amount,
+            plan: data.payment_plan || planId,
+            organizationId
+        });
+
+        // Map status to our internal standard
+        let status = 'INCOMPLETE';
+        if (isSuccessful) status = 'ACTIVE';
+        if (isCancelled) status = 'CANCELED';
 
         return {
             isSubscriptionChange: isSubscription,
-            isPayment: true,
+            isPayment: isChargeEvent,
             transactionId: data.tx_ref || data.id?.toString(),
             amount: data.amount,
             currency: data.currency,
+            // If it's a subscription, we use the tx_ref as a fallback ID if data.id is not suitable
             subscriptionId: isSubscription ? (data.id ? data.id.toString() : data.tx_ref) : undefined,
             customerId: data.customer?.email,
-            status: isSuccessful ? 'ACTIVE' : 'INCOMPLETE',
+            status,
             currentPeriodEnd: undefined, // Flutterwave doesn't always provide this in the charge.completed event
-            organizationId: data.meta?.organizationId || payload.meta?.organizationId,
+            organizationId,
             flwCustomerId: data.customer?.id?.toString(),
             flwPaymentMethodId: data.card?.token,
-            planId: data.meta?.planId
+            planId
         };
     }
 }

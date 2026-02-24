@@ -20,12 +20,14 @@ model Organization {
   name          String
   slug          String         @unique
   plan          String         @default("FREE") // FREE | PRO | ENTERPRISE
+  isActive      Boolean        @default(true)
   users         User[]
   servers       Server[]
   projects      Project[]
   apiTokens     ApiToken[]
   subscriptions Subscription[]
   payments      Payment[]
+  auditLogs     AuditLog[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -37,6 +39,7 @@ model User {
   email          String        @unique
   password       String        // bcrypt hashed
   role           String        @default("OWNER") // OWNER | ADMIN | MEMBER | PLATFORM_ADMIN
+  isActive       Boolean       @default(true)
   organization   Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?       // Optional for PLATFORM_ADMIN
   sessions       Session[]
@@ -77,6 +80,7 @@ model AuditLog {
   action         String
   userId         String?
   organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
   ipAddress      String?
   metadata       String?  // JSON string
   createdAt      DateTime @default(now())

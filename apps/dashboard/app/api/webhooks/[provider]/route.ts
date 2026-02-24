@@ -12,6 +12,8 @@ export async function POST(
         request.headers.get('x-paystack-signature') ||
         request.headers.get('verif-hash') || '';
 
+    console.log(`[Webhook] Received ${providerId} request`);
+
     try {
         const eventData = JSON.parse(payload);
         await paymentService.handleWebhook(providerId, payload, signature, eventData);

@@ -19,6 +19,7 @@ export class PaymentService {
             'active': 'ACTIVE',
             'past_due': 'PAST_DUE',
             'canceled': 'CANCELED',
+            'cancelled': 'CANCELED',
             'incomplete': 'INCOMPLETE',
             'trialing': 'TRIALING',
         };
@@ -179,20 +180,21 @@ export class PaymentService {
                     where: { id: resolvedOrgId },
                     data: { plan: 'PRO' }
                 });
-
-                await prisma.auditLog.create({
-                    data: {
-                        action: 'SUBSCRIPTION_DETERMINED',
-                        organizationId: resolvedOrgId,
-                        metadata: JSON.stringify({ status, provider: providerId })
-                    }
-                });
             } else if (status === 'CANCELED' || status === 'PAST_DUE') {
                 await prisma.organization.update({
                     where: { id: resolvedOrgId },
                     data: { plan: 'FREE' }
                 });
             }
+
+            // Log the determination
+            await prisma.auditLog.create({
+                data: {
+                    action: 'SUBSCRIPTION_DETERMINED',
+                    organizationId: resolvedOrgId,
+                    metadata: JSON.stringify({ status, provider: providerId })
+                }
+            });
         }
     }
 }

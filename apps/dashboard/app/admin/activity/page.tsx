@@ -8,18 +8,61 @@ interface AuditLog {
     action: string;
     userId: string | null;
     organizationId: string | null;
+    organization?: {
+        name: string;
+    };
     ipAddress: string | null;
     metadata: string | null;
     createdAt: string;
 }
 
+interface Organization {
+    id: string;
+    name: string;
+}
+
 export default function AdminActivityPage() {
     const { token } = useAuth();
     const [activity, setActivity] = useState<AuditLog[]>([]);
+    const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [selectedOrg, setSelectedOrg] = useState('');
+    const [selectedAction, setSelectedAction] = useState('');
+
+    const ACTIONS = [
+        'SERVER_CREATED',
+        'SERVER_PROVISION_STARTED',
+        'SERVER_PROVISION_COMPLETED',
+        'SERVER_PROVISION_FAILED',
+        'PROJECT_CREATED',
+        'DEPLOYMENT_STARTED',
+        'DEPLOYMENT_COMPLETED',
+        'DEPLOYMENT_FAILED',
+        'SUBSCRIPTION_DETERMINED'
+    ];
+
+    useEffect(() => {
+        if (!token) return;
+
+        const loadOrgs = async () => {
+            try {
+                const res = await fetch('/api/admin/organizations?limit=100', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setOrganizations(data.organizations);
+                }
+            } catch (e) {
+                console.error('Failed to load organizations', e);
+            }
+        };
+
+        loadOrgs();
+    }, [token]);
 
     useEffect(() => {
         if (!token) return;
@@ -27,7 +70,11 @@ export default function AdminActivityPage() {
         const loadContent = async () => {
             setIsLoading(true);
             try {
-                const res = await fetch(`/api/admin/activity?page=${page}&limit=50`, {
+                let url = `/api/admin/activity?page=${page}&limit=50`;
+                if (selectedOrg) url += `&orgId=${selectedOrg}`;
+                if (selectedAction) url += `&action=${selectedAction}`;
+
+                const res = await fetch(url, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
 
@@ -44,7 +91,7 @@ export default function AdminActivityPage() {
         };
 
         loadContent();
-    }, [token, page]);
+    }, [token, page, selectedOrg, selectedAction]);
 
     if (isLoading) return <div>Loading activity feed...</div>;
     if (error) return <div className="text-red-500">Error: {error}</div>;
@@ -52,6 +99,45 @@ export default function AdminActivityPage() {
     return (
         <div>
             <h1 className="text-3xl font-bold mb-8 text-white">Platform Activity Log</h1>
+
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                    <label className="block text-xs text-gray-500 uppercase mb-1">Filter by Organization</label>
+                    <select
+                        value={selectedOrg}
+                        onChange={(e) => { setSelectedOrg(e.target.value); setPage(1); }}
+                        className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+                    >
+                        <option value="">All Organizations</option>
+                        {organizations.map(org => (
+                            <option key={org.id} value={org.id}>{org.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex-1">
+                    <label className="block text-xs text-gray-500 uppercase mb-1">Filter by Action</label>
+                    <select
+                        value={selectedAction}
+                        onChange={(e) => { setSelectedAction(e.target.value); setPage(1); }}
+                        className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+                    >
+                        <option value="">All Actions</option>
+                        {ACTIONS.map(action => (
+                            <option key={action} value={action}>{action}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex items-end">
+                    {(selectedOrg || selectedAction) && (
+                        <button
+                            onClick={() => { setSelectedOrg(''); setSelectedAction(''); setPage(1); }}
+                            className="text-xs text-blue-400 hover:text-blue-300 underline py-2"
+                        >
+                            Reset Filters
+                        </button>
+                    )}
+                </div>
+            </div>
 
             <div className="bg-gray-950/50 border border-gray-800 rounded-lg overflow-hidden">
                 <ul className="divide-y divide-gray-800">
@@ -63,7 +149,11 @@ export default function AdminActivityPage() {
                                         {log.action}
                                     </span>
                                     <div className="text-sm text-gray-400 mt-1">
-                                        {log.organizationId && <span className="mr-3">Org: <code className="text-gray-300">{log.organizationId}</code></span>}
+                                        {log.organizationId && (
+                                            <span className="mr-3">
+                                                Org: <code className="text-gray-300 font-bold">{log.organization?.name || log.organizationId}</code>
+                                            </span>
+                                        )}
                                         {log.userId && <span>User: <code className="text-gray-300">{log.userId}</code></span>}
                                     </div>
                                     {log.metadata && (

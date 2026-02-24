@@ -52,6 +52,16 @@ export async function validateSession(token: string) {
         return null;
     }
 
+    // Check if user is active
+    if (!session.user.isActive) {
+        throw new Error('Account deactivated');
+    }
+
+    // Check if organization is active
+    if (session.user.organization && !session.user.organization.isActive) {
+        throw new Error('Organization deactivated');
+    }
+
     return session.user;
 }
 
@@ -89,7 +99,13 @@ export async function getAuthContext(request: Request): Promise<AuthContext | nu
  * Use in API routes.
  */
 export async function requireAuth(request: Request): Promise<AuthContext> {
-    const ctx = await getAuthContext(request);
+    const ctx = await getAuthContext(request).catch(err => {
+        if (err.message === 'Account deactivated' || err.message === 'Organization deactivated') {
+            throw err;
+        }
+        return null;
+    });
+
     if (!ctx) {
         throw new Error('Unauthorized');
     }
