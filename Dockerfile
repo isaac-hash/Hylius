@@ -22,7 +22,7 @@ COPY packages/cli/package.json ./packages/cli/
 COPY packages/core/package.json ./packages/core/
 RUN npm ci
 COPY . .
-RUN prisma generate --schema=apps/dashboard/prisma/schema.prisma
+RUN npx prisma generate --schema=apps/dashboard/prisma/schema.prisma
 RUN npm run build
 
 
