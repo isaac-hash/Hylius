@@ -41,8 +41,8 @@ hylius deploy
 
 **Features:**
 - **Atomic Deployment:** Uses a "Symlink Swap" logic to ensure zero-downtime.
-- **Auto-Detection:** Detects if you're using Next.js (Standalone), Docker, or raw Node.js.
-- **Zero-Config:** If no Dockerfile is found, it automatically prepares the environment.
+- **Strategy Auto-Detection:** Uses Docker Compose when `compose.yaml` exists, Dockerfile when `Dockerfile` exists, and will auto-generate Docker artifacts for Node/Next.js repos without them before deploying.
+- **Release Safety:** Every deploy goes to a release directory and then symlink-swaps to `current`.
 
 ---
 
