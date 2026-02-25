@@ -101,7 +101,7 @@ export async function deploy(options: any) {
             server,
             project,
             trigger: 'cli',
-            onLog: (chunk) => {
+            onLog: (chunk: string) => {
                 // Stop spinner to log, then restart or just log raw?
                 // For CLI experience, maybe just log raw lines if verbose, 
                 // but for now let's just log to console above spinner or update spinner text

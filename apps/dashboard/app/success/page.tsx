@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function PaymentSuccessPage() {
+import { Suspense } from "react";
+
+function SuccessContent() {
     const searchParams = useSearchParams();
     const reference = searchParams.get("reference") || searchParams.get("trxref");
     const [countdown, setCountdown] = useState(5);
@@ -56,5 +58,17 @@ export default function PaymentSuccessPage() {
                 </Link>
             </div>
         </div>
+    );
+}
+
+export default function PaymentSuccessPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+                <div className="text-center">Loading...</div>
+            </div>
+        }>
+            <SuccessContent />
+        </Suspense>
     );
 }

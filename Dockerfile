@@ -14,7 +14,7 @@ CMD ["npm", "run", "dev"]
 # Builder
 # ==========================================
 FROM node:20-alpine AS builder
-RUN apk add --no-cache libc6-compat make g++ python3
+RUN apk add --no-cache libc6-compat make g++ python3 openssl
 WORKDIR /app
 COPY package*.json ./
 COPY apps/dashboard/package.json ./apps/dashboard/
@@ -30,7 +30,7 @@ RUN npm run build
 # Production
 # ==========================================
 FROM node:20-alpine AS production
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package*.json ./
 COPY apps/dashboard/package.json ./apps/dashboard/
