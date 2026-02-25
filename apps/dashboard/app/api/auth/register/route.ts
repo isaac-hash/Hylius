@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../services/prisma';
 import { hashPassword, createSession } from '../../../../services/auth.service';
+import { Prisma } from '@prisma/client';
 
 export async function POST(request: Request) {
     try {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
         // Create organization + user in a transaction
         const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const organization = await tx.organization.create({
                 data: {
                     name: orgName,
