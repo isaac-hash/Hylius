@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import AddServerModal from './AddServerModal';
 import AddProjectModal from './AddProjectModal';
-import ProvisionTerminalModal from './ProvisionTerminalModal';
+
+const ProvisionTerminalModal = dynamic(() => import('./ProvisionTerminalModal'), {
+    ssr: false,
+});
 import Link from 'next/link';
 
 interface Project {

@@ -7,9 +7,9 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "dev": "npm run dev --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "build": "npm run build -w packages/core && npm run build -w packages/cli && npm run build -w apps/dashboard",
+    "dev": "npm run dev -w packages/core && npm run dev -w packages/cli && npm run dev -w apps/dashboard",
+    "test": "npm run test -w packages/core && npm run test -w packages/cli && npm run test -w apps/dashboard"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

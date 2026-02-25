@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = 'force-dynamic';
 
 import ServerList from "@/components/ServerList";
 import Link from "next/link";
