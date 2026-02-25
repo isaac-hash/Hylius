@@ -10,6 +10,7 @@ Hylius is a monorepo that includes a Docker/deployment CLI and a web dashboard f
 - 📦 Production-ready build configurations
 - 🛠️ **Server Provisioning** (`hylius setup`) - Automatic Docker/Firewall setup
 - 🚢 **Atomic Deployment** (`hylius deploy`) - Zero-downtime push to VPS
+- 📦 **Smart runtime deploy strategy** - Auto uses Docker Compose / Dockerfile / PM2 based on project files
 - 🤖 **CI/CD Automation** (`hylius ci-generate`) - Quick GitHub Actions scaffolding
 - 🎨 **Beautiful colored terminal output with spinners**
 - 📊 **Real-time streaming command output**

@@ -100,7 +100,9 @@ app.prepare().then(() => {
                     repoUrl: project.repoUrl,
                     branch: project.branch,
                     deployPath: project.deployPath,
-                    // TODO: Add build/start commands from DB
+                    buildCommand: project.buildCommand || undefined,
+                    startCommand: project.startCommand || undefined,
+                    deployStrategy: 'auto',
                 };
 
                 // 4. Execute Deployment
