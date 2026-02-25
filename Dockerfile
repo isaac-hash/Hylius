@@ -22,6 +22,7 @@ COPY packages/cli/package.json ./packages/cli/
 COPY packages/core/package.json ./packages/core/
 RUN npm ci
 COPY . .
+RUN prisma generate
 RUN npm run build
 
 
