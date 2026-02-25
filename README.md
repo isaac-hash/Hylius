@@ -1,6 +1,6 @@
 # hylius
 
-A CLI tool to initialize and manage Docker configurations for development projects with beautiful colored terminal output.
+Hylius is a monorepo that includes a Docker/deployment CLI and a web dashboard for managing servers, projects, and deployments.
 
 ## Features
 
@@ -13,6 +13,7 @@ A CLI tool to initialize and manage Docker configurations for development projec
 - 🤖 **CI/CD Automation** (`hylius ci-generate`) - Quick GitHub Actions scaffolding
 - 🎨 **Beautiful colored terminal output with spinners**
 - 📊 **Real-time streaming command output**
+- 🖥️ **Dashboard UI** (`apps/dashboard`) for server, project, billing, and deployment management
 
 ## Installation
 
@@ -110,21 +111,13 @@ This will create Docker images with tags:
 
 ```
 hylius/
-├── src/
-│   ├── commands/
-│   │   ├── root.ts      # Main CLI program
-│   │   ├── init.ts      # Init command
-│   │   ├── dev.ts       # Dev command
-│   │   └── build.ts     # Build command
-│   ├── utils/
-│   │   ├── config.ts    # Config file handling
-│   │   └── detect.ts    # Project type detection
-│   ├── templates/
-│   │   └── index.ts     # Docker/compose templates
-│   └── index.ts         # Entry point
-├── package.json
-├── tsconfig.json
-└── README.md
+├── apps/
+│   └── dashboard/        # Next.js dashboard + API routes + realtime deployment UI
+├── packages/
+│   ├── core/             # Shared deployment, setup, monitoring, SSH logic
+│   └── cli/              # `hylius` CLI package
+├── docs/
+└── package.json          # npm workspaces root
 ```
 
 ## Development
