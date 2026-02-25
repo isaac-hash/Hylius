@@ -21,17 +21,102 @@ async function execStreamOrThrow(
     }
 }
 
+async function hasFile(client: SSHClient, filePath: string): Promise<boolean> {
+    const { code } = await client.exec(`test -f ${filePath}`);
+    return code === 0;
+}
+
+async function detectNodeRuntime(client: SSHClient, releasePath: string): Promise<'next' | 'node' | null> {
+    if (!(await hasFile(client, `${releasePath}/package.json`))) {
+        return null;
+    }
+
+    const { code: nextCode } = await client.exec(`grep -q '"next"' ${releasePath}/package.json`);
+    if (nextCode === 0) {
+        return 'next';
+    }
+
+    return 'node';
+}
+
+function getGeneratedDockerfile(runtime: 'next' | 'node'): string {
+    if (runtime === 'next') {
+        return `FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+`;
+    }
+
+    return `FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
+`;
+}
+
+function getGeneratedCompose(project: ProjectConfig): string {
+    const imageName = project.dockerImage || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:latest`;
+    const containerName = project.containerName || `${project.name}-app`;
+
+    return `services:\n  app:\n    build:\n      context: .\n    image: ${imageName}\n    container_name: ${containerName}\n    restart: unless-stopped\n    ports:\n      - \"3000:3000\"\n`;
+}
+
+async function scaffoldContainerFilesIfNeeded(
+    client: SSHClient,
+    releasePath: string,
+    project: ProjectConfig,
+    onLog?: (chunk: string) => void,
+): Promise<void> {
+    if (project.deployStrategy && project.deployStrategy !== 'auto') {
+        return;
+    }
+
+    const composeFile = project.dockerComposeFile || 'compose.yaml';
+
+    if (await hasFile(client, `${releasePath}/${composeFile}`) || await hasFile(client, `${releasePath}/Dockerfile`)) {
+        return;
+    }
+
+    const runtime = await detectNodeRuntime(client, releasePath);
+    if (!runtime) {
+        return;
+    }
+
+    const dockerfileContent = getGeneratedDockerfile(runtime).replace(/'/g, `'"'"'`);
+    const composeContent = getGeneratedCompose(project).replace(/'/g, `'"'"'`);
+
+    if (onLog) onLog(`No Docker artifacts found. Generating ${runtime.toUpperCase()} Dockerfile and ${composeFile}...\n`);
+
+    await execOrThrow(
+        client,
+        `cat <<'EOF' > ${releasePath}/Dockerfile\n${dockerfileContent}EOF`,
+        'Generate Dockerfile',
+    );
+
+    await execOrThrow(
+        client,
+        `cat <<'EOF' > ${releasePath}/${composeFile}\n${composeContent}EOF`,
+        `Generate ${composeFile}`,
+    );
+}
+
 async function resolveDeployStrategy(client: SSHClient, releasePath: string, project: ProjectConfig): Promise<'pm2' | 'docker-compose' | 'dockerfile'> {
     if (project.deployStrategy && project.deployStrategy !== 'auto') {
         return project.deployStrategy;
     }
 
     const composeFile = project.dockerComposeFile || 'compose.yaml';
-    const { code: composeCode } = await client.exec(`test -f ${releasePath}/${composeFile}`);
-    if (composeCode === 0) return 'docker-compose';
+    if (await hasFile(client, `${releasePath}/${composeFile}`)) return 'docker-compose';
 
-    const { code: dockerfileCode } = await client.exec(`test -f ${releasePath}/Dockerfile`);
-    if (dockerfileCode === 0) return 'dockerfile';
+    if (await hasFile(client, `${releasePath}/Dockerfile`)) return 'dockerfile';
 
     return 'pm2';
 }
@@ -68,6 +153,8 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             'Git clone',
             onLog,
         );
+
+        await scaffoldContainerFilesIfNeeded(client, releasePath, project, onLog);
 
         const strategy = await resolveDeployStrategy(client, releasePath, project);
         log(`Deploy strategy: ${strategy}`);
