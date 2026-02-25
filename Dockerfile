@@ -14,11 +14,15 @@ CMD ["npm", "run", "dev"]
 # Builder
 # ==========================================
 FROM node:20-alpine AS builder
-RUN apk add --no-cache libc6-compat make g++ python3
+RUN apk add --no-cache libc6-compat make g++ python3 openssl
 WORKDIR /app
 COPY package*.json ./
+COPY apps/dashboard/package.json ./apps/dashboard/
+COPY packages/cli/package.json ./packages/cli/
+COPY packages/core/package.json ./packages/core/
 RUN npm ci
 COPY . .
+RUN npx prisma generate --schema=apps/dashboard/prisma/schema.prisma
 RUN npm run build
 
 
@@ -26,10 +30,16 @@ RUN npm run build
 # Production
 # ==========================================
 FROM node:20-alpine AS production
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package*.json ./
+COPY apps/dashboard/package.json ./apps/dashboard/
+COPY packages/cli/package.json ./packages/cli/
+COPY packages/core/package.json ./packages/core/
 RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/apps/dashboard/.next ./apps/dashboard/.next
+COPY --from=builder /app/apps/dashboard/public ./apps/dashboard/public
+COPY --from=builder /app/packages/core/dist ./packages/core/dist
+COPY --from=builder /app/packages/cli/dist ./packages/cli/dist
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["npm", "start", "-w", "apps/dashboard"]

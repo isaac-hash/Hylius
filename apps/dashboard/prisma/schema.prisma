@@ -1,0 +1,223 @@
+// Hylius Dashboard — Managed-Hosted Control Plane Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // SQLite for dev, switch to "postgresql" for prod
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums & Types ─────────────────────────────────────────
+// Note: SQLite does not support native enums. 
+// We use Strings for roles, statuses, and providers.
+
+// ─── Multi-Tenancy ─────────────────────────────────────────
+
+model Organization {
+  id            String         @id @default(cuid())
+  name          String
+  slug          String         @unique
+  plan          String         @default("FREE") // FREE | PRO | ENTERPRISE
+  isActive      Boolean        @default(true)
+  users         User[]
+  servers       Server[]
+  projects      Project[]
+  apiTokens     ApiToken[]
+  subscriptions Subscription[]
+  payments      Payment[]
+  auditLogs     AuditLog[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+// ─── Auth ───────────────────────────────────────────────────
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  password       String        // bcrypt hashed
+  role           String        @default("OWNER") // OWNER | ADMIN | MEMBER | PLATFORM_ADMIN
+  isActive       Boolean       @default(true)
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?       // Optional for PLATFORM_ADMIN
+  sessions       Session[]
+  lastLoginAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  
+  @@index([organizationId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+}
+
+model ApiToken {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  name           String
+  hashedToken    String       @unique
+  lastUsedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
+// ─── Audit & Billing ────────────────────────────────────────
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String
+  userId         String?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  ipAddress      String?
+  metadata       String?  // JSON string
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  provider           String       // "STRIPE" | "PAYSTACK" | "FLUTTERWAVE"
+  externalCustomerId String
+  externalSubId      String
+  status             String       // "ACTIVE" | "PAST_DUE" | "CANCELED" | "INCOMPLETE" | "TRIALING"
+  currentPeriodEnd   DateTime?
+  
+  // Billing identifiers
+  flutterwaveCustomerId     String?
+  flutterwavePaymentMethodId String?
+
+  planId             String?
+  plan               Plan?        @relation(fields: [planId], references: [id])
+  organization       Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model Payment {
+  id                     String       @id @default(cuid())
+  organizationId         String
+  provider               String       // "STRIPE" | "PAYSTACK" | "FLUTTERWAVE"
+  externalTransactionId  String       @unique
+  amount                 Float
+  currency               String       @default("USD")
+  status                 String       // "SUCCESS" | "FAILED" | "PENDING"
+  
+  organization           Organization @relation(fields: [organizationId], references: [id])
+  createdAt              DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([externalTransactionId])
+}
+
+model Plan {
+  id                String         @id @default(cuid())
+  name              String
+  description       String?
+  amount            Float
+  currency          String         @default("USD")
+  interval          String         @default("MONTHLY") // MONTHLY | YEARLY
+  
+  paystackPlanCode  String?        @unique
+  flutterwavePlanId String?        @unique
+  
+  isActive          Boolean        @default(true)
+  subscriptions     Subscription[]
+  
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+
+// ─── Infrastructure ─────────────────────────────────────────
+
+model Server {
+  id                  String       @id @default(cuid())
+  name                String
+  ip                  String
+  port                Int          @default(22)
+  username            String
+  privateKeyEncrypted String?      // AES-256-GCM encrypted SSH key (managed)
+  keyIv               String?      // Initialization vector for decryption
+  osType              String?      // e.g. "Ubuntu", "Alpine"
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  organizationId      String
+  projects            Project[]
+  metrics             Metric[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([organizationId])
+}
+
+model Project {
+  id             String       @id @default(cuid())
+  name           String
+  repoUrl        String
+  branch         String       @default("main")
+  deployPath     String
+  buildCommand   String?
+  startCommand   String?
+  envVars        String?      // JSON string of env vars
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  server         Server       @relation(fields: [serverId], references: [id])
+  serverId       String
+  deployments    Deployment[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([serverId])
+}
+
+model Deployment {
+  id             String       @id @default(cuid())
+  releaseId      String       // Core-generated timestamp ID
+  commitHash     String?
+  status         String       // "PENDING" | "BUILDING" | "SUCCESS" | "FAILED"
+  triggerSource  String       // "CLI" | "DASHBOARD" | "WEBHOOK"
+  durationMs     Int?
+  logPath        String?      // Path to log file / object storage key
+  project        Project      @relation(fields: [projectId], references: [id])
+  projectId      String
+  organizationId String?      // For faster aggregation queries (admin level)
+  startedAt      DateTime     @default(now())
+  finishedAt     DateTime?
+
+  @@index([projectId])
+  @@index([organizationId])
+  @@index([startedAt])
+}
+
+model Metric {
+  id        String   @id @default(cuid())
+  server    Server   @relation(fields: [serverId], references: [id])
+  serverId  String
+  cpu       Float
+  memory    Float
+  disk      Float
+  uptime    Float
+  createdAt DateTime @default(now())
+
+  @@index([serverId])
+}
