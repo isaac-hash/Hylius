@@ -15,6 +15,11 @@ export interface ProjectConfig {
     startCommand?: string;
     env?: Record<string, string>;
     deployPath: string; // e.g. /var/www/my-app
+    deployStrategy?: 'auto' | 'pm2' | 'docker-compose' | 'dockerfile';
+    dockerComposeFile?: string;
+    dockerImage?: string;
+    containerName?: string;
+    dockerRunCommand?: string;
 }
 
 export type TriggerSource = 'cli' | 'dashboard' | 'webhook';
