@@ -69,32 +69,6 @@ async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string)
     }
 }
 
-async function detectRuntimeFromFiles(client: SSHClient, releasePath: string): Promise<ProjectRuntime | null> {
-    if (await hasFile(client, `${releasePath}/package.json`)) {
-        const { code: nextCode } = await client.exec(`grep -q '"next"' ${releasePath}/package.json`);
-        if (nextCode === 0) {
-            return 'next';
-        }
-
-        if (await hasFile(client, `${releasePath}/vite.config.ts`) || await hasFile(client, `${releasePath}/vite.config.js`)) {
-            return 'vite';
-        }
-
-        return 'node';
-    }
-
-    if (await hasFile(client, `${releasePath}/requirements.txt`) || await hasFile(client, `${releasePath}/pyproject.toml`)) {
-        if (await hasFile(client, `${releasePath}/main.py`)) {
-            const { code: fastApiCode } = await client.exec(`grep -q 'FastAPI' ${releasePath}/main.py`);
-            if (fastApiCode === 0) {
-                return 'fastapi';
-            }
-        }
-
-        return 'python';
-    }
-}
-
 async function detectRuntimeFromFiles(client: SSHClient, appPath: string): Promise<ProjectRuntime | null> {
     if (await hasFile(client, `${appPath}/package.json`)) {
         const { code: nextCode } = await client.exec(`grep -q '"next"' ${appPath}/package.json`);
@@ -125,13 +99,8 @@ async function detectRuntimeFromFiles(client: SSHClient, appPath: string): Promi
         return 'php';
     }
 
-    if (await hasFile(client, `${releasePath}/composer.json`)) {
-        if (await hasFile(client, `${releasePath}/artisan`)) return 'laravel';
-        return 'php';
-    }
-
-    if (await hasFile(client, `${releasePath}/go.mod`)) return 'go';
-    if (await hasFile(client, `${releasePath}/pom.xml`)) return 'java';
+    if (await hasFile(client, `${appPath}/go.mod`)) return 'go';
+    if (await hasFile(client, `${appPath}/pom.xml`)) return 'java';
 
     return null;
 }
@@ -259,8 +228,7 @@ async function scaffoldContainerFilesIfNeeded(
         return;
     }
 
-    const { runtime, appPath } = detected;
-    const contextPath = appPath === releasePath ? '.' : appPath.replace(`${releasePath}/`, './');
+    const appPath = releasePath;
 
     const dockerfileContent = getGeneratedDockerfile(runtime).replace(/'/g, `'"'"'`);
     const composeContent = getGeneratedCompose(project, runtime).replace(/'/g, `'"'"'`);
