@@ -125,16 +125,16 @@ function capitalize(str: string): string {
   return str.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 
-function generateConfig(projectType: string): void {
+function generateConfig(projectType: string, projectRoot: string = process.cwd()): void {
   let dockerfile: string;
   let compose: string;
   let dockerignore = templates.nodeDockerignore; // Default ignore list
 
-  const hasPackageLock = fs.existsSync('package-lock.json');
-  const hasRequirements = fs.existsSync('requirements.txt');
-  const hasGoMod = fs.existsSync('go.mod');
-  const hasPom = fs.existsSync('pom.xml');
-  const hasComposerLock = fs.existsSync('composer.lock');
+  const hasPackageLock = fs.existsSync(path.join(projectRoot, 'package-lock.json'));
+  const hasRequirements = fs.existsSync(path.join(projectRoot, 'requirements.txt'));
+  const hasGoMod = fs.existsSync(path.join(projectRoot, 'go.mod'));
+  const hasPom = fs.existsSync(path.join(projectRoot, 'pom.xml'));
+  const hasComposerLock = fs.existsSync(path.join(projectRoot, 'composer.lock'));
 
   const options = {
     hasLockfile: hasPackageLock || hasRequirements || hasGoMod || hasPom || hasComposerLock,
@@ -178,8 +178,8 @@ function generateConfig(projectType: string): void {
     case 'laravel':
       dockerfile = templates.getLaravelDockerfile(options);
       compose = templates.laravelCompose;
-      if (!fs.existsSync('docker-entrypoint.sh')) {
-        fs.writeFileSync('docker-entrypoint.sh', templates.laravelEntrypoint, 'utf8');
+      if (!fs.existsSync(path.join(projectRoot, 'docker-entrypoint.sh'))) {
+        fs.writeFileSync(path.join(projectRoot, 'docker-entrypoint.sh'), templates.laravelEntrypoint, 'utf8');
         console.log(chalk.gray(`   Created: docker-entrypoint.sh`));
       }
       break;
@@ -187,10 +187,33 @@ function generateConfig(projectType: string): void {
       throw new Error(`Unsupported project type: ${projectType}`);
   }
 
-  fs.writeFileSync('Dockerfile', dockerfile, 'utf8');
-  fs.writeFileSync('compose.yaml', compose, 'utf8');
-  if (!fs.existsSync('.dockerignore')) {
-    fs.writeFileSync('.dockerignore', dockerignore, 'utf8');
+  fs.writeFileSync(path.join(projectRoot, 'Dockerfile'), dockerfile, 'utf8');
+  fs.writeFileSync(path.join(projectRoot, 'compose.yaml'), compose, 'utf8');
+  if (!fs.existsSync(path.join(projectRoot, '.dockerignore'))) {
+    fs.writeFileSync(path.join(projectRoot, '.dockerignore'), dockerignore, 'utf8');
   }
   console.log(chalk.gray(`   Created: Dockerfile, compose.yaml`));
+}
+
+export function ensureDockerArtifacts(projectRoot: string): { generated: boolean; projectType: string } {
+  const composePath = path.join(projectRoot, 'compose.yaml');
+  const dockerfilePath = path.join(projectRoot, 'Dockerfile');
+
+  if (fs.existsSync(composePath) || fs.existsSync(dockerfilePath)) {
+    return { generated: false, projectType: 'existing' };
+  }
+
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(projectRoot);
+    const projectType = detectProjectType();
+    if (projectType === 'unknown') {
+      return { generated: false, projectType };
+    }
+
+    generateConfig(projectType, projectRoot);
+    return { generated: true, projectType };
+  } finally {
+    process.chdir(previousCwd);
+  }
 }

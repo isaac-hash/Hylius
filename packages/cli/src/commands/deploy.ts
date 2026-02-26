@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import path from 'path';
 import { deploy as coreDeploy, DeployOptions, ServerConfig, ProjectConfig, SSHClient } from '@hylius/core';
-import { detectProjectType } from '../utils/detect.js';
+import { ensureDockerArtifacts } from './init.js';
 import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -160,6 +160,13 @@ export async function deploy(options: any) {
             const bundleName = `hylius-bundle-${Date.now()}.tar.gz`;
             const localBundlePath = path.join(os.tmpdir(), bundleName);
             const remoteBundlePath = `/tmp/${bundleName}`;
+
+            spinner.text = 'Checking Docker artifacts...';
+            const artifactResult = ensureDockerArtifacts(localSourcePath);
+            if (artifactResult.generated) {
+                spinner.info(chalk.cyan(`No Dockerfile/compose.yaml found. Generated templates for detected type: ${artifactResult.projectType}`));
+                spinner.start('Starting deployment...');
+            }
 
             spinner.text = 'Bundling local project...';
             try {
