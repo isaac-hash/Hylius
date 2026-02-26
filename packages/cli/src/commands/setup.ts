@@ -135,7 +135,7 @@ export const setupCommand = new Command('setup')
             if (isUbuntu || isDebian) {
                 dockerCommands = [
                     `${sudoPrefix}apt-get update`,
-                    `${sudoPrefix}apt-get install -y ca-certificates curl gnupg lsb-release`,
+                    `${sudoPrefix}apt-get install -y ca-certificates curl gnupg lsb-release nano git htop`,
                     `${sudoPrefix}mkdir -p /etc/apt/keyrings`,
                     `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | ${sudoPrefix}gpg --dearmor -o /etc/apt/keyrings/docker.gpg || true`,
                     `echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(lsb_release -cs) stable" | ${sudoPrefix}tee /etc/apt/sources.list.d/docker.list > /dev/null`,
@@ -147,7 +147,7 @@ export const setupCommand = new Command('setup')
             } else if (isAlpine) {
                 dockerCommands = [
                     `${sudoPrefix}apk update`,
-                    `${sudoPrefix}apk add --no-cache docker docker-cli-compose`,
+                    `${sudoPrefix}apk add --no-cache docker docker-cli-compose nano git htop`,
                     `${sudoPrefix}rc-update add docker default || true`,
                     `${sudoPrefix}addgroup ${currentUser} docker || true`,
                     `${sudoPrefix}service docker start || ${sudoPrefix}rc-service docker start || true`
@@ -163,7 +163,19 @@ export const setupCommand = new Command('setup')
             }
             spinner.succeed('Docker installed successfully');
 
-            // 3. Setup Firewall — auto-enable in CI, prompt in interactive mode
+            // 3. Install Railpack (zero-config container builder)
+            spinner.start('Installing Railpack...');
+            const railpackResult = await ssh.execCommand(
+                `curl -fsSL https://railpack.com/install.sh | ${isRoot ? 'bash' : `${sudoPrefix}bash`}`
+            );
+            if (railpackResult.code === 0) {
+                spinner.succeed('Railpack installed successfully');
+            } else {
+                spinner.warn('Railpack installation failed (non-critical). Deploy will fall back to Dockerfile-based builds.');
+                console.log(chalk.dim(`   ${railpackResult.stderr || railpackResult.stdout}`));
+            }
+
+            // 4. Setup Firewall — auto-enable in CI, prompt in interactive mode
             let setupUfw = true;
             if (!isCI()) {
                 const ufwAnswer = await inquirer.prompt([{

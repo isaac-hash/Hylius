@@ -28,12 +28,10 @@ async function hasFile(client: SSHClient, filePath: string): Promise<boolean> {
 
 type ProjectRuntime = 'next' | 'vite' | 'node' | 'python' | 'fastapi' | 'go' | 'java' | 'php' | 'laravel';
 
-interface DetectedRuntime {
-    runtime: ProjectRuntime;
-    appPath: string;
-}
-
-async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string): Promise<DetectedRuntime | null> {
+/**
+ * Detect runtime using railpack plan --json (for port mapping only).
+ */
+async function detectRuntime(client: SSHClient, releasePath: string): Promise<ProjectRuntime | null> {
     const { stdout, code } = await client.exec(`cd ${releasePath} && railpack plan --json`);
     if (code !== 0 || !stdout.trim()) {
         return null;
@@ -45,28 +43,24 @@ async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string)
             return null;
         }
 
-        const providers = plan.providers.map(provider => provider.toLowerCase());
-        if (providers.includes('nextjs')) return { runtime: 'next', appPath: releasePath };
+        const providers = plan.providers.map(p => p.toLowerCase());
+        if (providers.includes('nextjs')) return 'next';
         if (providers.includes('node')) {
             if (await hasFile(client, `${releasePath}/vite.config.ts`) || await hasFile(client, `${releasePath}/vite.config.js`)) {
-                return { runtime: 'vite', appPath: releasePath };
+                return 'vite';
             }
-
-            return { runtime: 'node', appPath: releasePath };
+            return 'node';
         }
-
         if (providers.includes('python')) {
-            if (plan.variables?.RAILPACK_PYTHON_APP_MODULE?.includes('main:app')) return { runtime: 'fastapi', appPath: releasePath };
-            return { runtime: 'python', appPath: releasePath };
+            if (plan.variables?.RAILPACK_PYTHON_APP_MODULE?.includes('main:app')) return 'fastapi';
+            return 'python';
         }
-
         if (providers.includes('php')) {
-            if (await hasFile(client, `${releasePath}/artisan`)) return { runtime: 'laravel', appPath: releasePath };
-            return { runtime: 'php', appPath: releasePath };
+            if (await hasFile(client, `${releasePath}/artisan`)) return 'laravel';
+            return 'php';
         }
-
-        if (providers.includes('go')) return { runtime: 'go', appPath: releasePath };
-        if (providers.includes('java')) return { runtime: 'java', appPath: releasePath };
+        if (providers.includes('go')) return 'go';
+        if (providers.includes('java')) return 'java';
 
         return null;
     } catch {
@@ -74,203 +68,61 @@ async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string)
     }
 }
 
-async function detectRuntimeFromFiles(client: SSHClient, releasePath: string): Promise<DetectedRuntime | null> {
-    const searchPaths = [releasePath];
-    // Check if there are subdirectories (for monorepos or nested apps)
-    const { stdout: lsDir } = await client.exec(`find ${releasePath} -maxdepth 2 -type d -not -path '*/.*'`);
-    const dirs = lsDir.split('\n').filter(Boolean);
-    searchPaths.push(...dirs);
-
-    for (const appPath of searchPaths) {
-        if (await hasFile(client, `${appPath}/package.json`)) {
-            const { code: nextCode } = await client.exec(`grep -q '"next"' ${appPath}/package.json`);
-            if (nextCode === 0) return { runtime: 'next', appPath };
-
-            if (await hasFile(client, `${appPath}/vite.config.ts`) || await hasFile(client, `${appPath}/vite.config.js`)) {
-                return { runtime: 'vite', appPath };
-            }
-
-            return { runtime: 'node', appPath };
-        }
-
-        if (await hasFile(client, `${appPath}/requirements.txt`) || await hasFile(client, `${appPath}/pyproject.toml`)) {
-            if (await hasFile(client, `${appPath}/main.py`)) {
-                const { code: fastApiCode } = await client.exec(`grep -q 'FastAPI' ${appPath}/main.py`);
-                if (fastApiCode === 0) return { runtime: 'fastapi', appPath };
-            }
-
-            return { runtime: 'python', appPath };
-        }
-
-        if (await hasFile(client, `${appPath}/composer.json`)) {
-            if (await hasFile(client, `${appPath}/artisan`)) return { runtime: 'laravel', appPath };
-            return { runtime: 'php', appPath };
-        }
-
-        if (await hasFile(client, `${appPath}/go.mod`)) return { runtime: 'go', appPath };
-        if (await hasFile(client, `${appPath}/pom.xml`)) return { runtime: 'java', appPath };
-    }
-
-    return null;
-}
-
-async function detectProjectRuntime(client: SSHClient, releasePath: string): Promise<DetectedRuntime | null> {
-    const railpackDetected = await detectRuntimeFromRailpack(client, releasePath);
-    if (railpackDetected) return railpackDetected;
-
-    return detectRuntimeFromFiles(client, releasePath);
-}
-
-function getGeneratedDockerfile(runtime: ProjectRuntime): string {
+/**
+ * Get the default port for a detected runtime.
+ */
+function getRuntimePort(runtime: ProjectRuntime | null): string {
     switch (runtime) {
+        case 'python':
+        case 'fastapi':
+            return '8000';
+        case 'go':
+        case 'java':
+            return '8080';
+        case 'php':
+        case 'laravel':
+            return '80';
         case 'next':
-            return `FROM node:22-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["npm", "start"]
-`;
         case 'vite':
         case 'node':
-            return `FROM node:22-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
-COPY . .
-EXPOSE 3000
-CMD ["npm", "start"]
-`;
-        case 'fastapi':
-            return `FROM python:3.12-slim
-WORKDIR /app
-COPY requirements*.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-`;
-        case 'python':
-            return `FROM python:3.12-slim
-WORKDIR /app
-COPY requirements*.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["python", "main.py"]
-`;
-        case 'go':
-            return `FROM golang:1.23-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum* ./
-RUN go mod download
-COPY . .
-RUN go build -o app .
-
-FROM alpine:3.20
-WORKDIR /app
-COPY --from=builder /app/app /app/app
-EXPOSE 8080
-CMD ["/app/app"]
-`;
-        case 'java':
-            return `FROM maven:3.9-eclipse-temurin-21 AS builder
-WORKDIR /app
-COPY pom.xml ./
-COPY src ./src
-RUN mvn -DskipTests package
-
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-COPY --from=builder /app/target/*.jar /app/app.jar
-EXPOSE 8080
-CMD ["java", "-jar", "/app/app.jar"]
-`;
-        case 'laravel':
-            return `FROM php:8.3-apache
-WORKDIR /var/www/html
-RUN docker-php-ext-install pdo pdo_mysql
-COPY . .
-EXPOSE 80
-CMD ["apache2-foreground"]
-`;
-        case 'php':
-            return `FROM php:8.3-apache
-WORKDIR /var/www/html
-COPY . .
-EXPOSE 80
-CMD ["apache2-foreground"]
-`;
+        default:
+            return '3000';
     }
 }
 
-function getGeneratedCompose(project: ProjectConfig, runtime: ProjectRuntime, contextPath: string = '.'): string {
-    const imageName = project.dockerImage || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:latest`;
-    const containerName = project.containerName || `${project.name}-app`;
-    const appPort = runtime === 'python' || runtime === 'fastapi' ? '8000:8000' : runtime === 'php' || runtime === 'laravel' ? '80:80' : '3000:3000';
+type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2';
 
-    return `services:\n  app:\n    build:\n      context: ${contextPath}\n    image: ${imageName}\n    container_name: ${containerName}\n    restart: unless-stopped\n    ports:\n      - \"${appPort}\"\n`;
-}
-
-async function scaffoldContainerFilesIfNeeded(
-    client: SSHClient,
-    releasePath: string,
-    project: ProjectConfig,
-    onLog?: (chunk: string) => void,
-): Promise<void> {
-    if (project.deployStrategy && project.deployStrategy !== 'auto') {
-        return;
-    }
-
-    const composeFile = project.dockerComposeFile || 'compose.yaml';
-
-    if (await hasFile(client, `${releasePath}/${composeFile}`) || await hasFile(client, `${releasePath}/Dockerfile`)) {
-        return;
-    }
-
-    const detected = await detectProjectRuntime(client, releasePath);
-    if (!detected) {
-        return;
-    }
-
-    const { runtime, appPath } = detected;
-    const contextPath = appPath === releasePath ? '.' : appPath.replace(`${releasePath}/`, './');
-
-    const dockerfileContent = getGeneratedDockerfile(runtime).replace(/'/g, `'"'"'`);
-    const composeContent = getGeneratedCompose(project, runtime, contextPath).replace(/'/g, `'"'"'`);
-
-    if (onLog) onLog(`No Docker artifacts found. Generating ${runtime.toUpperCase()} Dockerfile and ${composeFile}...\n`);
-
-    await execOrThrow(
-        client,
-        `cat <<'EOF' > ${appPath}/Dockerfile\n${dockerfileContent}EOF`,
-        'Generate Dockerfile',
-    );
-
-    await execOrThrow(
-        client,
-        `cat <<'EOF' > ${releasePath}/${composeFile}\n${composeContent}EOF`,
-        `Generate ${composeFile}`,
-    );
-}
-
-async function resolveDeployStrategy(client: SSHClient, releasePath: string, project: ProjectConfig): Promise<'pm2' | 'docker-compose' | 'dockerfile'> {
+/**
+ * Determine how to deploy the project based on existing files or explicit config.
+ */
+async function resolveDeployStrategy(client: SSHClient, releasePath: string, project: ProjectConfig): Promise<DeployStrategy> {
+    // Explicit user override (skip 'auto')
     if (project.deployStrategy && project.deployStrategy !== 'auto') {
         return project.deployStrategy;
     }
 
+    // Check for existing containerization artifacts
     const composeFile = project.dockerComposeFile || 'compose.yaml';
     if (await hasFile(client, `${releasePath}/${composeFile}`)) return 'docker-compose';
-
+    if (await hasFile(client, `${releasePath}/docker-compose.yml`)) return 'docker-compose';
     if (await hasFile(client, `${releasePath}/Dockerfile`)) return 'dockerfile';
+    if (await hasFile(client, `${releasePath}/nixpacks.toml`)) return 'nixpacks';
+    if (await hasFile(client, `${releasePath}/railpack.json`)) return 'railpack';
 
+    // Not containerized — check if railpack is available on the server
+    const { code: railpackCheck } = await client.exec('command -v railpack');
+    if (railpackCheck === 0) return 'railpack';
+
+    // Fallback to PM2 (no containerization)
     return 'pm2';
 }
 
 function getContainerName(project: ProjectConfig): string {
     return project.containerName || `${project.name}-app`;
+}
+
+function getImageName(project: ProjectConfig): string {
+    return project.dockerImage || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:latest`;
 }
 
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
@@ -302,7 +154,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 'Extract bundle',
                 onLog,
             );
-            // Optionally remove the bundle after extraction
+            // Remove the bundle after extraction
             await client.exec(`rm ${project.localBundlePath}`);
         } else {
             log(`Cloning ${project.repoUrl} (${project.branch || 'main'})...`);
@@ -314,13 +166,18 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
         }
 
-        await scaffoldContainerFilesIfNeeded(client, releasePath, project, onLog);
-
         const strategy = await resolveDeployStrategy(client, releasePath, project);
         log(`Deploy strategy: ${strategy}`);
 
         if (strategy === 'docker-compose') {
             const composeFile = project.dockerComposeFile || 'compose.yaml';
+
+            // Patch compose target from development to production for server deployments
+            log('Patching compose target to production...');
+            await client.exec(
+                `cd ${releasePath} && sed -i 's/target: development/target: production/g' ${composeFile}`
+            );
+
             log(`Running Docker Compose using ${composeFile}...`);
             await execStreamOrThrow(
                 client,
@@ -329,8 +186,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 onLog,
             );
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
         } else if (strategy === 'dockerfile') {
-            const imageName = project.dockerImage || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:latest`;
+            const imageName = getImageName(project);
             const containerName = getContainerName(project);
             const runCommand = project.dockerRunCommand || `docker run -d --name ${containerName} --restart unless-stopped ${imageName}`;
 
@@ -351,7 +209,69 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+        } else if (strategy === 'railpack') {
+            const imageName = getImageName(project);
+            const containerName = getContainerName(project);
+
+            // Detect runtime for port mapping
+            log('Detecting project runtime...');
+            const runtime = await detectRuntime(client, releasePath);
+            const port = getRuntimePort(runtime);
+            log(`Detected runtime: ${runtime || 'unknown'} (port ${port})`);
+
+            // Build with Railpack — it auto-detects everything and sets the start command
+            log(`Building container image with Railpack: ${imageName}`);
+            await execStreamOrThrow(
+                client,
+                `cd ${releasePath} && railpack build . --name ${imageName}`,
+                'Railpack build',
+                onLog,
+            );
+
+            // Stop old container and run the new image
+            log(`Replacing container: ${containerName}`);
+            await execStreamOrThrow(
+                client,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName} --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                'Docker run',
+                onLog,
+            );
+
+            await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+        } else if (strategy === 'nixpacks') {
+            const imageName = getImageName(project);
+            const containerName = getContainerName(project);
+
+            // Detect runtime for port mapping
+            log('Detecting project runtime...');
+            const runtime = await detectRuntime(client, releasePath);
+            const port = getRuntimePort(runtime);
+            log(`Detected runtime: ${runtime || 'unknown'} (port ${port})`);
+
+            // Build with Nixpacks
+            log(`Building container image with Nixpacks: ${imageName}`);
+            await execStreamOrThrow(
+                client,
+                `cd ${releasePath} && nixpacks build . --name ${imageName}`,
+                'Nixpacks build',
+                onLog,
+            );
+
+            // Stop old container and run the new image
+            log(`Replacing container: ${containerName}`);
+            await execStreamOrThrow(
+                client,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName} --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                'Docker run',
+                onLog,
+            );
+
+            await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
         } else {
+            // PM2 strategy (no containerization)
             log('Installing dependencies...');
             await execStreamOrThrow(client, `cd ${releasePath} && npm install --omit=dev`, 'Install dependencies', onLog);
 
