@@ -140,14 +140,17 @@ export const setupCommand = new Command('setup')
                     `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | ${sudoPrefix}gpg --dearmor -o /etc/apt/keyrings/docker.gpg || true`,
                     `echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(lsb_release -cs) stable" | ${sudoPrefix}tee /etc/apt/sources.list.d/docker.list > /dev/null`,
                     `${sudoPrefix}apt-get update`,
-                    `${sudoPrefix}apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin`
+                    `${sudoPrefix}apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin`,
+                    `${sudoPrefix}systemctl enable docker || true`,
+                    `${sudoPrefix}systemctl start docker || true`
                 ];
             } else if (isAlpine) {
                 dockerCommands = [
                     `${sudoPrefix}apk update`,
                     `${sudoPrefix}apk add --no-cache docker docker-cli-compose`,
                     `${sudoPrefix}rc-update add docker default || true`,
-                    `${sudoPrefix}addgroup ${currentUser} docker || true`
+                    `${sudoPrefix}addgroup ${currentUser} docker || true`,
+                    `${sudoPrefix}service docker start || ${sudoPrefix}rc-service docker start || true`
                 ];
             }
 

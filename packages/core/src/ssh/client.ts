@@ -77,6 +77,30 @@ export class SSHClient {
         });
     }
 
+    public async uploadFile(localPath: string, remotePath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.client.sftp((err: any, sftp) => {
+                if (err) return reject(err);
+                sftp.fastPut(localPath, remotePath, (err: any) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        });
+    }
+
+    public async putBuffer(buffer: Buffer, remotePath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.client.sftp((err: any, sftp) => {
+                if (err) return reject(err);
+                const stream = sftp.createWriteStream(remotePath);
+                stream.on('close', () => resolve());
+                stream.on('error', (err: any) => reject(err));
+                stream.end(buffer);
+            });
+        });
+    }
+
     public end() {
         this.client.end();
     }

@@ -4,8 +4,11 @@ import dotenv from 'dotenv';
 import chalk from 'chalk';
 import ora from 'ora';
 import path from 'path';
-import { deploy as coreDeploy, DeployOptions, ServerConfig, ProjectConfig } from '@hylius/core';
+import { deploy as coreDeploy, DeployOptions, ServerConfig, ProjectConfig, SSHClient } from '@hylius/core';
 import { detectProjectType } from '../utils/detect.js';
+import { execSync, spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
 
 dotenv.config();
 
@@ -76,6 +79,13 @@ async function getConfiguration(): Promise<{ server: ServerConfig; project: Proj
         },
         {
             type: 'input',
+            name: 'port',
+            message: 'SSH Port:',
+            default: envConfig.port || 22,
+            validate: (input) => !isNaN(parseInt(input)) || 'Port must be a number'
+        },
+        {
+            type: 'input',
             name: 'targetPath',
             message: 'Target Path on VPS (e.g. /var/www/myapp):',
             default: envConfig.targetPath || '/var/www/hylius-app',
@@ -112,7 +122,7 @@ async function getConfiguration(): Promise<{ server: ServerConfig; project: Proj
     const server: ServerConfig = {
         host: answers.host,
         username: answers.username,
-        port: envConfig.port,
+        port: parseInt(answers.port),
         privateKeyPath: answers.privateKeyPath || envConfig.privateKeyPath,
         privateKey: envConfig.privateKey,
         password: answers.password || envConfig.password,
@@ -132,17 +142,80 @@ async function getConfiguration(): Promise<{ server: ServerConfig; project: Proj
 }
 
 export async function deploy(options: any) {
+    let server: ServerConfig;
+    let project: ProjectConfig;
+
     try {
-        const { server, project } = await getConfiguration();
+        const config = await getConfiguration();
+        server = config.server;
+        project = config.project;
 
         const spinner = ora('Starting deployment...').start();
+
+        // Handle local deployment bundling and upload
+        const isLocal = project.repoUrl === '.' || project.repoUrl.startsWith('./') || project.repoUrl.startsWith('../') || path.isAbsolute(project.repoUrl);
+
+        if (isLocal) {
+            const localSourcePath = path.resolve(project.repoUrl);
+            const bundleName = `hylius-bundle-${Date.now()}.tar.gz`;
+            const localBundlePath = path.join(os.tmpdir(), bundleName);
+            const remoteBundlePath = `/tmp/${bundleName}`;
+
+            spinner.text = 'Bundling local project...';
+            try {
+                // Use tar to bundle the directory, excluding common heavy folders
+                // Using spawnSync for better cross-platform argument handling (Windows backslashes etc)
+                const tarResult = spawnSync('tar', [
+                    '-czf', localBundlePath,
+                    '--exclude=node_modules',
+                    '--exclude=.git',
+                    '--exclude=.next',
+                    '--exclude=dist',
+                    '-C', localSourcePath,
+                    '.' // <-- The target path must be the very last argument
+                ]);
+
+                if (tarResult.status !== 0) {
+                    const errorMsg = tarResult.stderr?.toString() || tarResult.error?.message || 'Unknown error';
+                    throw new Error(errorMsg);
+                }
+            } catch (error: any) {
+                spinner.fail(chalk.red(`Bundling failed: ${error.message}`));
+                process.exit(1);
+            }
+
+            spinner.text = 'Connecting for upload...';
+            const client = new SSHClient(server);
+            try {
+                await client.connect();
+                spinner.text = `Uploading bundle to ${server.host}...`;
+                await client.uploadFile(localBundlePath, remoteBundlePath);
+
+                project.repoUrl = 'local';
+                project.localBundlePath = remoteBundlePath;
+                spinner.succeed(chalk.dim('Local bundle uploaded.'));
+                spinner.start('Proceeding with deployment...');
+            } catch (error: any) {
+                spinner.fail(chalk.red(`Upload failed: ${error.message}`));
+                if (fs.existsSync(localBundlePath)) fs.unlinkSync(localBundlePath);
+                process.exit(1);
+            } finally {
+                client.end();
+                if (fs.existsSync(localBundlePath)) fs.unlinkSync(localBundlePath);
+            }
+        }
 
         const deployOptions: DeployOptions = {
             server,
             project,
             trigger: 'cli',
             onLog: (chunk: string) => {
-                spinner.text = chunk.trim().substring(0, 80);
+                // Clear the spinner temporarily to print the log cleanly
+                spinner.clear();
+                // Print the raw server logs directly to your terminal
+                console.log(chalk.gray(`[Server] ${chunk.trim()}`));
+                // Keep the spinner alive
+                spinner.text = 'Deploying...';
             }
         };
 
@@ -151,7 +224,7 @@ export async function deploy(options: any) {
         if (result.success) {
             spinner.succeed(chalk.green(`Deployment Successful! Release ID: ${result.releaseId}`));
             console.log(chalk.dim(`Duration: ${result.durationMs}ms`));
-            console.log(chalk.dim(`Commit: ${result.commitHash}`));
+            console.log(chalk.dim(`Commit: ${result.commitHash || 'N/A'}`));
         } else {
             spinner.fail(chalk.red(`Deployment Failed: ${result.error}`));
             process.exit(1);

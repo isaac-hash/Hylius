@@ -146,13 +146,25 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         log(`Creating release directory: ${releasePath}`);
         await execOrThrow(client, `mkdir -p ${releasePath}`, 'Create release directory');
 
-        log(`Cloning ${project.repoUrl} (${project.branch || 'main'})...`);
-        await execStreamOrThrow(
-            client,
-            `git clone -b ${project.branch || 'main'} --depth 1 ${project.repoUrl} ${releasePath}`,
-            'Git clone',
-            onLog,
-        );
+        if (project.repoUrl === 'local' && project.localBundlePath) {
+            log(`Extracting local bundle from ${project.localBundlePath}...`);
+            await execStreamOrThrow(
+                client,
+                `tar -xzf ${project.localBundlePath} -C ${releasePath} --strip-components=1`,
+                'Extract bundle',
+                onLog,
+            );
+            // Optionally remove the bundle after extraction
+            await client.exec(`rm ${project.localBundlePath}`);
+        } else {
+            log(`Cloning ${project.repoUrl} (${project.branch || 'main'})...`);
+            await execStreamOrThrow(
+                client,
+                `git clone -b ${project.branch || 'main'} --depth 1 ${project.repoUrl} ${releasePath}`,
+                'Git clone',
+                onLog,
+            );
+        }
 
         await scaffoldContainerFilesIfNeeded(client, releasePath, project, onLog);
 

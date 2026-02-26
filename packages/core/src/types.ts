@@ -10,6 +10,7 @@ export interface ServerConfig {
 export interface ProjectConfig {
     name: string;
     repoUrl: string;
+    localBundlePath?: string; // Local path to the uploaded tarball on the server
     branch?: string;
     buildCommand?: string;
     startCommand?: string;
