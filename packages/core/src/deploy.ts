@@ -28,7 +28,12 @@ async function hasFile(client: SSHClient, filePath: string): Promise<boolean> {
 
 type ProjectRuntime = 'next' | 'vite' | 'node' | 'python' | 'fastapi' | 'go' | 'java' | 'php' | 'laravel';
 
-async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string): Promise<ProjectRuntime | null> {
+interface DetectedRuntime {
+    runtime: ProjectRuntime;
+    appPath: string;
+}
+
+async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string): Promise<DetectedRuntime | null> {
     const { stdout, code } = await client.exec(`cd ${releasePath} && railpack plan --json`);
     if (code !== 0 || !stdout.trim()) {
         return null;
@@ -41,27 +46,27 @@ async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string)
         }
 
         const providers = plan.providers.map(provider => provider.toLowerCase());
-        if (providers.includes('nextjs')) return 'next';
+        if (providers.includes('nextjs')) return { runtime: 'next', appPath: releasePath };
         if (providers.includes('node')) {
             if (await hasFile(client, `${releasePath}/vite.config.ts`) || await hasFile(client, `${releasePath}/vite.config.js`)) {
-                return 'vite';
+                return { runtime: 'vite', appPath: releasePath };
             }
 
-            return 'node';
+            return { runtime: 'node', appPath: releasePath };
         }
 
         if (providers.includes('python')) {
-            if (plan.variables?.RAILPACK_PYTHON_APP_MODULE?.includes('main:app')) return 'fastapi';
-            return 'python';
+            if (plan.variables?.RAILPACK_PYTHON_APP_MODULE?.includes('main:app')) return { runtime: 'fastapi', appPath: releasePath };
+            return { runtime: 'python', appPath: releasePath };
         }
 
         if (providers.includes('php')) {
-            if (await hasFile(client, `${releasePath}/artisan`)) return 'laravel';
-            return 'php';
+            if (await hasFile(client, `${releasePath}/artisan`)) return { runtime: 'laravel', appPath: releasePath };
+            return { runtime: 'php', appPath: releasePath };
         }
 
-        if (providers.includes('go')) return 'go';
-        if (providers.includes('java')) return 'java';
+        if (providers.includes('go')) return { runtime: 'go', appPath: releasePath };
+        if (providers.includes('java')) return { runtime: 'java', appPath: releasePath };
 
         return null;
     } catch {
@@ -69,78 +74,49 @@ async function detectRuntimeFromRailpack(client: SSHClient, releasePath: string)
     }
 }
 
-async function detectRuntimeFromFiles(client: SSHClient, releasePath: string): Promise<ProjectRuntime | null> {
-    if (await hasFile(client, `${releasePath}/package.json`)) {
-        const { code: nextCode } = await client.exec(`grep -q '"next"' ${releasePath}/package.json`);
-        if (nextCode === 0) {
-            return 'next';
-        }
+async function detectRuntimeFromFiles(client: SSHClient, releasePath: string): Promise<DetectedRuntime | null> {
+    const searchPaths = [releasePath];
+    // Check if there are subdirectories (for monorepos or nested apps)
+    const { stdout: lsDir } = await client.exec(`find ${releasePath} -maxdepth 2 -type d -not -path '*/.*'`);
+    const dirs = lsDir.split('\n').filter(Boolean);
+    searchPaths.push(...dirs);
 
-        if (await hasFile(client, `${releasePath}/vite.config.ts`) || await hasFile(client, `${releasePath}/vite.config.js`)) {
-            return 'vite';
-        }
+    for (const appPath of searchPaths) {
+        if (await hasFile(client, `${appPath}/package.json`)) {
+            const { code: nextCode } = await client.exec(`grep -q '"next"' ${appPath}/package.json`);
+            if (nextCode === 0) return { runtime: 'next', appPath };
 
-        return 'node';
-    }
-
-    if (await hasFile(client, `${releasePath}/requirements.txt`) || await hasFile(client, `${releasePath}/pyproject.toml`)) {
-        if (await hasFile(client, `${releasePath}/main.py`)) {
-            const { code: fastApiCode } = await client.exec(`grep -q 'FastAPI' ${releasePath}/main.py`);
-            if (fastApiCode === 0) {
-                return 'fastapi';
+            if (await hasFile(client, `${appPath}/vite.config.ts`) || await hasFile(client, `${appPath}/vite.config.js`)) {
+                return { runtime: 'vite', appPath };
             }
+
+            return { runtime: 'node', appPath };
         }
 
-        return 'python';
-    }
-}
-
-async function detectRuntimeFromFiles(client: SSHClient, appPath: string): Promise<ProjectRuntime | null> {
-    if (await hasFile(client, `${appPath}/package.json`)) {
-        const { code: nextCode } = await client.exec(`grep -q '"next"' ${appPath}/package.json`);
-        if (nextCode === 0) {
-            return 'next';
-        }
-
-        if (await hasFile(client, `${appPath}/vite.config.ts`) || await hasFile(client, `${appPath}/vite.config.js`)) {
-            return 'vite';
-        }
-
-        return 'node';
-    }
-
-    if (await hasFile(client, `${appPath}/requirements.txt`) || await hasFile(client, `${appPath}/pyproject.toml`)) {
-        if (await hasFile(client, `${appPath}/main.py`)) {
-            const { code: fastApiCode } = await client.exec(`grep -q 'FastAPI' ${appPath}/main.py`);
-            if (fastApiCode === 0) {
-                return 'fastapi';
+        if (await hasFile(client, `${appPath}/requirements.txt`) || await hasFile(client, `${appPath}/pyproject.toml`)) {
+            if (await hasFile(client, `${appPath}/main.py`)) {
+                const { code: fastApiCode } = await client.exec(`grep -q 'FastAPI' ${appPath}/main.py`);
+                if (fastApiCode === 0) return { runtime: 'fastapi', appPath };
             }
+
+            return { runtime: 'python', appPath };
         }
 
-        return 'python';
-    }
+        if (await hasFile(client, `${appPath}/composer.json`)) {
+            if (await hasFile(client, `${appPath}/artisan`)) return { runtime: 'laravel', appPath };
+            return { runtime: 'php', appPath };
+        }
 
-    if (await hasFile(client, `${appPath}/composer.json`)) {
-        if (await hasFile(client, `${appPath}/artisan`)) return 'laravel';
-        return 'php';
+        if (await hasFile(client, `${appPath}/go.mod`)) return { runtime: 'go', appPath };
+        if (await hasFile(client, `${appPath}/pom.xml`)) return { runtime: 'java', appPath };
     }
-
-    if (await hasFile(client, `${releasePath}/composer.json`)) {
-        if (await hasFile(client, `${releasePath}/artisan`)) return 'laravel';
-        return 'php';
-    }
-
-    if (await hasFile(client, `${releasePath}/go.mod`)) return 'go';
-    if (await hasFile(client, `${releasePath}/pom.xml`)) return 'java';
 
     return null;
 }
 
-async function detectProjectRuntime(client: SSHClient, releasePath: string): Promise<ProjectRuntime | null> {
-    const railpackRuntime = await detectRuntimeFromRailpack(client, releasePath);
-    if (railpackRuntime) {
-        return railpackRuntime;
-    }
+async function detectProjectRuntime(client: SSHClient, releasePath: string): Promise<DetectedRuntime | null> {
+    const railpackDetected = await detectRuntimeFromRailpack(client, releasePath);
+    if (railpackDetected) return railpackDetected;
 
     return detectRuntimeFromFiles(client, releasePath);
 }
@@ -230,12 +206,12 @@ CMD ["apache2-foreground"]
     }
 }
 
-function getGeneratedCompose(project: ProjectConfig, runtime: ProjectRuntime): string {
+function getGeneratedCompose(project: ProjectConfig, runtime: ProjectRuntime, contextPath: string = '.'): string {
     const imageName = project.dockerImage || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:latest`;
     const containerName = project.containerName || `${project.name}-app`;
     const appPort = runtime === 'python' || runtime === 'fastapi' ? '8000:8000' : runtime === 'php' || runtime === 'laravel' ? '80:80' : '3000:3000';
 
-    return `services:\n  app:\n    build:\n      context: .\n    image: ${imageName}\n    container_name: ${containerName}\n    restart: unless-stopped\n    ports:\n      - \"${appPort}\"\n`;
+    return `services:\n  app:\n    build:\n      context: ${contextPath}\n    image: ${imageName}\n    container_name: ${containerName}\n    restart: unless-stopped\n    ports:\n      - \"${appPort}\"\n`;
 }
 
 async function scaffoldContainerFilesIfNeeded(
@@ -254,8 +230,8 @@ async function scaffoldContainerFilesIfNeeded(
         return;
     }
 
-    const runtime = await detectProjectRuntime(client, releasePath);
-    if (!runtime) {
+    const detected = await detectProjectRuntime(client, releasePath);
+    if (!detected) {
         return;
     }
 
@@ -263,7 +239,7 @@ async function scaffoldContainerFilesIfNeeded(
     const contextPath = appPath === releasePath ? '.' : appPath.replace(`${releasePath}/`, './');
 
     const dockerfileContent = getGeneratedDockerfile(runtime).replace(/'/g, `'"'"'`);
-    const composeContent = getGeneratedCompose(project, runtime).replace(/'/g, `'"'"'`);
+    const composeContent = getGeneratedCompose(project, runtime, contextPath).replace(/'/g, `'"'"'`);
 
     if (onLog) onLog(`No Docker artifacts found. Generating ${runtime.toUpperCase()} Dockerfile and ${composeFile}...\n`);
 
