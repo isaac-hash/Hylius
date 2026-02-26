@@ -93,6 +93,37 @@ async function detectRuntimeFromFiles(client: SSHClient, releasePath: string): P
 
         return 'python';
     }
+}
+
+async function detectRuntimeFromFiles(client: SSHClient, appPath: string): Promise<ProjectRuntime | null> {
+    if (await hasFile(client, `${appPath}/package.json`)) {
+        const { code: nextCode } = await client.exec(`grep -q '"next"' ${appPath}/package.json`);
+        if (nextCode === 0) {
+            return 'next';
+        }
+
+        if (await hasFile(client, `${appPath}/vite.config.ts`) || await hasFile(client, `${appPath}/vite.config.js`)) {
+            return 'vite';
+        }
+
+        return 'node';
+    }
+
+    if (await hasFile(client, `${appPath}/requirements.txt`) || await hasFile(client, `${appPath}/pyproject.toml`)) {
+        if (await hasFile(client, `${appPath}/main.py`)) {
+            const { code: fastApiCode } = await client.exec(`grep -q 'FastAPI' ${appPath}/main.py`);
+            if (fastApiCode === 0) {
+                return 'fastapi';
+            }
+        }
+
+        return 'python';
+    }
+
+    if (await hasFile(client, `${appPath}/composer.json`)) {
+        if (await hasFile(client, `${appPath}/artisan`)) return 'laravel';
+        return 'php';
+    }
 
     if (await hasFile(client, `${releasePath}/composer.json`)) {
         if (await hasFile(client, `${releasePath}/artisan`)) return 'laravel';
@@ -228,6 +259,9 @@ async function scaffoldContainerFilesIfNeeded(
         return;
     }
 
+    const { runtime, appPath } = detected;
+    const contextPath = appPath === releasePath ? '.' : appPath.replace(`${releasePath}/`, './');
+
     const dockerfileContent = getGeneratedDockerfile(runtime).replace(/'/g, `'"'"'`);
     const composeContent = getGeneratedCompose(project, runtime).replace(/'/g, `'"'"'`);
 
@@ -235,7 +269,7 @@ async function scaffoldContainerFilesIfNeeded(
 
     await execOrThrow(
         client,
-        `cat <<'EOF' > ${releasePath}/Dockerfile\n${dockerfileContent}EOF`,
+        `cat <<'EOF' > ${appPath}/Dockerfile\n${dockerfileContent}EOF`,
         'Generate Dockerfile',
     );
 
