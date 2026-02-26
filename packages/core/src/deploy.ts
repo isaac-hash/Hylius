@@ -291,7 +291,12 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             await execStreamOrThrow(client, restartCmd, 'PM2 restart', onLog);
         }
 
-        const commitHash = (await execOrThrow(client, `cd ${currentPath} && git rev-parse HEAD`, 'Read commit hash')).trim();
+        let commitHash = 'unknown';
+        try {
+            commitHash = (await execOrThrow(client, `cd ${currentPath} && git rev-parse HEAD`, 'Read commit hash')).trim();
+        } catch {
+            // Ignore for local bundle deployments which lack .git
+        }
         const durationMs = Date.now() - startTime;
         log(`Deployment successful in ${durationMs}ms`);
 

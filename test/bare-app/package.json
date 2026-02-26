@@ -1,1 +1,1 @@
-{"name":"bare-app","version":"1.0.0","scripts":{"start":"node index.js"}}
+{"name":"bare-app","version":"1.0.0","scripts":{"start":"node index.js","build":"echo no build needed"}}
