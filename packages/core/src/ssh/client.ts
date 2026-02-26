@@ -17,6 +17,7 @@ export class SSHClient {
                 host: this.config.host,
                 port: this.config.port || 22,
                 username: this.config.username,
+                password: this.config.password,
             };
 
             if (this.config.privateKey) {

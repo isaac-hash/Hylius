@@ -3,6 +3,7 @@ export interface ServerConfig {
     username: string;
     privateKeyPath?: string; // Local path to private key
     privateKey?: string;     // Raw private key string (encrypted in DB)
+    password?: string;       // SSH password (Alternative to key)
     port?: number;
 }
 

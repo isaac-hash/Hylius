@@ -9,7 +9,12 @@ import { detectProjectType } from '../utils/detect.js';
 
 dotenv.config();
 
-async function getConfiguration(): Promise<{ server: ServerConfig, project: ProjectConfig }> {
+// Determine if we're running in CI/CD (headless) mode
+function isCI(): boolean {
+    return !!(process.env.CI || process.env.GITHUB_ACTIONS);
+}
+
+async function getConfiguration(): Promise<{ server: ServerConfig; project: ProjectConfig }> {
     // 1. Try process.env (CI/CD)
     const envConfig = {
         host: process.env.HYLIUS_HOST,
@@ -17,14 +22,43 @@ async function getConfiguration(): Promise<{ server: ServerConfig, project: Proj
         port: process.env.HYLIUS_PORT ? parseInt(process.env.HYLIUS_PORT) : 22,
         privateKeyPath: process.env.HYLIUS_SSH_KEY_PATH,
         privateKey: process.env.HYLIUS_SSH_KEY,
-        password: process.env.HYLIUS_PASSWORD, // Note: Core types might need password support if not key-based
+        password: process.env.HYLIUS_PASSWORD,
         targetPath: process.env.HYLIUS_TARGET_PATH,
-        repoUrl: process.env.HYLIUS_REPO_URL, // New requirement for Core
+        repoUrl: process.env.HYLIUS_REPO_URL,
         branch: process.env.HYLIUS_BRANCH,
     };
 
+    if (isCI()) {
+        if (!envConfig.host || !envConfig.repoUrl || !envConfig.targetPath) {
+            throw new Error('CI mode: HYLIUS_HOST, HYLIUS_REPO_URL, and HYLIUS_TARGET_PATH are required.');
+        }
+        if (!envConfig.password && !envConfig.privateKey && !envConfig.privateKeyPath) {
+            throw new Error('CI mode: One of HYLIUS_PASSWORD, HYLIUS_SSH_KEY, or HYLIUS_SSH_KEY_PATH is required.');
+        }
+
+        const server: ServerConfig = {
+            host: envConfig.host,
+            username: envConfig.username || 'root',
+            port: envConfig.port,
+            privateKeyPath: envConfig.privateKeyPath,
+            privateKey: envConfig.privateKey,
+            password: envConfig.password,
+        };
+
+        const project: ProjectConfig = {
+            name: path.basename(process.cwd()),
+            repoUrl: envConfig.repoUrl,
+            branch: envConfig.branch || 'main',
+            deployPath: envConfig.targetPath,
+            buildCommand: process.env.HYLIUS_BUILD_COMMAND || 'npm run build',
+            startCommand: process.env.HYLIUS_START_COMMAND || 'pm2 reload ecosystem.config.js || pm2 start ecosystem.config.js'
+        };
+
+        return { server, project };
+    }
+
     // Interactive Prompts
-    console.log(chalk.blue('≡ƒöî Configuration needed for deployment'));
+    console.log(chalk.blue('🔍 Configuration needed for deployment'));
 
     const answers = await inquirer.prompt([
         {
@@ -57,14 +91,20 @@ async function getConfiguration(): Promise<{ server: ServerConfig, project: Proj
             type: 'list',
             name: 'authType',
             message: 'Authentication Method:',
-            choices: ['SSH Agent (Recommended)', 'Private Key File', 'Password'] // Password support depends on Core
+            choices: ['SSH Agent (Recommended)', 'Private Key File', 'Password']
         },
         {
             type: 'input',
             name: 'privateKeyPath',
             message: 'Path to Private Key:',
-            when: (answers) => answers.authType === 'Private Key File',
+            when: (a) => a.authType === 'Private Key File',
             default: process.env.HOME + '/.ssh/id_rsa'
+        },
+        {
+            type: 'password',
+            name: 'password',
+            message: 'VPS Password:',
+            when: (a) => a.authType === 'Password'
         }
     ]);
 
@@ -75,6 +115,7 @@ async function getConfiguration(): Promise<{ server: ServerConfig, project: Proj
         port: envConfig.port,
         privateKeyPath: answers.privateKeyPath || envConfig.privateKeyPath,
         privateKey: envConfig.privateKey,
+        password: answers.password || envConfig.password,
     };
 
     // Construct ProjectConfig
@@ -83,7 +124,6 @@ async function getConfiguration(): Promise<{ server: ServerConfig, project: Proj
         repoUrl: answers.repoUrl,
         branch: envConfig.branch || 'main',
         deployPath: answers.targetPath,
-        // Detect build command? For now default or prompt could be added.
         buildCommand: 'npm run build',
         startCommand: 'pm2 reload ecosystem.config.js || pm2 start ecosystem.config.js'
     };
@@ -102,10 +142,7 @@ export async function deploy(options: any) {
             project,
             trigger: 'cli',
             onLog: (chunk: string) => {
-                // Stop spinner to log, then restart or just log raw?
-                // For CLI experience, maybe just log raw lines if verbose, 
-                // but for now let's just log to console above spinner or update spinner text
-                spinner.text = chunk.trim().substring(0, 80); // Update spinner with latest log
+                spinner.text = chunk.trim().substring(0, 80);
             }
         };
 
