@@ -8,3 +8,10 @@ dist/
 *.tsbuildinfo
 hyconvgem.md
 hylproj.md
+test/
+testdir/
+mock_vps_key
+mock_vps_key.pub
+read_doc.js
+setup-git.bat
+setup-git.sh
