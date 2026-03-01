@@ -42,6 +42,7 @@ export interface DeployResult {
     commitHash?: string;
     durationMs: number;
     error?: string;
+    url?: string;        // Live URL where the app is accessible
 }
 
 export interface PulseMetrics {

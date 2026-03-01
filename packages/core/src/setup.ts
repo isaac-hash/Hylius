@@ -72,11 +72,11 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[33m[3/3] Configuring basic firewall (UFW)...\x1b[0m');
         // We attempt UFW setup, but ignore failures (e.g., if running inside a Docker mock container without ufw)
         const ufwCommands = [
-            `${sudoPrefix}apt-get install -y ufw || ${sudoPrefix}apk add --no-cache ufw || true`,
-            `${sudoPrefix}ufw allow 22/tcp || true`,
-            `${sudoPrefix}ufw allow 80/tcp || true`,
-            `${sudoPrefix}ufw allow 443/tcp || true`,
-            `echo "y" | ${sudoPrefix}ufw enable || true`
+            `${sudoPrefix}apt-get install -y ufw > /dev/null 2>&1 || ${sudoPrefix}apk add --no-cache ufw > /dev/null 2>&1 || true`,
+            `${sudoPrefix}ufw allow 22/tcp > /dev/null 2>&1 || true`,
+            `${sudoPrefix}ufw allow 80/tcp > /dev/null 2>&1 || true`,
+            `${sudoPrefix}ufw allow 443/tcp > /dev/null 2>&1 || true`,
+            `echo "y" | ${sudoPrefix}ufw enable > /dev/null 2>&1 || true`
         ];
 
         for (const cmd of ufwCommands) {

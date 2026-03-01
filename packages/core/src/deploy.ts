@@ -273,22 +273,93 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         } else {
             // PM2 strategy (no containerization)
             log('Installing dependencies...');
-            await execStreamOrThrow(client, `cd ${releasePath} && npm install --omit=dev`, 'Install dependencies', onLog);
+            await execStreamOrThrow(client, `cd ${releasePath} && npm install`, 'Install dependencies', onLog);
 
-            if (project.buildCommand) {
-                log(`Running build: ${project.buildCommand}`);
-                await execStreamOrThrow(client, `cd ${releasePath} && ${project.buildCommand}`, 'Project build', onLog);
+            // Determine build command: use explicit or auto-detect from package.json
+            let buildCmd = project.buildCommand;
+            log(`Build command from config: "${buildCmd || '(none)'}"`);
+            if (!buildCmd) {
+                try {
+                    const { stdout: pkgStr } = await client.exec(`cat ${releasePath}/package.json`);
+                    if (pkgStr) {
+                        const pkg = JSON.parse(pkgStr);
+                        if (pkg.scripts?.build) {
+                            buildCmd = 'npm run build';
+                            log(`Auto-detected build script in package.json`);
+                        } else {
+                            log(`No build script found in package.json`);
+                        }
+                    }
+                } catch (e: any) {
+                    log(`Failed to read package.json for build detection: ${e.message}`);
+                }
+            }
+
+            if (buildCmd) {
+                log(`Running build: ${buildCmd}`);
+                await execStreamOrThrow(client, `cd ${releasePath} && ${buildCmd}`, 'Project build', onLog);
+            } else {
+                log('No build command to run, skipping build step');
             }
 
             log('Switching symlink...');
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
             log('Restarting application...');
+            let startScript = 'start';
+            let extraArgs = '';
+            try {
+                const { stdout: packageJsonStr } = await client.exec(`cat ${currentPath}/package.json`);
+                if (packageJsonStr) {
+                    const pkg = JSON.parse(packageJsonStr);
+                    const isVite = pkg.dependencies?.vite || pkg.devDependencies?.vite;
+
+                    if (pkg.scripts) {
+                        if (pkg.scripts.start) startScript = 'start';
+                        else if (pkg.scripts.preview) {
+                            startScript = 'run preview';
+                            if (isVite) extraArgs = ' -- --host 0.0.0.0';
+                        }
+                        else if (pkg.scripts.dev) {
+                            startScript = 'run dev';
+                            if (isVite) extraArgs = ' -- --host 0.0.0.0';
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore parse errors, fallback to default 'start'
+            }
+
             const restartCmd = project.startCommand
                 ? `cd ${currentPath} && ${project.startCommand}`
-                : `cd ${currentPath} && pm2 restart ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production`;
+                : `cd ${currentPath} && (test -f ecosystem.config.js && (pm2 delete "${project.name}" > /dev/null 2>&1; pm2 start ecosystem.config.js --env production) || (pm2 delete "${project.name}" > /dev/null 2>&1; pm2 start npm --name "${project.name}" -- ${startScript}${extraArgs}))`;
 
             await execStreamOrThrow(client, restartCmd, 'PM2 restart', onLog);
+
+            // --- Detect listening port and construct URL ---
+            let appPort = '';
+            try {
+                // Wait briefly for the app to start and bind to a port
+                await new Promise(res => setTimeout(res, 2000));
+                const { stdout: pm2Logs } = await client.exec(`pm2 logs "${project.name}" --lines 30 --nostream 2>/dev/null`);
+                if (pm2Logs) {
+                    // Match patterns like "http://localhost:4173" or ":4173" or "port 4173"
+                    const portMatch = pm2Logs.match(/(?:localhost|0\.0\.0\.0|127\.0\.0\.1):(\d{4,5})/i)
+                        || pm2Logs.match(/port\s+(\d{4,5})/i);
+                    if (portMatch) {
+                        appPort = portMatch[1];
+                    }
+                }
+            } catch {
+                // Ignore detection errors
+            }
+
+            if (!appPort) {
+                appPort = '3000';
+            }
+
+            const appUrl = `http://${options.server.host}:${appPort}`;
+            log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
         }
 
         let commitHash = 'unknown';
@@ -300,11 +371,30 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         const durationMs = Date.now() - startTime;
         log(`Deployment successful in ${durationMs}ms`);
 
+        // Build the final URL
+        let finalUrl: string | undefined;
+        try {
+            const { stdout: pm2Logs } = await client.exec(`pm2 logs "${project.name}" --lines 30 --nostream 2>/dev/null`);
+            if (pm2Logs) {
+                const portMatch = pm2Logs.match(/(?:localhost|0\.0\.0\.0|127\.0\.0\.1):(\d{4,5})/i)
+                    || pm2Logs.match(/port\s+(\d{4,5})/i);
+                if (portMatch) {
+                    finalUrl = `http://${options.server.host}:${portMatch[1]}`;
+                }
+            }
+        } catch {
+            // Ignore
+        }
+        if (!finalUrl) {
+            finalUrl = `http://${options.server.host}:3000`;
+        }
+
         return {
             success: true,
             releaseId,
             commitHash,
-            durationMs
+            durationMs,
+            url: finalUrl
         };
 
     } catch (err: any) {

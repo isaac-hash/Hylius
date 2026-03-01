@@ -19,6 +19,11 @@ export default function DeploymentTerminal({ projectId, active, onDeployFinished
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const hasTriggered = useRef(false);
+    const onDeployFinishedRef = useRef(onDeployFinished);
+
+    useEffect(() => {
+        onDeployFinishedRef.current = onDeployFinished;
+    }, [onDeployFinished]);
 
     const triggerDeploy = useCallback(() => {
         if (hasTriggered.current) return;
@@ -64,25 +69,25 @@ export default function DeploymentTerminal({ projectId, active, onDeployFinished
         // Socket listeners
         const socket = getSocket();
 
-        socket.on('log', (data: string) => {
+        socket.on(`log:${projectId}`, (data: string) => {
             term.write(data);
         });
 
-        socket.on('deploy_start', (data: { deploymentId: string }) => {
+        socket.on(`deploy_start:${projectId}`, (data: { deploymentId: string }) => {
             term.writeln(`\x1b[36mDeployment ID: ${data.deploymentId}\x1b[0m`);
         });
 
-        socket.on('deploy_success', (result: any) => {
+        socket.on(`deploy_success:${projectId}`, (result: any) => {
             term.writeln(`\n\x1b[32m✓ Deployment completed in ${result.durationMs}ms\x1b[0m`);
-            onDeployFinished?.();
+            onDeployFinishedRef.current?.();
         });
 
-        socket.on('deploy_error', (error: string) => {
+        socket.on(`deploy_error:${projectId}`, (error: string) => {
             term.writeln(`\n\x1b[31m✗ Deployment failed: ${error}\x1b[0m`);
-            onDeployFinished?.();
+            onDeployFinishedRef.current?.();
         });
 
-        socket.on('error', (err: string) => {
+        socket.on(`error:${projectId}`, (err: string) => {
             term.writeln(`\n\x1b[31mError: ${err}\x1b[0m`);
         });
 
@@ -94,17 +99,17 @@ export default function DeploymentTerminal({ projectId, active, onDeployFinished
         triggerDeploy();
 
         return () => {
-            socket.off('log');
-            socket.off('deploy_start');
-            socket.off('deploy_success');
-            socket.off('deploy_error');
-            socket.off('error');
+            socket.off(`log:${projectId}`);
+            socket.off(`deploy_start:${projectId}`);
+            socket.off(`deploy_success:${projectId}`);
+            socket.off(`deploy_error:${projectId}`);
+            socket.off(`error:${projectId}`);
             window.removeEventListener('resize', handleResize);
             term.dispose();
             xtermRef.current = null;
             hasTriggered.current = false;
         };
-    }, [active, projectId, triggerDeploy, onDeployFinished]);
+    }, [active, projectId, triggerDeploy]);
 
     if (!active) return null;
 

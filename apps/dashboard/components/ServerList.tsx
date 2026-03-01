@@ -120,7 +120,9 @@ export default function ServerList() {
                         >
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h3 className="font-semibold text-lg text-white">{server.name}</h3>
+                                    <Link href={`/servers/${server.id}`}>
+                                        <h3 className="font-semibold text-lg text-white hover:text-blue-400 transition-colors">{server.name}</h3>
+                                    </Link>
                                     <p className="text-sm text-gray-400">{server.ip}</p>
                                 </div>
                                 <span className="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
@@ -159,10 +161,10 @@ export default function ServerList() {
                                     + Project
                                 </button>
                                 <Link
-                                    href="/deployments"
+                                    href={`/servers/${server.id}`}
                                     className="flex-1 bg-gray-800 hover:bg-gray-700 text-sm py-2 rounded text-gray-300 transition-colors text-center"
                                 >
-                                    Logs
+                                    Details
                                 </Link>
                             </div>
                         </div>

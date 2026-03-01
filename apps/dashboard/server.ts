@@ -36,8 +36,8 @@ app.prepare().then(() => {
             console.log(`Received deploy request for project: ${projectId}`);
 
             if (activeDeployments.has(projectId)) {
-                socket.emit('error', 'A deployment is already in progress for this project.');
-                socket.emit('log', `\n\x1b[31mDeployment already in progress, please wait.\x1b[0m\n`);
+                socket.emit(`error:${projectId}`, 'A deployment is already in progress for this project.');
+                socket.emit(`log:${projectId}`, `\n\x1b[31mDeployment already in progress, please wait.\x1b[0m\n`);
                 return;
             }
             activeDeployments.add(projectId);
@@ -50,7 +50,7 @@ app.prepare().then(() => {
                 });
 
                 if (!project) {
-                    socket.emit('error', 'Project not found');
+                    socket.emit(`error:${projectId}`, 'Project not found');
                     return;
                 }
 
@@ -65,7 +65,7 @@ app.prepare().then(() => {
                     }
                 });
 
-                socket.emit('deploy_start', { deploymentId: deployment.id });
+                socket.emit(`deploy_start:${projectId}`, { deploymentId: deployment.id });
 
                 // Audit Log
                 await prisma.auditLog.create({
@@ -83,7 +83,7 @@ app.prepare().then(() => {
                     try {
                         privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv);
                     } catch (e) {
-                        socket.emit('log', `Error decrypting SSH key: ${e}\n`);
+                        socket.emit(`log:${projectId}`, `Error decrypting SSH key: ${e}\n`);
                     }
                 }
 
@@ -92,7 +92,8 @@ app.prepare().then(() => {
                     host: project.server.ip,
                     port: project.server.port,
                     username: project.server.username,
-                    privateKey: privateKey, // Decrypted in-memory, never persisted
+                    privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                    password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
                 };
 
                 const projectConfig: ProjectConfig = {
@@ -106,14 +107,14 @@ app.prepare().then(() => {
                 };
 
                 // 4. Execute Deployment
-                socket.emit('log', `\x1b[36mStarting deployment for ${project.name}...\x1b[0m\n`);
+                socket.emit(`log:${projectId}`, `\x1b[36mStarting deployment for ${project.name}...\x1b[0m\n`);
 
                 const result = await deploy({
                     server: serverConfig,
                     project: projectConfig,
                     trigger: 'dashboard',
                     onLog: (chunk) => {
-                        socket.emit('log', chunk);
+                        socket.emit(`log:${projectId}`, chunk);
                         // TODO: stream to file or DB buffer
                     }
                 });
@@ -146,17 +147,17 @@ app.prepare().then(() => {
                 });
 
                 if (result.success) {
-                    socket.emit('deploy_success', result);
-                    socket.emit('log', `\n\x1b[32mDeployment Successful! Release: ${result.releaseId}\x1b[0m\n`);
+                    socket.emit(`deploy_success:${projectId}`, result);
+                    socket.emit(`log:${projectId}`, `\n\x1b[32mDeployment Successful! Release: ${result.releaseId}\x1b[0m\n`);
                 } else {
-                    socket.emit('deploy_error', result.error);
-                    socket.emit('log', `\n\x1b[31mDeployment Failed: ${result.error}\x1b[0m\n`);
+                    socket.emit(`deploy_error:${projectId}`, result.error);
+                    socket.emit(`log:${projectId}`, `\n\x1b[31mDeployment Failed: ${result.error}\x1b[0m\n`);
                 }
 
             } catch (error: any) {
                 console.error('Deployment error:', error);
-                socket.emit('error', error.message);
-                socket.emit('log', `\n\x1b[31mSystem Error: ${error.message}\x1b[0m\n`);
+                socket.emit(`error:${projectId}`, error.message);
+                socket.emit(`log:${projectId}`, `\n\x1b[31mSystem Error: ${error.message}\x1b[0m\n`);
             } finally {
                 activeDeployments.delete(projectId);
             }
@@ -209,7 +210,8 @@ app.prepare().then(() => {
                     host: serverRecord.ip,
                     port: serverRecord.port,
                     username: serverRecord.username,
-                    privateKey: privateKey,
+                    privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                    password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
                 };
 
                 // 3. Execute Setup
