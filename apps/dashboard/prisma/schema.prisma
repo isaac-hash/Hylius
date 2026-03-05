@@ -183,6 +183,7 @@ model Project {
   server         Server       @relation(fields: [serverId], references: [id])
   serverId       String
   deployments    Deployment[]
+  domains        Domain[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -198,6 +199,7 @@ model Deployment {
   triggerSource  String       // "CLI" | "DASHBOARD" | "WEBHOOK"
   durationMs     Int?
   logPath        String?      // Path to log file / object storage key
+  deployUrl      String?      // Live URL where the deployed app is accessible
   project        Project      @relation(fields: [projectId], references: [id])
   projectId      String
   organizationId String?      // For faster aggregation queries (admin level)
@@ -207,6 +209,20 @@ model Deployment {
   @@index([projectId])
   @@index([organizationId])
   @@index([startedAt])
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  hostname       String   @unique // e.g. "myapp.com" or "api.myapp.com"
+  status         String   @default("PENDING") // PENDING | DNS_VERIFIED | ACTIVE | ERROR
+  sslStatus      String   @default("PENDING") // PENDING | PROVISIONING | ACTIVE | ERROR
+  errorMessage   String?
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([projectId])
 }
 
 model Metric {

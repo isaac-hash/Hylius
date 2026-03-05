@@ -10,6 +10,11 @@ const DeploymentTerminal = dynamic(() => import('@/components/DeploymentTerminal
     loading: () => <div className="w-full h-[400px] bg-[#0d1117] rounded-lg border border-gray-800 flex items-center justify-center text-gray-500">Loading terminal...</div>
 });
 
+interface Server {
+    id: string;
+    name: string;
+}
+
 interface Project {
     id: string;
     name: string;
@@ -24,7 +29,9 @@ import { useAuth } from '@/providers/auth.provider';
 export default function DeploymentPage() {
     const { user, logout, token } = useAuth();
     const [projects, setProjects] = useState<Project[]>([]);
+    const [servers, setServers] = useState<Server[]>([]);
     const [selectedProjectId, setSelectedProjectId] = useState('');
+    const [selectedServerId, setSelectedServerId] = useState('');
     const [isDeploying, setIsDeploying] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -47,9 +54,24 @@ export default function DeploymentPage() {
             .catch(() => setLoading(false));
     }, [token]);
 
+    const fetchServers = useCallback(() => {
+        if (!token) return;
+        fetch('/api/servers', {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (Array.isArray(data)) setServers(data);
+            })
+            .catch(() => {});
+    }, [token]);
+
     useEffect(() => {
-        if (token) fetchProjects();
-    }, [fetchProjects, token]);
+        if (token) {
+            fetchProjects();
+            fetchServers();
+        }
+    }, [fetchProjects, fetchServers, token]);
 
     const handleDeployNow = () => {
         if (!selectedProjectId) return;
@@ -97,8 +119,8 @@ export default function DeploymentPage() {
                 <main className="max-w-7xl mx-auto px-6 py-12">
                     <header className="flex justify-between items-center mb-8">
                         <div>
-                            <h1 className="text-2xl font-bold mb-1">Deployments</h1>
-                            <p className="text-gray-400 text-sm">Real-time deployment logs and history.</p>
+                            <h1 className="text-2xl font-bold mb-1">All Deployments</h1>
+                            <p className="text-gray-400 text-sm">Real-time deployment logs and history across all servers.</p>
                         </div>
                         <div className="flex items-center gap-3">
                             {/* Project Selector */}
@@ -186,9 +208,25 @@ export default function DeploymentPage() {
 
                             {/* History Sidebar - 1/3 width */}
                             <div>
-                                <h3 className="text-lg font-semibold mb-3">Recent Deployments</h3>
+                                <h3 className="text-lg font-semibold mb-3">Deployment History</h3>
+
+                                {/* Server Filter */}
+                                <div className="mb-3">
+                                    <select
+                                        value={selectedServerId}
+                                        onChange={(e) => setSelectedServerId(e.target.value)}
+                                        className="w-full bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm text-white focus:border-blue-600 focus:outline-none transition-colors"
+                                    >
+                                        <option value="">All Servers</option>
+                                        {servers.map((s) => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
                                 <DeploymentHistory
                                     projectId={selectedProjectId}
+                                    serverId={selectedServerId || undefined}
                                     refreshKey={refreshKey}
                                 />
                             </div>

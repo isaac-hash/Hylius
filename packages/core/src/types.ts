@@ -34,6 +34,15 @@ export interface DeployOptions {
      * Logic: CLI uses console.log, Dashboard uses socket.emit.
      */
     onLog?: (chunk: string) => void;
+    /**
+     * Optional: domains configured for this project.
+     * If present, Caddy will be updated post-deploy.
+     */
+    domains?: DomainConfig[];
+    /**
+     * TLS mode for Caddy: 'production' (Let's Encrypt) or 'internal' (self-signed).
+     */
+    tlsMode?: 'production' | 'internal';
 }
 
 export interface DeployResult {
@@ -70,4 +79,21 @@ export interface SetupResult {
     success: boolean;
     durationMs: number;
     error?: string;
+}
+
+export interface DomainConfig {
+    hostname: string;
+    upstreamPort: string; // e.g. "3000"
+}
+
+export interface DomainResult {
+    success: boolean;
+    hostname: string;
+    sslProvisioned: boolean;
+    error?: string;
+}
+
+export interface ConfigureCaddyOptions {
+    domains: DomainConfig[];
+    tlsMode?: 'production' | 'internal'; // Default: 'production'
 }

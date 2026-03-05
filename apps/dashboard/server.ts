@@ -128,6 +128,7 @@ app.prepare().then(() => {
                         releaseId: result.releaseId,
                         durationMs: result.durationMs,
                         commitHash: result.commitHash,
+                        deployUrl: result.url || null,
                         finishedAt: new Date(),
                     }
                 });

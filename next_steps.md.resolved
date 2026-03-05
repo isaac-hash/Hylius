@@ -1,0 +1,96 @@
+# Hylius: Next Steps Analysis
+
+## Where You Stand Today
+
+You've built an impressive foundation. Here's what's **working**:
+
+| Layer | What's Built | Status |
+|-------|-------------|--------|
+| **Core** | Deploy (Docker + railpack), Setup (provisioning), Monitoring (SSH pulse), Rollback (symlink swap) | ✅ Functional |
+| **CLI** | `init`, [deploy](file:///c:/Users/HP/Documents/Anvil/packages/core/src/deploy.ts#128-412), [setup](file:///c:/Users/HP/Documents/Anvil/packages/core/src/setup.ts#4-107), `build`, `dev`, `ci-generate` | ✅ Functional |
+| **Dashboard** | Auth, Admin panel, Billing (Flutterwave/Paystack), Server/Project CRUD, Real-time deploy via Socket.io | ✅ Functional |
+| **Schema** | Organization, User, Session, Server, Project, Deployment, Metric, Plan, Subscription, Payment | ✅ Complete |
+| **CI/CD** | GitHub Actions workflow generator (deploy-only + full pipeline) | ✅ Functional |
+
+---
+
+## Gap Analysis vs. Competitors
+
+### Dokploy Has (That You Don't Yet)
+
+| Feature | Dokploy | Hylius Status | Priority |
+|---------|---------|---------------|----------|
+| **Custom Domains + SSL** | Traefik auto-config, Let's Encrypt | ❌ Missing | 🔴 Critical |
+| **Database Management** | Deploy MySQL, Postgres, Redis, MongoDB | ❌ Missing | 🟡 Medium |
+| **Backups** | Automated DB + file backups to S3/R2 | ❌ Missing | 🟡 Medium |
+| **Templates / One-Click Apps** | Pre-built templates (WordPress, Ghost, etc.) | ❌ Missing | 🟢 Nice-to-have |
+| **Docker Compose** | Native multi-service compose support | ⚠️ Partial (single container) | 🟡 Medium |
+| **Multi-server** | Deploy same app across multiple servers | ❌ Missing | 🟢 Future |
+
+### Vercel Has (That You Don't Yet)
+
+| Feature | Vercel | Hylius Status | Priority |
+|---------|--------|---------------|----------|
+| **Preview Deployments** | Every PR gets a unique URL | ❌ Missing | 🔴 Critical |
+| **Auto-HTTPS** | Automatic SSL for all domains | ❌ Missing | 🔴 Critical |
+| **Git Webhooks** | Auto-deploy on `git push` from dashboard | ❌ Missing | 🔴 Critical |
+| **Environment Variables UI** | Per-environment env var management | ⚠️ Partial (JSON string in DB) | 🟡 Medium |
+| **Deployment Logs Persistence** | Permanent build logs, searchable | ⚠️ Partial (logPath in schema but unused) | 🟡 Medium |
+| **Framework Detection** | Auto-detect Next.js, Vite, etc. | ⚠️ Partial (railpack) | 🟡 Medium |
+
+---
+
+## Recommended Next Step: **Domain Management + SSL (Auto-HTTPS)**
+
+> [!IMPORTANT]
+> This is the #1 feature gap. Without custom domains and SSL, deployed apps are only accessible by IP:port — which isn't usable in production. Both Dokploy and Vercel solve this out of the box.
+
+### Why This First?
+
+1. **Production-readiness**: No user will deploy a real app to `http://143.198.x.x:3000`
+2. **It unlocks Preview Deployments**: Once you have domain/subdomain management, you can generate `preview-abc123.user-domain.com`
+3. **It's your "graduation moment"**: Moving from "development tool" to "production platform"
+4. **Every competitor has this**: It's table stakes
+
+### What It Involves
+
+```mermaid
+graph LR
+    A[User adds domain] --> B[Hylius configures Nginx/Caddy on VPS]
+    B --> C[DNS verification]
+    C --> D[Auto-provision Let's Encrypt cert]
+    D --> E[Reverse proxy to container port]
+```
+
+#### Implementation Scope
+
+1. **Add `domain` field to Project schema** — custom domain per project
+2. **Nginx/Caddy reverse proxy generation** — SSH in, write config, reload
+3. **Let's Encrypt integration** — use `certbot` or Caddy's auto-SSL
+4. **Deploy URL display** — show `https://myapp.com` on dashboard instead of `IP:port`
+5. **Core function**: `configureDomain()` in `packages/core`
+6. **CLI command**: `hylius domain add myapp.com`
+
+---
+
+## The Full Priority Roadmap
+
+| Phase | Feature | Impact | Effort |
+|-------|---------|--------|--------|
+| **Phase 1** (Now) | 🔒 **Domain + SSL** | Enables production use | Medium |
+| **Phase 2** | 🔗 **Git Webhooks** (auto-deploy on push) | Matches the Vercel "magic" | Medium |
+| **Phase 3** | 👁️ **Preview Deployments** (per-branch URLs) | Killer differentiator | High |
+| **Phase 4** | 🌍 **Environment Variables UI** (proper editor, per-env) | Better DX | Low |
+| **Phase 5** | 📊 **Monitoring Dashboard** (use existing `getPulse`, add charts) | Visualization of existing data | Medium |
+| **Phase 6** | 💾 **Persistent Build Logs** (store, search, replay) | Enterprise-grade | Medium |
+| **Phase 7** | 🗄️ **Database Management** (deploy Postgres/MySQL/Redis) | Dokploy parity | High |
+| **Phase 8** | 📦 **One-Click Templates** | Onboarding accelerator | Low |
+
+---
+
+## Decision Point
+
+> [!NOTE]
+> The above roadmap is my recommendation based on impact-vs-effort analysis against your direct competitors. Phase 1 (Domain + SSL) is the clear next step because it's the difference between "demo-ready" and "production-ready."
+
+Would you like me to create a detailed implementation plan for **Phase 1: Domain Management + Auto-SSL**, or would you prefer to tackle a different phase first?

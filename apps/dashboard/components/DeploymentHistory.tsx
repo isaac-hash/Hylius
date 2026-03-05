@@ -12,11 +12,13 @@ interface Deployment {
     durationMs: number | null;
     startedAt: string;
     finishedAt: string | null;
-    project?: { name: string };
+    deployUrl: string | null;
+    project?: { name: string; server?: { name: string } };
 }
 
 interface DeploymentHistoryProps {
     projectId?: string;
+    serverId?: string;
     refreshKey?: number; // Increment to trigger a refetch
 }
 
@@ -44,16 +46,20 @@ function timeAgo(dateStr: string): string {
     return `${days}d ago`;
 }
 
-export default function DeploymentHistory({ projectId, refreshKey }: DeploymentHistoryProps) {
+export default function DeploymentHistory({ projectId, serverId, refreshKey }: DeploymentHistoryProps) {
     const { token } = useAuth();
     const [deployments, setDeployments] = useState<Deployment[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchDeployments = useCallback(() => {
         setLoading(true);
-        const url = projectId
-            ? `/api/deployments?projectId=${projectId}`
-            : '/api/deployments';
+
+        // Build URL with query params
+        const params = new URLSearchParams();
+        if (projectId) params.set('projectId', projectId);
+        if (serverId) params.set('serverId', serverId);
+        const queryString = params.toString();
+        const url = queryString ? `/api/deployments?${queryString}` : '/api/deployments';
 
         if (!token) return;
 
@@ -64,7 +70,7 @@ export default function DeploymentHistory({ projectId, refreshKey }: DeploymentH
                 setLoading(false);
             })
             .catch(() => setLoading(false));
-    }, [projectId, token]);
+    }, [projectId, serverId, token]);
 
     useEffect(() => {
         if (token) fetchDeployments();
@@ -113,11 +119,22 @@ export default function DeploymentHistory({ projectId, refreshKey }: DeploymentH
                             </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-gray-500">
+                            {d.project?.name && (
+                                <span className="text-gray-400 font-medium">{d.project.name}</span>
+                            )}
+                            {d.project?.server?.name && (
+                                <span className="text-gray-600">on {d.project.server.name}</span>
+                            )}
                             {d.commitHash && (
                                 <span className="font-mono">{d.commitHash.slice(0, 7)}</span>
                             )}
                             <span>{formatDuration(d.durationMs)}</span>
                             <span className="uppercase">{d.triggerSource}</span>
+                            {d.deployUrl && d.status === 'SUCCESS' && (
+                                <a href={d.deployUrl} target="_blank" rel="noreferrer" className="text-green-400 hover:underline truncate max-w-[120px]" title={d.deployUrl}>
+                                    {d.deployUrl.replace('http://', '')}
+                                </a>
+                            )}
                         </div>
                     </div>
                 );
@@ -125,3 +142,4 @@ export default function DeploymentHistory({ projectId, refreshKey }: DeploymentH
         </div>
     );
 }
+

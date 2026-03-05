@@ -7,6 +7,7 @@ export async function GET(request: Request) {
         const auth = await requireAuth(request);
         const { searchParams } = new URL(request.url);
         const projectId = searchParams.get('projectId');
+        const serverId = searchParams.get('serverId');
 
         // Build where clause — always scoped to org via project
         const where: Record<string, unknown> = {
@@ -17,13 +18,24 @@ export async function GET(request: Request) {
             where.projectId = projectId;
         }
 
+        if (serverId) {
+            // Filter by server: deployments whose project belongs to this server
+            where.project = {
+                ...(where.project as Record<string, unknown>),
+                serverId,
+            };
+        }
+
         const deployments = await prisma.deployment.findMany({
             where,
             orderBy: { startedAt: 'desc' },
             take: 50,
             include: {
                 project: {
-                    select: { name: true },
+                    select: {
+                        name: true,
+                        server: { select: { name: true } },
+                    },
                 },
             },
         });

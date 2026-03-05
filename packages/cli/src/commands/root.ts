@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { initCommand } from './init.js';
 import { devCommand } from './dev.js';
 import { buildCommand } from './build.js';
+import { domainCommand } from './domain.js';
 
 export const program = new Command()
   .name('hylius')
@@ -14,3 +15,4 @@ export const program = new Command()
 program.addCommand(initCommand);
 program.addCommand(devCommand);
 program.addCommand(buildCommand);
+program.addCommand(domainCommand);

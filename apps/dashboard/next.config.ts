@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@hylius/core"],
+  serverExternalPackages: ["ssh2", "@hylius/core", "node-ssh"],
 };
 
 export default nextConfig;

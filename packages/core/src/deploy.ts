@@ -1,5 +1,6 @@
-import { DeployOptions, DeployResult, ProjectConfig } from './types.js';
+import { DeployOptions, DeployResult, ProjectConfig, DomainConfig } from './types.js';
 import { SSHClient } from './ssh/client.js';
+import { configureCaddy, ensureCaddyRunning } from './domain.js';
 
 async function execOrThrow(client: SSHClient, command: string, context: string): Promise<string> {
     const { stdout, stderr, code } = await client.exec(command);
@@ -138,6 +139,8 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
     const log = (msg: string) => {
         if (onLog) onLog(msg + '\n');
     };
+
+    let finalUrl: string | undefined;
 
     try {
         log(`[${releaseId}] Connecting to ${server.host}...`);
@@ -318,11 +321,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                         if (pkg.scripts.start) startScript = 'start';
                         else if (pkg.scripts.preview) {
                             startScript = 'run preview';
-                            if (isVite) extraArgs = ' -- --host 0.0.0.0';
+                            if (isVite) extraArgs = ' -- --host 0.0.0.0 --port 3000';
                         }
                         else if (pkg.scripts.dev) {
                             startScript = 'run dev';
-                            if (isVite) extraArgs = ' -- --host 0.0.0.0';
+                            if (isVite) extraArgs = ' -- --host 0.0.0.0 --port 3000';
                         }
                     }
                 }
@@ -330,36 +333,108 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 // Ignore parse errors, fallback to default 'start'
             }
 
+            // Delete old PM2 process first to fully clear stale log history
+            await client.exec(`pm2 delete "${project.name}" > /dev/null 2>&1 || true`);
+
+            // Detect runtime early so we know the expected port for cleanup
+            const runtime = await detectRuntime(client, releasePath);
+            const defaultPort = getRuntimePort(runtime);
+
+            // Wait for the old process to fully release its port, then kill
+            // any lingering child process that might still hold the port
+            await new Promise(res => setTimeout(res, 1500));
+            await client.exec(`fuser -k ${defaultPort}/tcp > /dev/null 2>&1 || true`);
+            // Also kill common Vite default port that may linger from previous deploys
+            if (defaultPort !== '4173') {
+                await client.exec(`fuser -k 4173/tcp > /dev/null 2>&1 || true`);
+            }
+            await new Promise(res => setTimeout(res, 500));
+
             const restartCmd = project.startCommand
                 ? `cd ${currentPath} && ${project.startCommand}`
-                : `cd ${currentPath} && (test -f ecosystem.config.js && (pm2 delete "${project.name}" > /dev/null 2>&1; pm2 start ecosystem.config.js --env production) || (pm2 delete "${project.name}" > /dev/null 2>&1; pm2 start npm --name "${project.name}" -- ${startScript}${extraArgs}))`;
+                : `cd ${currentPath} && (test -f ecosystem.config.js && pm2 start ecosystem.config.js --env production || pm2 start npm --name "${project.name}" -- ${startScript}${extraArgs})`;
 
             await execStreamOrThrow(client, restartCmd, 'PM2 restart', onLog);
 
-            // --- Detect listening port and construct URL ---
+            // --- Detect the actual listening port ---
             let appPort = '';
-            try {
-                // Wait briefly for the app to start and bind to a port
+
+            // Method 1: Check actual listening port via ss (most reliable)
+            for (let attempt = 0; attempt < 4 && !appPort; attempt++) {
                 await new Promise(res => setTimeout(res, 2000));
-                const { stdout: pm2Logs } = await client.exec(`pm2 logs "${project.name}" --lines 30 --nostream 2>/dev/null`);
-                if (pm2Logs) {
-                    // Match patterns like "http://localhost:4173" or ":4173" or "port 4173"
-                    const portMatch = pm2Logs.match(/(?:localhost|0\.0\.0\.0|127\.0\.0\.1):(\d{4,5})/i)
-                        || pm2Logs.match(/port\s+(\d{4,5})/i);
-                    if (portMatch) {
-                        appPort = portMatch[1];
+                try {
+                    const { stdout: pidStr } = await client.exec(`pm2 pid "${project.name}" 2>/dev/null`);
+                    const pid = pidStr.trim();
+                    if (pid && pid !== '0') {
+                        // Check both the PM2 pid and its child processes (e.g. npm → node → vite)
+                        const { stdout: portStr } = await client.exec(
+                            `{ pgrep -P ${pid} 2>/dev/null; echo ${pid}; } | xargs -I{} ss -tlnp 2>/dev/null | grep 'pid=' | grep -oP '(?<=:)\\d{4,5}(?=\\s)' | head -1`
+                        );
+                        const detected = portStr.trim();
+                        if (detected && /^\d{4,5}$/.test(detected)) {
+                            appPort = detected;
+                        }
                     }
+                } catch {
+                    // Ignore, retry
                 }
-            } catch {
-                // Ignore detection errors
+            }
+
+            // Method 2: Parse PM2 log files directly as fallback
+            if (!appPort) {
+                try {
+                    const { stdout: logContent } = await client.exec(
+                        `tail -20 ~/.pm2/logs/${project.name}-out.log 2>/dev/null`
+                    );
+                    if (logContent) {
+                        const portMatches = [...logContent.matchAll(/(?:localhost|0\.0\.0\.0|127\.0\.0\.1):(\d{4,5})/gi)];
+                        const fallbackMatches = [...logContent.matchAll(/port\s+(\d{4,5})/gi)];
+                        if (portMatches.length > 0) {
+                            appPort = portMatches[portMatches.length - 1][1];
+                        } else if (fallbackMatches.length > 0) {
+                            appPort = fallbackMatches[fallbackMatches.length - 1][1];
+                        }
+                    }
+                } catch {
+                    // Ignore
+                }
             }
 
             if (!appPort) {
-                appPort = '3000';
+                appPort = defaultPort;
+                log(`Port not detected, using default: ${defaultPort}`);
             }
 
             const appUrl = `http://${options.server.host}:${appPort}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
+            finalUrl = appUrl;
+        }
+
+        // ─── Post-deploy: Update Caddy reverse proxy if domains are configured ───
+        if (options.domains && options.domains.length > 0) {
+            log('\nUpdating Caddy reverse proxy for configured domains...');
+            try {
+                const appPort = finalUrl
+                    ? new URL(finalUrl).port || '3000'
+                    : '3000';
+
+                const domainConfigs: DomainConfig[] = options.domains.map(d => ({
+                    hostname: d.hostname,
+                    upstreamPort: d.upstreamPort || appPort,
+                }));
+
+                await configureCaddy(client, {
+                    domains: domainConfigs,
+                    tlsMode: options.tlsMode || 'production',
+                }, onLog);
+
+                // Update finalUrl to the first domain's HTTPS URL
+                const protocol = options.tlsMode === 'internal' ? 'https' : 'https';
+                finalUrl = `${protocol}://${options.domains[0].hostname}`;
+                log(`\x1b[36m🔒 Domain URL: ${finalUrl}\x1b[0m`);
+            } catch (err: any) {
+                log(`\x1b[33mWarning: Caddy update failed (deploy still succeeded): ${err.message}\x1b[0m`);
+            }
         }
 
         let commitHash = 'unknown';
@@ -371,30 +446,12 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         const durationMs = Date.now() - startTime;
         log(`Deployment successful in ${durationMs}ms`);
 
-        // Build the final URL
-        let finalUrl: string | undefined;
-        try {
-            const { stdout: pm2Logs } = await client.exec(`pm2 logs "${project.name}" --lines 30 --nostream 2>/dev/null`);
-            if (pm2Logs) {
-                const portMatch = pm2Logs.match(/(?:localhost|0\.0\.0\.0|127\.0\.0\.1):(\d{4,5})/i)
-                    || pm2Logs.match(/port\s+(\d{4,5})/i);
-                if (portMatch) {
-                    finalUrl = `http://${options.server.host}:${portMatch[1]}`;
-                }
-            }
-        } catch {
-            // Ignore
-        }
-        if (!finalUrl) {
-            finalUrl = `http://${options.server.host}:3000`;
-        }
-
         return {
             success: true,
             releaseId,
             commitHash,
             durationMs,
-            url: finalUrl
+            url: finalUrl || `http://${options.server.host}:3000`
         };
 
     } catch (err: any) {
