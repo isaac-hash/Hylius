@@ -21,7 +21,10 @@ export class SSHClient {
             };
 
             if (this.config.privateKey) {
-                connectConfig.privateKey = this.config.privateKey;
+                // OpenSSH keys require a trailing newline to parse correctly in ssh2
+                let keyStr = this.config.privateKey;
+                if (!keyStr.endsWith('\n')) keyStr += '\n';
+                connectConfig.privateKey = keyStr;
             } else if (this.config.privateKeyPath) {
                 try {
                     connectConfig.privateKey = fs.readFileSync(this.config.privateKeyPath);

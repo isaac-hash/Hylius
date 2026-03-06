@@ -51,12 +51,17 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
                 `curl -fsSL https://download.docker.com/linux/ubuntu/gpg | ${sudoPrefix}gpg --dearmor -o /etc/apt/keyrings/docker.gpg || true`,
                 `echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(lsb_release -cs) stable" | ${sudoPrefix}tee /etc/apt/sources.list.d/docker.list > /dev/null`,
                 `${sudoPrefix}apt-get update`,
-                `${sudoPrefix}apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git`
+                `${sudoPrefix}apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git`,
+                // Install Node.js 20 LTS via NodeSource (distro nodejs is v12, too old for Vite/ESM)
+                `curl -fsSL https://deb.nodesource.com/setup_20.x | ${sudoPrefix}bash -`,
+                `${sudoPrefix}apt-get install -y nodejs`,
+                `${sudoPrefix}npm install -g pm2`
             ];
         } else if (isAlpine) {
             dockerCommands = [
                 `${sudoPrefix}apk update`,
-                `${sudoPrefix}apk add --no-cache docker docker-cli-compose git`,
+                `${sudoPrefix}apk add --no-cache docker docker-cli-compose git nodejs npm`,
+                `${sudoPrefix}npm install -g pm2`,
                 `${sudoPrefix}rc-update add docker default || true`,
                 `${sudoPrefix}addgroup ${currentUser} docker || true`
             ];
