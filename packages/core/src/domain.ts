@@ -40,7 +40,9 @@ export function generateCaddyfile(domains: DomainConfig[], tlsMode: 'production'
 
     const blocks = domains.map(d => {
         const tlsDirective = tlsMode === 'internal' ? '\n    tls internal' : '';
-        return `${d.hostname} {${tlsDirective}\n    reverse_proxy localhost:${d.upstreamPort}\n}`;
+        // header_up Host localhost ensures upstream dev servers (Vite, etc.) don't block
+        // the request due to host security checks on the custom domain hostname
+        return `${d.hostname} {${tlsDirective}\n    reverse_proxy localhost:${d.upstreamPort} {\n        header_up Host localhost\n    }\n}`;
     });
 
     return `# Hylius Managed Caddyfile — DO NOT EDIT MANUALLY\n# Last updated: ${new Date().toISOString()}\n\n${blocks.join('\n\n')}\n`;
