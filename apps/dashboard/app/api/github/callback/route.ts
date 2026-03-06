@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '../../../../services/prisma';
-import { requireAuth } from '../../../../services/auth.service';
 
 /**
  * GitHub App Installation Callback
@@ -8,44 +6,36 @@ import { requireAuth } from '../../../../services/auth.service';
  * After a user installs the Hylius GitHub App on their account/org,
  * GitHub redirects here with ?installation_id=...&setup_action=install
  *
- * We save the installation and redirect back to the dashboard.
+ * We redirect back to the dashboard so the frontend (which has the auth token)
+ * can attach it to the organization securely.
  */
 export async function GET(request: Request) {
     try {
-        const auth = await requireAuth(request);
-        if (!auth.organizationId) {
-            return NextResponse.redirect(new URL('/?error=org_required', request.url));
-        }
-
         const url = new URL(request.url);
-        const installationId = parseInt(url.searchParams.get('installation_id') || '', 10);
-        const setupAction = url.searchParams.get('setup_action') || 'install';
+        const installationId = url.searchParams.get('installation_id');
+        const setupAction = url.searchParams.get('setup_action');
 
-        if (!installationId || isNaN(installationId)) {
+        if (!installationId) {
             return NextResponse.redirect(new URL('/?error=missing_installation', request.url));
         }
 
-        if (setupAction === 'install' || setupAction === 'update') {
-            // Upsert the installation record
-            await prisma.gitHubInstallation.upsert({
-                where: { installationId },
-                create: {
-                    installationId,
-                    accountLogin: url.searchParams.get('account_login') || 'unknown',
-                    accountType: url.searchParams.get('account_type') || 'User',
-                    organizationId: auth.organizationId,
-                },
-                update: {
-                    organizationId: auth.organizationId,
-                    updatedAt: new Date(),
-                },
-            });
+        // Construct the base URL from headers to handle reverse proxies like ngrok
+        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000';
+        const baseUrl = `${protocol}://${host}`;
 
-            console.log(`[GitHub Callback] Installation ${installationId} saved for org ${auth.organizationId}`);
-        }
+        // Just forward the params to the frontend which holds the auth token.
+        const redirectUrl = new URL('/github/link', baseUrl);
+        redirectUrl.searchParams.set('github_install', installationId);
+        if (setupAction) redirectUrl.searchParams.set('setup_action', setupAction);
 
-        // Redirect back to dashboard with success indicator
-        return NextResponse.redirect(new URL('/?github=connected', request.url));
+        // Forward account info if GitHub provided it (optional)
+        const accountLogin = url.searchParams.get('account_login');
+        const accountType = url.searchParams.get('account_type');
+        if (accountLogin) redirectUrl.searchParams.set('account_login', accountLogin);
+        if (accountType) redirectUrl.searchParams.set('account_type', accountType);
+
+        return NextResponse.redirect(redirectUrl);
     } catch (error: any) {
         console.error('[GitHub Callback] Error:', error);
         return NextResponse.redirect(new URL('/?error=github_callback_failed', request.url));

@@ -20,22 +20,31 @@ export default function GitHubConnect({ compact = false }: GitHubConnectProps) {
     const [loading, setLoading] = useState(true);
 
     const appSlug = typeof window !== 'undefined'
-        ? (process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'hylius')
-        : 'hylius';
+        ? (process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'hylius-platform')
+        : 'hylius-platform';
 
     useEffect(() => {
         if (!token) return;
-        fetch('/api/github/repos', {
-            headers: { Authorization: `Bearer ${token}` },
-        })
-            .then(res => res.json())
-            .then(data => {
+
+        const fetchRepos = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch('/api/github/repos', {
+                    headers: { Authorization: `Bearer ${token}` },
+                    cache: 'no-store',
+                });
+                const data = await res.json();
                 if (data.connected && data.installation) {
                     setInstallation(data.installation);
                 }
-            })
-            .catch(console.error)
-            .finally(() => setLoading(false));
+            } catch (err) {
+                console.error('Failed to fetch repos:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchRepos();
     }, [token]);
 
     const installUrl = `https://github.com/apps/${appSlug}/installations/new`;

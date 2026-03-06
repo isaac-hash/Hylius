@@ -3,6 +3,8 @@ import { prisma } from '../../../../services/prisma';
 import { requireAuth } from '../../../../services/auth.service';
 import { listRepos } from '../../../../services/github.service';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * List GitHub repos accessible to the organization's GitHub App installation.
  *

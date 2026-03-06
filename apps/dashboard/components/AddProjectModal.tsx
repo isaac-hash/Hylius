@@ -36,6 +36,8 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         startCommand: '',
     });
     const [githubMeta, setGithubMeta] = useState<{ repoFullName: string; installationId: number } | null>(null);
+    const [useGitHubActions, setUseGitHubActions] = useState(false);
+    const [successData, setSuccessData] = useState<{ token: string; webhookUrl: string } | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -43,6 +45,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
     const [repos, setRepos] = useState<GitHubRepo[]>([]);
     const [reposLoading, setReposLoading] = useState(false);
     const [githubConnected, setGithubConnected] = useState(false);
+    const [installationId, setInstallationId] = useState<number>(0);
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
@@ -63,6 +66,9 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
             if (data.connected) {
                 setGithubConnected(true);
                 setRepos(data.repos || []);
+                if (data.installation?.installationId) {
+                    setInstallationId(Number(data.installation.installationId));
+                }
             } else {
                 setGithubConnected(false);
             }
@@ -84,8 +90,9 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         });
         setGithubMeta({
             repoFullName: repo.fullName,
-            installationId: 0, // Will be set from the API response
+            installationId: installationId,
         });
+        setUseGitHubActions(false);
         // Switch to manual for final review/edit
         setMode('manual');
     }
@@ -104,6 +111,9 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
             if (githubMeta) {
                 body.githubRepoFullName = githubMeta.repoFullName;
                 body.githubInstallationId = githubMeta.installationId;
+                if (useGitHubActions) {
+                    body.deployStrategy = 'ghcr-pull';
+                }
             }
 
             const res = await fetch('/api/projects', {
@@ -115,13 +125,38 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                 body: JSON.stringify(body),
             });
 
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed to create project');
+            if (useGitHubActions) {
+                // Generate a deployment token automatically
+                const tokenRes = await fetch('/api/tokens', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ name: `GitHub Actions - ${form.name}` })
+                });
+
+                let deployToken = 'Failed to generate token';
+                if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json();
+                    deployToken = tokenData.token;
+                }
+
+                setSuccessData({
+                    token: deployToken,
+                    webhookUrl: `${window.location.origin}/api/webhooks/deploy-complete`
+                });
+
+                setForm({ name: '', repoUrl: '', branch: 'main', deployPath: '', buildCommand: '', startCommand: '' });
+                setGithubMeta(null);
+                setUseGitHubActions(false);
+                onAdded?.();
+                return; // Return early, leaving the modal open to show the success data
             }
 
             setForm({ name: '', repoUrl: '', branch: 'main', deployPath: '', buildCommand: '', startCommand: '' });
             setGithubMeta(null);
+            setUseGitHubActions(false);
             onAdded?.();
             onClose();
         } catch (err: unknown) {
@@ -144,7 +179,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         r.fullName.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const appSlug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'hylius';
+    const appSlug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'hylius-platform';
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -283,6 +318,25 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                             </div>
                         )}
 
+                        {githubMeta && (
+                            <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={useGitHubActions}
+                                        onChange={(e) => setUseGitHubActions(e.target.checked)}
+                                        className="mt-1 w-4 h-4 rounded border-gray-600 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900 bg-gray-700 cursor-pointer"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-medium text-white mb-0.5">Build on GitHub Actions (Recommended)</p>
+                                        <p className="text-xs text-gray-400">
+                                            Hylius will automatically commit a reusable CI/CD workflow to your repository to build your project as a Docker container using GitHub Container Registry. Saves server resources.
+                                        </p>
+                                    </div>
+                                </label>
+                            </div>
+                        )}
+
                         {fields.map((f) => (
                             <div key={f.name}>
                                 <label className="block text-sm text-gray-400 mb-1">
@@ -316,6 +370,55 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                             </button>
                         </div>
                     </form>
+                )}
+
+                {/* Success Data Mode */}
+                {successData && (
+                    <div className="space-y-4">
+                        <div className="bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-lg flex items-start gap-3">
+                            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <div>
+                                <h3 className="font-medium text-green-300">Project Created & Workflow Provisioned!</h3>
+                                <p className="text-sm mt-1">A GitHub Actions workflow file has been committed to your repository. To allow the workflow to notify Hylius when a build is complete, please add these two repository secrets in GitHub:</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs text-gray-400 font-mono mb-1">HYLIUS_WEBHOOK_URL</label>
+                                <div className="flex bg-black border border-gray-800 rounded overflow-hidden">
+                                    <input readOnly value={successData.webhookUrl} className="flex-1 bg-transparent p-2 text-sm text-gray-300 font-mono outline-none" />
+                                    <button onClick={() => navigator.clipboard.writeText(successData.webhookUrl)} className="px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors" title="Copy">
+                                        📋
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-400 font-mono mb-1">HYLIUS_API_TOKEN</label>
+                                <div className="flex bg-black border border-gray-800 rounded overflow-hidden">
+                                    <input readOnly value={successData.token} className="flex-1 bg-transparent p-2 text-sm text-gray-300 font-mono outline-none" />
+                                    <button onClick={() => navigator.clipboard.writeText(successData.token)} className="px-3 bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors" title="Copy">
+                                        📋
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSuccessData(null);
+                                    onClose();
+                                }}
+                                className="bg-white text-black font-medium hover:bg-gray-200 px-5 py-2 rounded transition-colors"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

@@ -81,6 +81,12 @@ async function handlePush(body: any) {
     // Deploy each matching project
     const results = [];
     for (const project of projects) {
+        if (project.deployStrategy === 'ghcr-pull') {
+            console.log(`[GitHub Webhook] Skipping ${project.name} because it uses ghcr-pull strategy (handled by deploy-complete webhook)`);
+            results.push({ projectId: project.id, name: project.name, skipped: true, reason: 'ghcr-pull strategy' });
+            continue;
+        }
+
         try {
             const result = await executeDeployment({
                 projectId: project.id,

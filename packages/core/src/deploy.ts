@@ -16,9 +16,13 @@ async function execStreamOrThrow(
     context: string,
     onLog?: (chunk: string) => void,
 ): Promise<void> {
-    const code = await client.execStream(command, onLog, onLog);
+    let lastErrorChunk = '';
+    const code = await client.execStream(command, onLog, (errChunk) => {
+        lastErrorChunk += errChunk;
+        if (onLog) onLog(errChunk);
+    });
     if (code !== 0) {
-        throw new Error(`${context} failed (exit ${code})`);
+        throw new Error(`${context} failed (exit ${code}): ${lastErrorChunk}`.trim());
     }
 }
 
@@ -91,7 +95,7 @@ function getRuntimePort(runtime: ProjectRuntime | null): string {
     }
 }
 
-type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2';
+type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2' | 'ghcr-pull';
 
 /**
  * Determine how to deploy the project based on existing files or explicit config.
@@ -149,27 +153,35 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         log(`Creating release directory: ${releasePath}`);
         await execOrThrow(client, `mkdir -p ${releasePath}`, 'Create release directory');
 
-        if (project.repoUrl === 'local' && project.localBundlePath) {
-            log(`Extracting local bundle from ${project.localBundlePath}...`);
-            await execStreamOrThrow(
-                client,
-                `tar -xzf ${project.localBundlePath} -C ${releasePath} --strip-components=1`,
-                'Extract bundle',
-                onLog,
-            );
-            // Remove the bundle after extraction
-            await client.exec(`rm ${project.localBundlePath}`);
-        } else {
-            log(`Cloning ${project.repoUrl} (${project.branch || 'main'})...`);
-            await execStreamOrThrow(
-                client,
-                `git clone -b ${project.branch || 'main'} --depth 1 ${project.repoUrl} ${releasePath}`,
-                'Git clone',
-                onLog,
-            );
+        let strategy: DeployStrategy | null = project.deployStrategy && project.deployStrategy !== 'auto'
+            ? (project.deployStrategy as DeployStrategy)
+            : null;
+
+        if (strategy !== 'ghcr-pull') {
+            if (project.repoUrl === 'local' && project.localBundlePath) {
+                log(`Extracting local bundle from ${project.localBundlePath}...`);
+                await execStreamOrThrow(
+                    client,
+                    `tar -xzf ${project.localBundlePath} -C ${releasePath} --strip-components=1`,
+                    'Extract bundle',
+                    onLog,
+                );
+                // Remove the bundle after extraction
+                await client.exec(`rm ${project.localBundlePath}`);
+            } else {
+                log(`Cloning ${project.repoUrl} (${project.branch || 'main'})...`);
+                await execStreamOrThrow(
+                    client,
+                    `git clone -b ${project.branch || 'main'} --depth 1 ${project.repoUrl} ${releasePath}`,
+                    'Git clone',
+                    onLog,
+                );
+            }
         }
 
-        const strategy = await resolveDeployStrategy(client, releasePath, project);
+        if (!strategy) {
+            strategy = await resolveDeployStrategy(client, releasePath, project);
+        }
         log(`Deploy strategy: ${strategy}`);
 
         if (strategy === 'docker-compose') {
@@ -188,6 +200,44 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 'Docker Compose deploy',
                 onLog,
             );
+            await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+        } else if (strategy === 'ghcr-pull') {
+            const image = project.ghcrImage;
+            if (!image) throw new Error("ghcrImage is required for the ghcr-pull deploy strategy.");
+
+            const containerName = getContainerName(project);
+
+            log(`Pulling pre-built image: ${image}`);
+            await execStreamOrThrow(client, `docker pull ${image}`, 'Docker pull', onLog);
+
+            // Find a free port starting from 3011 (since 3000-3010 are pre-bound by the Mock VPS)
+            log(`Finding a free port...`);
+            let port = '3011';
+            try {
+                // Iteratively check ports starting from 3011 using Node.js loop over SSH
+                for (let p = 3011; p <= 3100; p++) {
+                    const { stdout: portStr } = await client.exec(
+                        `docker ps --format '{{.Ports}}' | grep -q ":${p}->" || echo "FREE"`
+                    );
+                    if (portStr.trim() === 'FREE') {
+                        port = p.toString();
+                        break;
+                    }
+                }
+            } catch (e: any) {
+                log(`Failed to find dynamic port, falling back to 3011: ${e.message}`);
+            }
+
+            log(`Assigning port ${port} and replacing container: ${containerName}`);
+            await execStreamOrThrow(
+                client,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && \
+                 docker run -d --name ${containerName} --restart unless-stopped -p ${port}:3000 ${image}`,
+                'Docker run',
+                onLog,
+            );
+
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
         } else if (strategy === 'dockerfile') {
@@ -275,8 +325,19 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
         } else {
             // PM2 strategy (no containerization)
-            log('Installing dependencies...');
-            await execStreamOrThrow(client, `cd ${releasePath} && npm install`, 'Install dependencies', onLog);
+
+            // Detect package manager
+            let pkgManager = 'npm';
+            log('Detecting package manager...');
+            if (await hasFile(client, `${releasePath}/pnpm-lock.yaml`)) {
+                pkgManager = 'pnpm';
+            } else if (await hasFile(client, `${releasePath}/yarn.lock`)) {
+                pkgManager = 'yarn';
+            }
+            log(`Detected package manager: ${pkgManager}`);
+
+            log(`Installing dependencies using ${pkgManager}...`);
+            await execStreamOrThrow(client, `cd ${releasePath} && ${pkgManager} install`, 'Install dependencies', onLog);
 
             // Determine build command: use explicit or auto-detect from package.json
             let buildCmd = project.buildCommand;
@@ -287,7 +348,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                     if (pkgStr) {
                         const pkg = JSON.parse(pkgStr);
                         if (pkg.scripts?.build) {
-                            buildCmd = 'npm run build';
+                            buildCmd = `${pkgManager} run build`;
                             log(`Auto-detected build script in package.json`);
                         } else {
                             log(`No build script found in package.json`);
@@ -352,7 +413,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
             const restartCmd = project.startCommand
                 ? `cd ${currentPath} && ${project.startCommand}`
-                : `cd ${currentPath} && (test -f ecosystem.config.js && pm2 start ecosystem.config.js --env production || pm2 start npm --name "${project.name}" -- ${startScript}${extraArgs})`;
+                : `cd ${currentPath} && (test -f ecosystem.config.js && pm2 start ecosystem.config.js --env production || pm2 start ${pkgManager} --name "${project.name}" -- ${startScript}${extraArgs})`;
 
             await execStreamOrThrow(client, restartCmd, 'PM2 restart', onLog);
 

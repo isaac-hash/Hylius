@@ -34,8 +34,9 @@
 | Feature | Vercel | Hylius Status | Priority |
 |---------|--------|---------------|----------|
 | Preview Deployments | Every PR gets a unique URL | ❌ Missing | 🔴 Critical |
-| Auto-HTTPS | Automatic SSL for all domains | ❌ Missing | 🔴 Critical |
-| Git Webhooks | Auto-deploy on `git push` from dashboard | ❌ Missing | 🔴 Critical |
+| Auto-HTTPS | Automatic SSL for all domains | ✅ Done (Caddy) | ✅ Done |
+| Git Webhooks | Auto-deploy on `git push` from dashboard | ✅ Done (GitHub App) | ✅ Done |
+| Commit Status Checks | Report deploy status back to GitHub with link | ❌ Missing | 🔴 Critical |
 | Environment Variables UI | Per-environment env var editor | ⚠️ Partial (JSON string in `envVars` field) | 🟡 Medium |
 | Persistent Build Logs | Permanent, searchable logs | ⚠️ Partial (`logPath` field exists but unused) | 🟡 Medium |
 | Framework Detection | Auto-detect Next.js, Vite, etc. | ⚠️ Partial (railpack handles this) | 🟡 Medium |
@@ -53,13 +54,13 @@
 
 | Phase | Feature | What It Unlocks | Effort | Detailed Plan |
 |-------|---------|-----------------|--------|---------------|
-| **Phase 1** | 🔒 **Domain + SSL (Caddy)** | Production-grade URLs, HTTPS | Medium | ✅ See below |
-| **Phase 2** | 🔗 **GitHub App + Webhooks** | Auto-deploy on push from dashboard | Medium | ✅ See below |
+| **Phase 1** | 🔒 **Domain + SSL (Caddy)** | Production-grade URLs, HTTPS | Medium | ✅ Done |
+| **Phase 2** | 🔗 **GitHub App + Webhooks** | Auto-deploy on push from dashboard | Medium | ✅ Done |
 | **Phase 3** | 🏗️ **CI-Build via GitHub Actions + GHCR** | Offload builds, zero-downtime pulls | Medium | Pending |
 | **Phase 4** | 👁️ **Preview Deployments** | Per-branch URLs (requires Phase 1 + 2) | High | Pending |
 | **Phase 5** | 🌍 **Environment Variables UI** | Per-environment editor, secrets management | Low | Pending |
 | **Phase 6** | 📊 **Monitoring Dashboard** | Charts from existing `getPulse` data | Medium | Pending |
-| **Phase 7** | 💾 **Persistent Build Logs** | Stored, searchable, replayable logs | Medium | Pending |
+| **Phase 7** | 💾 **Build Logs + GitHub Commit Statuses** | Vercel-style deploy status on GitHub, real-time log viewer | Medium | Pending |
 | **Phase 8** | 🗄️ **Database Management** | Deploy Postgres/MySQL/Redis alongside apps | High | Pending |
 | **Phase 9** | 📦 **One-Click Templates** | WordPress, Ghost, etc. | Low | Pending |
 
@@ -98,6 +99,25 @@
 ### The "Killer" Selling Point
 
 > *"Dokploy makes your $3/month VPS choke trying to compile your Next.js app. Hylius offloads the build to GitHub's servers for free. Your VPS just downloads the finished image in 5 seconds."*
+
+---
+
+## Phase 7 Summary: Build Logs + GitHub Commit Statuses
+
+> **Goal**: Report deployment status back to GitHub (like Vercel) and provide a deployment detail page with real-time build logs.
+
+### What Users See
+
+1. **On GitHub**: After a push, a commit status check appears — "Hylius — Building..." (pending) → "Hylius — Deployment has completed" (success) with a **Details** link
+2. **On Hylius**: Clicking "Details" opens `/deployments/[id]` — a page showing commit info, deploy status, duration, and a **live terminal log viewer**
+
+### Architecture
+
+1. **GitHub Commit Status API** (`POST /repos/{owner}/{repo}/statuses/{sha}`) — post `pending` before deploy, `success`/`failure` after
+2. **GitHub Deployments API** — create deployment records with environment info (Production/Preview)
+3. **Log Storage** — save build output to `Deployment.logContent` field in DB
+4. **SSE Streaming** — `/api/deployments/[id]/logs` endpoint streams live logs during active builds
+5. **Deployment Detail Page** — terminal-style UI at `/deployments/[id]` with auto-scroll
 
 ---
 

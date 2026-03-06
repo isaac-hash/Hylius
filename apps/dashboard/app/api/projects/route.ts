@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../services/prisma';
 import { requireAuth } from '../../../services/auth.service';
+import { autoProvisionWorkflow } from '../../../services/github-workflow.service';
 
 export async function GET(request: Request) {
     try {
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
         const auth = await requireAuth(request);
         if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
         const body = await request.json();
-        const { name, repoUrl, branch, deployPath, buildCommand, startCommand, serverId, githubRepoFullName, githubInstallationId } = body;
+        const { name, repoUrl, branch, deployPath, buildCommand, startCommand, serverId, githubRepoFullName, githubInstallationId, deployStrategy } = body;
 
         if (!name || !repoUrl || !deployPath || !serverId) {
             return NextResponse.json(
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
                 startCommand: startCommand || null,
                 githubRepoFullName: githubRepoFullName || null,
                 githubInstallationId: githubInstallationId || null,
+                deployStrategy: deployStrategy || 'auto',
                 serverId,
                 organizationId: auth.organizationId,
             },
@@ -84,6 +86,13 @@ export async function POST(request: Request) {
                 metadata: JSON.stringify({ projectId: project.id, name: project.name, serverId: project.serverId })
             }
         });
+
+        // If the user chose to use GitHub Actions, provision the workflow file in their repo
+        if (deployStrategy === 'ghcr-pull' && githubInstallationId && githubRepoFullName) {
+            // Non-blocking fire-and-forget so UI returns quickly
+            autoProvisionWorkflow(githubInstallationId, githubRepoFullName, project.branch)
+                .catch(err => console.error('[Projects API] Workflow provision failed:', err));
+        }
 
         return NextResponse.json(project);
     } catch (error: unknown) {

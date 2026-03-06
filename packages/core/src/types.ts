@@ -16,11 +16,12 @@ export interface ProjectConfig {
     startCommand?: string;
     env?: Record<string, string>;
     deployPath: string; // e.g. /var/www/my-app
-    deployStrategy?: 'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks';
+    deployStrategy?: 'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'ghcr-pull';
     dockerComposeFile?: string;
     dockerImage?: string;
     containerName?: string;
     dockerRunCommand?: string;
+    ghcrImage?: string;
 }
 
 export type TriggerSource = 'cli' | 'dashboard' | 'webhook';

@@ -5,7 +5,7 @@ import { deploy, DeployOptions, ServerConfig, ProjectConfig, DeployResult } from
 import { decrypt } from './crypto.service';
 import { getAuthenticatedCloneUrl } from './github.service';
 
-const prisma = new PrismaClient();
+import { prisma } from './prisma';
 
 export interface DeployServiceOptions {
     projectId: string;
@@ -98,7 +98,8 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         deployPath: project.deployPath,
         buildCommand: project.buildCommand || undefined,
         startCommand: project.startCommand || undefined,
-        deployStrategy: 'auto',
+        deployStrategy: (project.deployStrategy as any) || 'auto',
+        ghcrImage: project.ghcrImage || undefined,
     };
 
     // Build domain configs if domains exist
