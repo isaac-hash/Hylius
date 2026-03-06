@@ -10,6 +10,7 @@ import DeploymentHistory from '@/components/DeploymentHistory';
 import AddProjectModal from '@/components/AddProjectModal';
 import EditServerModal from '@/components/EditServerModal';
 import DomainManager from '@/components/DomainManager';
+import GitHubConnect from '@/components/GitHubConnect';
 
 const ProvisionTerminalModal = dynamic(() => import('@/components/ProvisionTerminalModal'), {
     ssr: false,
@@ -404,8 +405,14 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                     )}
                                 </div>
 
-                                {/* Right Sidebar - Metrics & History */}
+                                {/* Right Sidebar - GitHub, Metrics & History */}
                                 <div className="space-y-6">
+                                    {/* GitHub Connection */}
+                                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">GitHub</h3>
+                                        <GitHubConnect />
+                                    </div>
+
                                     {/* Live Server Metrics via SSH Pulse */}
                                     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                                         <div className="flex items-center justify-between mb-4">

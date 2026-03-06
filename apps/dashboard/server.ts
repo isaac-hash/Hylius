@@ -7,8 +7,9 @@ import next from 'next';
 import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 // @ts-ignore - Local workspace package
-import { deploy, setup, DeployOptions, ServerConfig, ProjectConfig, SetupOptions } from '@hylius/core';
+import { setup, ServerConfig, SetupOptions } from '@hylius/core';
 import { decrypt } from './services/crypto.service';
+import { executeDeployment } from './services/deploy.service';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -43,108 +44,14 @@ app.prepare().then(() => {
             activeDeployments.add(projectId);
 
             try {
-                // 1. Fetch Project & Server Config
-                const project = await prisma.project.findUnique({
-                    where: { id: projectId },
-                    include: { server: true }
-                });
+                socket.emit(`deploy_start:${projectId}`, { projectId });
 
-                if (!project) {
-                    socket.emit(`error:${projectId}`, 'Project not found');
-                    return;
-                }
-
-                // 2. Create Deployment Record
-                // @ts-ignore
-                const deployment = await prisma.deployment.create({
-                    data: {
-                        projectId: project.id,
-                        status: 'PENDING',
-                        triggerSource: 'DASHBOARD',
-                        releaseId: 'pending',
-                    }
-                });
-
-                socket.emit(`deploy_start:${projectId}`, { deploymentId: deployment.id });
-
-                // Audit Log
-                await prisma.auditLog.create({
-                    data: {
-                        action: 'DEPLOYMENT_STARTED',
-                        organizationId: project.organizationId,
-                        metadata: JSON.stringify({ projectId: project.id, deploymentId: deployment.id })
-                    }
-                });
-
-                // 3. Prepare Core Config
-                // Decrypt SSH key in-memory — key never leaves backend
-                let privateKey = '';
-                if (project.server.privateKeyEncrypted && project.server.keyIv) {
-                    try {
-                        privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv);
-                    } catch (e) {
-                        socket.emit(`log:${projectId}`, `Error decrypting SSH key: ${e}\n`);
-                    }
-                }
-
-                const serverConfig: ServerConfig = {
-                    // @ts-ignore
-                    host: project.server.ip,
-                    port: project.server.port,
-                    username: project.server.username,
-                    privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
-                    password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
-                };
-
-                const projectConfig: ProjectConfig = {
-                    name: project.name,
-                    repoUrl: project.repoUrl,
-                    branch: project.branch,
-                    deployPath: project.deployPath,
-                    buildCommand: project.buildCommand || undefined,
-                    startCommand: project.startCommand || undefined,
-                    deployStrategy: 'auto',
-                };
-
-                // 4. Execute Deployment
-                socket.emit(`log:${projectId}`, `\x1b[36mStarting deployment for ${project.name}...\x1b[0m\n`);
-
-                const result = await deploy({
-                    server: serverConfig,
-                    project: projectConfig,
+                const result = await executeDeployment({
+                    projectId,
                     trigger: 'dashboard',
                     onLog: (chunk) => {
                         socket.emit(`log:${projectId}`, chunk);
-                        // TODO: stream to file or DB buffer
-                    }
-                });
-
-                // 5. Update Status
-                // @ts-ignore
-                await prisma.deployment.update({
-                    where: { id: deployment.id },
-                    data: {
-                        status: result.success ? 'SUCCESS' : 'FAILED',
-                        releaseId: result.releaseId,
-                        durationMs: result.durationMs,
-                        commitHash: result.commitHash,
-                        deployUrl: result.url || null,
-                        finishedAt: new Date(),
-                    }
-                });
-
-                // Audit Log Completion
-                await prisma.auditLog.create({
-                    data: {
-                        action: result.success ? 'DEPLOYMENT_COMPLETED' : 'DEPLOYMENT_FAILED',
-                        organizationId: project.organizationId,
-                        metadata: JSON.stringify({
-                            projectId: project.id,
-                            deploymentId: deployment.id,
-                            releaseId: result.releaseId,
-                            error: result.error
-                        })
-                    }
+                    },
                 });
 
                 if (result.success) {

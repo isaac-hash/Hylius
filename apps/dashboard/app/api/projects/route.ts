@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         const auth = await requireAuth(request);
         if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
         const body = await request.json();
-        const { name, repoUrl, branch, deployPath, buildCommand, startCommand, serverId } = body;
+        const { name, repoUrl, branch, deployPath, buildCommand, startCommand, serverId, githubRepoFullName, githubInstallationId } = body;
 
         if (!name || !repoUrl || !deployPath || !serverId) {
             return NextResponse.json(
@@ -64,6 +64,8 @@ export async function POST(request: Request) {
                 deployPath,
                 buildCommand: buildCommand || null,
                 startCommand: startCommand || null,
+                githubRepoFullName: githubRepoFullName || null,
+                githubInstallationId: githubInstallationId || null,
                 serverId,
                 organizationId: auth.organizationId,
             },

@@ -54,7 +54,7 @@
 | Phase | Feature | What It Unlocks | Effort | Detailed Plan |
 |-------|---------|-----------------|--------|---------------|
 | **Phase 1** | 🔒 **Domain + SSL (Caddy)** | Production-grade URLs, HTTPS | Medium | ✅ See below |
-| **Phase 2** | 🔗 **GitHub App + Webhooks** | Auto-deploy on push from dashboard | Medium | Pending |
+| **Phase 2** | 🔗 **GitHub App + Webhooks** | Auto-deploy on push from dashboard | Medium | ✅ See below |
 | **Phase 3** | 🏗️ **CI-Build via GitHub Actions + GHCR** | Offload builds, zero-downtime pulls | Medium | Pending |
 | **Phase 4** | 👁️ **Preview Deployments** | Per-branch URLs (requires Phase 1 + 2) | High | Pending |
 | **Phase 5** | 🌍 **Environment Variables UI** | Per-environment editor, secrets management | Low | Pending |
