@@ -33,7 +33,7 @@ export default function RegisterPage() {
 
             // Auto-login after successful registration
             login(data.token, data.user, data.organization);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError(err.message);
         } finally {
             setIsLoading(false);
@@ -71,7 +71,7 @@ export default function RegisterPage() {
                                 type="text"
                                 required
                                 value={orgName}
-                                onChange={(e) => setOrgName(e.target.value)}
+                                onChange={(e) => { setOrgName(e.target.value); }}
                                 className="w-full bg-black/50 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all shadow-inner"
                                 placeholder="Acme Corp"
                             />
@@ -86,7 +86,7 @@ export default function RegisterPage() {
                                 type="email"
                                 required
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(e) => { setEmail(e.target.value); }}
                                 className="w-full bg-black/50 border border-neutral-800 rounded-xl px-4 py-3 text-white placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all shadow-inner"
                                 placeholder="admin@acme.com"
                             />
@@ -102,13 +102,13 @@ export default function RegisterPage() {
                                     type={showPassword ? "text" : "password"}
                                     required
                                     value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
+                                    onChange={(e) => { setPassword(e.target.value); }}
                                     className="w-full bg-black/50 border border-neutral-800 rounded-xl px-4 py-3 pr-12 text-white placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all shadow-inner"
                                     placeholder="••••••••"
                                 />
                                 <button
                                     type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
+                                    onClick={() => { setShowPassword(!showPassword); }}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors p-1"
                                 >
                                     {showPassword ? (

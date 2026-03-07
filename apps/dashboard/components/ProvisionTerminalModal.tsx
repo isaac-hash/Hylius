@@ -88,11 +88,11 @@ export default function ProvisionTerminalModal({ isOpen, onClose, serverId, serv
         });
 
         // Handle resize
-        const handleResize = () => fitAddon.fit();
+        const handleResize = () => { fitAddon.fit(); };
         window.addEventListener('resize', handleResize);
 
         // Map setTimeout to allow terminal to render properly before emitting
-        setTimeout(() => triggerSetup(), 500);
+        setTimeout(() => { triggerSetup(); }, 500);
 
         return () => {
             socket.off('log');

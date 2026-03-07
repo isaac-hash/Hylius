@@ -35,7 +35,7 @@ export default function PaymentSelectionPage({ params }: { params: Promise<{ pla
                 setLoading(false);
             }
         };
-        fetchPlan();
+        void fetchPlan();
     }, [planId]);
 
     const handleCheckout = async (providerId: string) => {
@@ -60,7 +60,7 @@ export default function PaymentSelectionPage({ params }: { params: Promise<{ pla
             } else {
                 throw new Error(data.error || "Failed to create checkout session");
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             alert(err.message);
         } finally {
             setProcessing(false);

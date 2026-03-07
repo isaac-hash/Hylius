@@ -97,7 +97,7 @@ export class PaystackAdapter implements PaymentProviderAdapter {
         return hash === signature;
     }
 
-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
+    parseWebhookEvent(payload: unknown): ParsedWebhookEvent {
         const event = payload.event;
         const data = payload.data;
 
@@ -120,7 +120,7 @@ export class PaystackAdapter implements PaymentProviderAdapter {
 
         let organizationId = undefined;
         if (data.metadata && data.metadata.custom_fields) {
-            const orgField = data.metadata.custom_fields.find((f: any) => f.variable_name === 'organizationId');
+            const orgField = data.metadata.custom_fields.find((f: unknown) => f.variable_name === 'organizationId');
             if (orgField) organizationId = orgField.value;
         }
 

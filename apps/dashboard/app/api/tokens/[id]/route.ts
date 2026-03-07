@@ -38,7 +38,7 @@ export async function DELETE(
 
         return NextResponse.json({ success: true });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[API Tokens DELETE]', error);
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

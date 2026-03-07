@@ -40,4 +40,4 @@ async function main() {
         console.log("Server has no encrypted key");
     }
 }
-main().finally(() => prisma.$disconnect());
+void void void main().finally(() => prisma.$disconnect());

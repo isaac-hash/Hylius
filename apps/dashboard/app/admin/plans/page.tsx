@@ -38,7 +38,7 @@ export default function AdminPlansPage() {
     };
 
     useEffect(() => {
-        fetchPlans();
+        void fetchPlans();
     }, []);
 
     const handleSync = async (id: string, provider: 'PAYSTACK' | 'FLUTTERWAVE') => {
@@ -54,7 +54,7 @@ export default function AdminPlansPage() {
 
             alert(`Synced with ${provider.toLowerCase()} successfully!`);
             fetchPlans();
-        } catch (err: any) {
+        } catch (err: unknown) {
             alert('Sync failed: ' + err.message);
         } finally {
             setSyncingId(null);

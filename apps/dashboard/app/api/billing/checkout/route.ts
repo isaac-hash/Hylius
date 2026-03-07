@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         );
 
         return NextResponse.json({ url: checkoutUrl });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Checkout creation failed:', err.message);
         return NextResponse.json({ error: err.message }, { status: 500 });
     }

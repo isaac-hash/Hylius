@@ -26,7 +26,7 @@ export async function GET(request: Request) {
             subscription,
             payments,
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Failed to fetch billing history:', err.message);
         return NextResponse.json({ error: err.message }, { status: 500 });
     }

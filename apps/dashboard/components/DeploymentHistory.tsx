@@ -69,7 +69,7 @@ export default function DeploymentHistory({ projectId, serverId, refreshKey }: D
                 if (Array.isArray(data)) setDeployments(data);
                 setLoading(false);
             })
-            .catch(() => setLoading(false));
+            .catch(() => { setLoading(false); });
     }, [projectId, serverId, token]);
 
     useEffect(() => {

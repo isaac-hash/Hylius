@@ -23,7 +23,7 @@ export async function GET(request: Request) {
         });
 
         return NextResponse.json(tokens);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[API Tokens GET]', error);
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
         // The frontend must display rawToken to the user now
         return NextResponse.json({ ...apiToken, token: rawToken });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[API Tokens POST]', error);
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

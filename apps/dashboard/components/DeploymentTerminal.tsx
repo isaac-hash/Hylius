@@ -92,7 +92,7 @@ export default function DeploymentTerminal({ projectId, active, onDeployFinished
         });
 
         // Handle resize
-        const handleResize = () => fitAddon.fit();
+        const handleResize = () => { fitAddon.fit(); };
         window.addEventListener('resize', handleResize);
 
         // Trigger deploy

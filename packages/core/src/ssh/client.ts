@@ -29,7 +29,7 @@ export class SSHClient {
                 try {
                     connectConfig.privateKey = fs.readFileSync(this.config.privateKeyPath);
                 } catch (err) {
-                    return reject(new Error(`Failed to read private key at ${this.config.privateKeyPath}: ${err}`));
+                    reject(new Error(`Failed to read private key at ${this.config.privateKeyPath}: ${err}`)); return;
                 }
             }
 
@@ -44,12 +44,12 @@ export class SSHClient {
     public async exec(command: string): Promise<{ stdout: string; stderr: string; code: number }> {
         return new Promise((resolve, reject) => {
             this.client.exec(command, (err, stream) => {
-                if (err) return reject(err);
+                if (err) { reject(err); return; }
 
                 let stdout = '';
                 let stderr = '';
 
-                stream.on('close', (code: number, signal: any) => {
+                stream.on('close', (code: number, signal: unknown) => {
                     resolve({ stdout, stderr, code });
                 }).on('data', (data: any) => {
                     stdout += data;
@@ -82,7 +82,7 @@ export class SSHClient {
 
     public async uploadFile(localPath: string, remotePath: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.client.sftp((err: any, sftp) => {
+            this.client.sftp((err: any, sftp: any) => {
                 if (err) return reject(err);
                 sftp.fastPut(localPath, remotePath, (err: any) => {
                     if (err) reject(err);
@@ -94,10 +94,10 @@ export class SSHClient {
 
     public async putBuffer(buffer: Buffer, remotePath: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.client.sftp((err: any, sftp) => {
+            this.client.sftp((err: any, sftp: any) => {
                 if (err) return reject(err);
                 const stream = sftp.createWriteStream(remotePath);
-                stream.on('close', () => resolve());
+                stream.on('close', () => { resolve(); });
                 stream.on('error', (err: any) => reject(err));
                 stream.end(buffer);
             });

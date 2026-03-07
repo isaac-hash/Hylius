@@ -18,7 +18,7 @@ export async function POST(
         const eventData = JSON.parse(payload);
         await paymentService.handleWebhook(providerId, payload, signature, eventData);
         return NextResponse.json({ received: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error(`Webhook error (${providerId}):`, err.message);
         return NextResponse.json({ error: err.message }, { status: 400 });
     }

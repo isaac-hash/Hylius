@@ -30,11 +30,13 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         });
 
         return NextResponse.json(domains);
-    } catch (error: any) {
-        if (error.message === 'Unauthorized') {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        return NextResponse.json({ error: error.message || 'Failed to list domains' }, { status: 500 });
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Failed to list domains'
+        }, { status: 500 });
     }
 }
 
@@ -164,11 +166,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             } : null,
         }, { status: 201 });
 
-    } catch (error: any) {
-        if (error.message === 'Unauthorized') {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        return NextResponse.json({ error: error.message || 'Failed to add domain' }, { status: 500 });
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Failed to add domain'
+        }, { status: 500 });
     }
 }
 
@@ -242,18 +246,20 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
             await client.connect();
             await configureCaddy(client, { domains: remainingDomains, tlsMode });
             client.end();
-        } catch (sshError: any) {
-            console.warn(`Caddy cleanup failed for ${hostname}: ${sshError.message}`);
+        } catch (sshError: unknown) {
+            console.warn(`Caddy cleanup failed for ${hostname}: ${sshError instanceof Error ? sshError.message : String(sshError)}`);
         }
 
         // Delete from DB
         await prisma.domain.delete({ where: { id: domain.id } });
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        if (error.message === 'Unauthorized') {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        return NextResponse.json({ error: error.message || 'Failed to delete domain' }, { status: 500 });
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Failed to delete domain'
+        }, { status: 500 });
     }
 }

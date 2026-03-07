@@ -61,7 +61,7 @@ export default function AdminDeploymentsPage() {
                 }
                 setLoading(false);
             })
-            .catch(() => setLoading(false));
+            .catch(() => { setLoading(false); });
     }, [token, page, statusFilter]);
 
     useEffect(() => {
@@ -148,14 +148,14 @@ export default function AdminDeploymentsPage() {
                             <p className="text-sm text-gray-500">Page {page} of {totalPages}</p>
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    onClick={() => { setPage(p => Math.max(1, p - 1)); }}
                                     disabled={page <= 1}
                                     className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 text-sm text-gray-400 hover:bg-gray-800 disabled:opacity-30 transition-colors"
                                 >
                                     Previous
                                 </button>
                                 <button
-                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
                                     disabled={page >= totalPages}
                                     className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 text-sm text-gray-400 hover:bg-gray-800 disabled:opacity-30 transition-colors"
                                 >

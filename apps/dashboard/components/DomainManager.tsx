@@ -46,7 +46,7 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
     }, [projectId, token]);
 
     useEffect(() => {
-        fetchDomains();
+        void fetchDomains();
     }, [fetchDomains]);
 
     const handleAddDomain = async (e: React.FormEvent) => {
@@ -81,8 +81,8 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
             setNewHostname('');
             setShowAddForm(false);
             fetchDomains();
-        } catch (err: any) {
-            setAddError(err.message || 'Failed to add domain');
+        } catch (err: unknown) {
+            setAddError(err instanceof Error ? err.message : 'Failed to add domain');
         } finally {
             setAddLoading(false);
         }
@@ -165,7 +165,7 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
                     Domains {domains.length > 0 && `(${domains.length})`}
                 </h4>
                 <button
-                    onClick={() => setShowAddForm(!showAddForm)}
+                    onClick={() => { setShowAddForm(!showAddForm); }}
                     className="text-xs px-2.5 py-1 rounded-md bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-1"
                 >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -179,7 +179,7 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
                     <input
                         type="text"
                         value={newHostname}
-                        onChange={(e) => setNewHostname(e.target.value)}
+                        onChange={(e) => { setNewHostname(e.target.value); }}
                         placeholder="myapp.com"
                         className="flex-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
                         disabled={addLoading}

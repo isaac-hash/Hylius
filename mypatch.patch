@@ -1,0 +1,783 @@
+diff --git a/apps/dashboard/services/payment/payment.provider.ts b/apps/dashboard/services/payment/payment.provider.ts
+--- a/apps/dashboard/services/payment/payment.provider.ts
++++ b/apps/dashboard/services/payment/payment.provider.ts
+@@ -55,1 +55,1 @@
+-    parseWebhookEvent(payload: any): ParsedWebhookEvent;
++    parseWebhookEvent(payload: unknown): ParsedWebhookEvent;
+diff --git a/packages/core/src/ssh/stream.ts b/packages/core/src/ssh/stream.ts
+--- a/packages/core/src/ssh/stream.ts
++++ b/packages/core/src/ssh/stream.ts
+@@ -12,1 +12,1 @@
+-                if (err) return reject(err);
++                if (err) { reject(err); return; }
+diff --git a/apps/dashboard/services/deploy.service.ts b/apps/dashboard/services/deploy.service.ts
+--- a/apps/dashboard/services/deploy.service.ts
++++ b/apps/dashboard/services/deploy.service.ts
+@@ -143,1 +143,1 @@
+-        onLog: (chunk) => log(chunk),
++        onLog: (chunk) => { log(chunk); },
+diff --git a/apps/dashboard/fix-server-port.ts b/apps/dashboard/fix-server-port.ts
+--- a/apps/dashboard/fix-server-port.ts
++++ b/apps/dashboard/fix-server-port.ts
+@@ -6,1 +6,1 @@
+-}).then((s: any) => {
++}).then((s: unknown) => {
+diff --git a/packages/cli/src/commands/setup.ts b/packages/cli/src/commands/setup.ts
+--- a/packages/cli/src/commands/setup.ts
++++ b/packages/cli/src/commands/setup.ts
+@@ -212,1 +212,1 @@
+-        } catch (error: any) {
++        } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/billing/history/route.ts b/apps/dashboard/app/api/billing/history/route.ts
+--- a/apps/dashboard/app/api/billing/history/route.ts
++++ b/apps/dashboard/app/api/billing/history/route.ts
+@@ -29,1 +29,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/components/DeploymentTerminal.tsx b/apps/dashboard/components/DeploymentTerminal.tsx
+--- a/apps/dashboard/components/DeploymentTerminal.tsx
++++ b/apps/dashboard/components/DeploymentTerminal.tsx
+@@ -95,1 +95,1 @@
+-        const handleResize = () => fitAddon.fit();
++        const handleResize = () => { fitAddon.fit(); };
+diff --git a/apps/dashboard/app/api/github/repos/route.ts b/apps/dashboard/app/api/github/repos/route.ts
+--- a/apps/dashboard/app/api/github/repos/route.ts
++++ b/apps/dashboard/app/api/github/repos/route.ts
+@@ -47,1 +47,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/components/DomainManager.tsx b/apps/dashboard/components/DomainManager.tsx
+--- a/apps/dashboard/components/DomainManager.tsx
++++ b/apps/dashboard/components/DomainManager.tsx
+@@ -49,1 +49,1 @@
+-        fetchDomains();
++        void fetchDomains();
+@@ -84,1 +84,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+@@ -168,1 +168,1 @@
+-                    onClick={() => setShowAddForm(!showAddForm)}
++                    onClick={() => { setShowAddForm(!showAddForm); }}
+@@ -182,1 +182,1 @@
+-                        onChange={(e) => setNewHostname(e.target.value)}
++                        onChange={(e) => { setNewHostname(e.target.value); }}
+diff --git a/packages/cli/src/commands/deploy.ts b/packages/cli/src/commands/deploy.ts
+--- a/packages/cli/src/commands/deploy.ts
++++ b/packages/cli/src/commands/deploy.ts
+@@ -144,1 +144,1 @@
+-export async function deploy(options: any) {
++export async function deploy(options: unknown) {
+@@ -189,1 +189,1 @@
+-            } catch (error: any) {
++            } catch (error: unknown) {
+diff --git a/apps/dashboard/services/github-workflow.service.ts b/apps/dashboard/services/github-workflow.service.ts
+--- a/apps/dashboard/services/github-workflow.service.ts
++++ b/apps/dashboard/services/github-workflow.service.ts
+@@ -66,1 +66,1 @@
+-    } catch (e: any) {
++    } catch (e: unknown) {
+@@ -87,1 +87,1 @@
+-  } catch (error: any) {
++  } catch (error: unknown) {
+diff --git a/packages/cli/src/commands/domain.ts b/packages/cli/src/commands/domain.ts
+--- a/packages/cli/src/commands/domain.ts
++++ b/packages/cli/src/commands/domain.ts
+@@ -46,1 +46,1 @@
+-async function connectSSH(config: any): Promise<NodeSSH> {
++async function connectSSH(config: unknown): Promise<NodeSSH> {
+@@ -103,1 +103,1 @@
+-                } catch (dnsErr: any) {
++                } catch (dnsErr: unknown) {
+@@ -162,1 +162,1 @@
+-        } catch (error: any) {
++        } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/github/callback/route.ts b/apps/dashboard/app/api/github/callback/route.ts
+--- a/apps/dashboard/app/api/github/callback/route.ts
++++ b/apps/dashboard/app/api/github/callback/route.ts
+@@ -39,1 +39,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/admin/servers/route.ts b/apps/dashboard/app/api/admin/servers/route.ts
+--- a/apps/dashboard/app/api/admin/servers/route.ts
++++ b/apps/dashboard/app/api/admin/servers/route.ts
+@@ -57,1 +57,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/(auth)/login/page.tsx b/apps/dashboard/app/(auth)/login/page.tsx
+--- a/apps/dashboard/app/(auth)/login/page.tsx
++++ b/apps/dashboard/app/(auth)/login/page.tsx
+@@ -35,1 +35,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+@@ -73,1 +73,1 @@
+-                                onChange={(e) => setEmail(e.target.value)}
++                                onChange={(e) => { setEmail(e.target.value); }}
+@@ -92,1 +92,1 @@
+-                                    onChange={(e) => setPassword(e.target.value)}
++                                    onChange={(e) => { setPassword(e.target.value); }}
+@@ -98,1 +98,1 @@
+-                                    onClick={() => setShowPassword(!showPassword)}
++                                    onClick={() => { setShowPassword(!showPassword); }}
+diff --git a/packages/core/src/setup.ts b/packages/core/src/setup.ts
+--- a/packages/core/src/setup.ts
++++ b/packages/core/src/setup.ts
+@@ -122,1 +122,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/webhooks/github/route.ts b/apps/dashboard/app/api/webhooks/github/route.ts
+--- a/apps/dashboard/app/api/webhooks/github/route.ts
++++ b/apps/dashboard/app/api/webhooks/github/route.ts
+@@ -26,1 +26,1 @@
+-    let body: any;
++    let body: unknown;
+@@ -45,1 +45,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+@@ -53,1 +53,1 @@
+-async function handlePush(body: any) {
++async function handlePush(body: unknown) {
+@@ -111,1 +111,1 @@
+-async function handleInstallation(body: any) {
++async function handleInstallation(body: unknown) {
+diff --git a/apps/dashboard/app/admin/users/page.tsx b/apps/dashboard/app/admin/users/page.tsx
+--- a/apps/dashboard/app/admin/users/page.tsx
++++ b/apps/dashboard/app/admin/users/page.tsx
+@@ -44,1 +44,1 @@
+-        } catch (e: any) {
++        } catch (e: unknown) {
+@@ -52,1 +52,1 @@
+-        loadContent();
++        void loadContent();
+@@ -142,1 +142,1 @@
+-                        onClick={() => setPage(p => Math.max(1, p - 1))}
++                        onClick={() => { setPage(p => Math.max(1, p - 1)); }}
+@@ -152,1 +152,1 @@
+-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
++                        onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
+diff --git a/apps/dashboard/app/admin/users/[id]/page.tsx b/apps/dashboard/app/admin/users/[id]/page.tsx
+--- a/apps/dashboard/app/admin/users/[id]/page.tsx
++++ b/apps/dashboard/app/admin/users/[id]/page.tsx
+@@ -58,1 +58,1 @@
+-            } catch (e: any) {
++            } catch (e: unknown) {
+@@ -65,1 +65,1 @@
+-        loadContent();
++        void loadContent();
+@@ -79,1 +79,1 @@
+-                        onClick={() => router.back()}
++                        onClick={() => { router.back(); }}
+diff --git a/apps/dashboard/app/api/admin/organizations/[id]/route.ts b/apps/dashboard/app/api/admin/organizations/[id]/route.ts
+--- a/apps/dashboard/app/api/admin/organizations/[id]/route.ts
++++ b/apps/dashboard/app/api/admin/organizations/[id]/route.ts
+@@ -24,1 +24,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/github/installations/route.ts b/apps/dashboard/app/api/github/installations/route.ts
+--- a/apps/dashboard/app/api/github/installations/route.ts
++++ b/apps/dashboard/app/api/github/installations/route.ts
+@@ -31,1 +31,1 @@
+-                accountLogin = (data.account as any)?.login || 'unknown';
++                accountLogin = (data.account as unknown)?.login || 'unknown';
+@@ -32,1 +32,1 @@
+-                accountType = (data.account as any)?.type || 'User';
++                accountType = (data.account as unknown)?.type || 'User';
+@@ -58,1 +58,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/admin/transactions/page.tsx b/apps/dashboard/app/admin/transactions/page.tsx
+--- a/apps/dashboard/app/admin/transactions/page.tsx
++++ b/apps/dashboard/app/admin/transactions/page.tsx
+@@ -44,1 +44,1 @@
+-            } catch (err: any) {
++            } catch (err: unknown) {
+@@ -51,1 +51,1 @@
+-        fetchTransactions();
++        void fetchTransactions();
+diff --git a/apps/dashboard/app/api/servers/[id]/route.ts b/apps/dashboard/app/api/servers/[id]/route.ts
+--- a/apps/dashboard/app/api/servers/[id]/route.ts
++++ b/apps/dashboard/app/api/servers/[id]/route.ts
+@@ -120,1 +120,1 @@
+-        const updateData: any = {
++        const updateData: unknown = {
+diff --git a/apps/dashboard/app/api/tokens/route.ts b/apps/dashboard/app/api/tokens/route.ts
+--- a/apps/dashboard/app/api/tokens/route.ts
++++ b/apps/dashboard/app/api/tokens/route.ts
+@@ -26,1 +26,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/test2.ts b/apps/dashboard/test2.ts
+--- a/apps/dashboard/test2.ts
++++ b/apps/dashboard/test2.ts
+@@ -3,1 +3,1 @@
+-p.project.findFirst({ where: { name: 'my-blog' } }).then(x => console.log('githubInstallationId =', x?.githubInstallationId)).finally(() => p.$disconnect());
++p.project.findFirst({ where: { name: 'my-blog' } }).then(x => { console.log('githubInstallationId =', x?.githubInstallationId); }).finally(() => p.$disconnect());
+diff --git a/apps/dashboard/app/api/projects/[id]/route.ts b/apps/dashboard/app/api/projects/[id]/route.ts
+--- a/apps/dashboard/app/api/projects/[id]/route.ts
++++ b/apps/dashboard/app/api/projects/[id]/route.ts
+@@ -51,1 +51,1 @@
+-        } catch (sshError: any) {
++        } catch (sshError: unknown) {
+@@ -66,1 +66,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/components/ServerList.tsx b/apps/dashboard/components/ServerList.tsx
+--- a/apps/dashboard/components/ServerList.tsx
++++ b/apps/dashboard/components/ServerList.tsx
+@@ -72,1 +72,1 @@
+-                    onClick={() => setIsServerModalOpen(true)}
++                    onClick={() => { setIsServerModalOpen(true); }}
+@@ -80,1 +80,1 @@
+-                onClose={() => setIsServerModalOpen(false)}
++                onClose={() => { setIsServerModalOpen(false); }}
+@@ -88,1 +88,1 @@
+-                onClose={() => setProjectModal({ open: false, serverId: '', serverName: '' })}
++                onClose={() => { setProjectModal({ open: false, serverId: '', serverName: '' }); }}
+@@ -98,1 +98,1 @@
+-                onClose={() => setProvisionModal({ open: false, serverId: '', serverName: '' })}
++                onClose={() => { setProvisionModal({ open: false, serverId: '', serverName: '' }); }}
+diff --git a/apps/dashboard/components/AddServerModal.tsx b/apps/dashboard/components/AddServerModal.tsx
+--- a/apps/dashboard/components/AddServerModal.tsx
++++ b/apps/dashboard/components/AddServerModal.tsx
+@@ -65,1 +65,1 @@
+-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
++                            onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
+@@ -78,1 +78,1 @@
+-                                    onChange={(e) => setFormData({ ...formData, ip: e.target.value })}
++                                    onChange={(e) => { setFormData({ ...formData, ip: e.target.value }); }}
+@@ -89,1 +89,1 @@
+-                                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
++                                    onChange={(e) => { setFormData({ ...formData, port: e.target.value }); }}
+@@ -99,1 +99,1 @@
+-                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
++                                onChange={(e) => { setFormData({ ...formData, username: e.target.value }); }}
+@@ -111,1 +111,1 @@
+-                            onChange={(e) => setFormData({ ...formData, privateKey: e.target.value })}
++                            onChange={(e) => { setFormData({ ...formData, privateKey: e.target.value }); }}
+diff --git a/apps/dashboard/test-server-port.ts b/apps/dashboard/test-server-port.ts
+--- a/apps/dashboard/test-server-port.ts
++++ b/apps/dashboard/test-server-port.ts
+@@ -3,1 +3,1 @@
+-prisma.server.findUnique({ where: { id: 'cmmdqvft5002nkmfwy5zbhvur' } }).then((s: any) => {
++prisma.server.findUnique({ where: { id: 'cmmdqvft5002nkmfwy5zbhvur' } }).then((s: unknown) => {
+diff --git a/packages/cli/src/utils/detect.ts b/packages/cli/src/utils/detect.ts
+--- a/packages/cli/src/utils/detect.ts
++++ b/packages/cli/src/utils/detect.ts
+@@ -9,1 +9,1 @@
+-  [key: string]: any;
++  [key: string]: unknown;
+diff --git a/apps/dashboard/test3.ts b/apps/dashboard/test3.ts
+--- a/apps/dashboard/test3.ts
++++ b/apps/dashboard/test3.ts
+@@ -12,1 +12,1 @@
+-main();
++void main();
+diff --git a/apps/dashboard/app/billing/page.tsx b/apps/dashboard/app/billing/page.tsx
+--- a/apps/dashboard/app/billing/page.tsx
++++ b/apps/dashboard/app/billing/page.tsx
+@@ -35,1 +35,1 @@
+-        fetchPlans();
++        void fetchPlans();
+diff --git a/apps/dashboard/components/AddProjectModal.tsx b/apps/dashboard/components/AddProjectModal.tsx
+--- a/apps/dashboard/components/AddProjectModal.tsx
++++ b/apps/dashboard/components/AddProjectModal.tsx
+@@ -53,1 +53,1 @@
+-            fetchRepos();
++            void fetchRepos();
+@@ -196,1 +196,1 @@
+-                        onClick={() => setMode('manual')}
++                        onClick={() => { setMode('manual'); }}
+@@ -206,1 +206,1 @@
+-                        onClick={() => setMode('github')}
++                        onClick={() => { setMode('github'); }}
+@@ -252,1 +252,1 @@
+-                                    onChange={e => setSearchQuery(e.target.value)}
++                                    onChange={e => { setSearchQuery(e.target.value); }}
+@@ -263,1 +263,1 @@
+-                                                onClick={() => selectRepo(repo)}
++                                                onClick={() => { selectRepo(repo); }}
+@@ -313,1 +313,1 @@
+-                                    onClick={() => setGithubMeta(null)}
++                                    onClick={() => { setGithubMeta(null); }}
+@@ -327,1 +327,1 @@
+-                                        onChange={(e) => setUseGitHubActions(e.target.checked)}
++                                        onChange={(e) => { setUseGitHubActions(e.target.checked); }}
+diff --git a/apps/dashboard/app/api/admin/plans/[id]/route.ts b/apps/dashboard/app/api/admin/plans/[id]/route.ts
+--- a/apps/dashboard/app/api/admin/plans/[id]/route.ts
++++ b/apps/dashboard/app/api/admin/plans/[id]/route.ts
+@@ -16,1 +16,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/webhooks/[provider]/route.ts b/apps/dashboard/app/api/webhooks/[provider]/route.ts
+--- a/apps/dashboard/app/api/webhooks/[provider]/route.ts
++++ b/apps/dashboard/app/api/webhooks/[provider]/route.ts
+@@ -21,1 +21,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/plans/route.ts b/apps/dashboard/app/api/plans/route.ts
+--- a/apps/dashboard/app/api/plans/route.ts
++++ b/apps/dashboard/app/api/plans/route.ts
+@@ -8,1 +8,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/success/page.tsx b/apps/dashboard/app/success/page.tsx
+--- a/apps/dashboard/app/success/page.tsx
++++ b/apps/dashboard/app/success/page.tsx
+@@ -26,1 +26,1 @@
+-        return () => clearInterval(timer);
++        return () => { clearInterval(timer); };
+diff --git a/apps/dashboard/components/BillingHistory.tsx b/apps/dashboard/components/BillingHistory.tsx
+--- a/apps/dashboard/components/BillingHistory.tsx
++++ b/apps/dashboard/components/BillingHistory.tsx
+@@ -41,1 +41,1 @@
+-            } catch (err: any) {
++            } catch (err: unknown) {
+@@ -48,1 +48,1 @@
+-        fetchHistory();
++        void fetchHistory();
+diff --git a/apps/dashboard/services/payment/stripe.ts b/apps/dashboard/services/payment/stripe.ts
+--- a/apps/dashboard/services/payment/stripe.ts
++++ b/apps/dashboard/services/payment/stripe.ts
+@@ -12,1 +12,1 @@
+-            apiVersion: '2024-10-28.acacia' as any
++            apiVersion: '2024-10-28.acacia' as unknown
+@@ -65,1 +65,1 @@
+-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
++    parseWebhookEvent(payload: unknown): ParsedWebhookEvent {
+diff --git a/apps/dashboard/app/api/admin/billing/route.ts b/apps/dashboard/app/api/admin/billing/route.ts
+--- a/apps/dashboard/app/api/admin/billing/route.ts
++++ b/apps/dashboard/app/api/admin/billing/route.ts
+@@ -39,1 +39,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/servers/[id]/page.tsx b/apps/dashboard/app/servers/[id]/page.tsx
+--- a/apps/dashboard/app/servers/[id]/page.tsx
++++ b/apps/dashboard/app/servers/[id]/page.tsx
+@@ -88,1 +88,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+@@ -242,1 +242,1 @@
+-                                        onClick={() => setProvisionModalOpen(true)}
++                                        onClick={() => { setProvisionModalOpen(true); }}
+@@ -249,1 +249,1 @@
+-                                        onClick={() => setEditServerModalOpen(true)}
++                                        onClick={() => { setEditServerModalOpen(true); }}
+@@ -276,1 +276,1 @@
+-                                            onClick={() => setAddProjectModalOpen(true)}
++                                            onClick={() => { setAddProjectModalOpen(true); }}
+@@ -346,1 +346,1 @@
+-                                                                    onClick={() => setActiveDeployProjectId(project.id)}
++                                                                    onClick={() => { setActiveDeployProjectId(project.id); }}
+@@ -521,1 +521,1 @@
+-                    onClose={() => setProvisionModalOpen(false)}
++                    onClose={() => { setProvisionModalOpen(false); }}
+@@ -528,1 +528,1 @@
+-                    onClose={() => setAddProjectModalOpen(false)}
++                    onClose={() => { setAddProjectModalOpen(false); }}
+@@ -539,1 +539,1 @@
+-                    onClose={() => setEditServerModalOpen(false)}
++                    onClose={() => { setEditServerModalOpen(false); }}
+diff --git a/apps/dashboard/app/admin/organizations/page.tsx b/apps/dashboard/app/admin/organizations/page.tsx
+--- a/apps/dashboard/app/admin/organizations/page.tsx
++++ b/apps/dashboard/app/admin/organizations/page.tsx
+@@ -41,1 +41,1 @@
+-        } catch (e: any) {
++        } catch (e: unknown) {
+@@ -49,1 +49,1 @@
+-        loadContent();
++        void loadContent();
+@@ -133,1 +133,1 @@
+-                        onClick={() => setPage(p => Math.max(1, p - 1))}
++                        onClick={() => { setPage(p => Math.max(1, p - 1)); }}
+@@ -143,1 +143,1 @@
+-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
++                        onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
+diff --git a/apps/dashboard/components/EditServerModal.tsx b/apps/dashboard/components/EditServerModal.tsx
+--- a/apps/dashboard/components/EditServerModal.tsx
++++ b/apps/dashboard/components/EditServerModal.tsx
+@@ -68,1 +68,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+@@ -86,1 +86,1 @@
+-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
++                            onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
+@@ -99,1 +99,1 @@
+-                                    onChange={(e) => setFormData({ ...formData, ip: e.target.value })}
++                                    onChange={(e) => { setFormData({ ...formData, ip: e.target.value }); }}
+@@ -110,1 +110,1 @@
+-                                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
++                                    onChange={(e) => { setFormData({ ...formData, port: e.target.value }); }}
+@@ -120,1 +120,1 @@
+-                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
++                                onChange={(e) => { setFormData({ ...formData, username: e.target.value }); }}
+@@ -132,1 +132,1 @@
+-                            onChange={(e) => setFormData({ ...formData, privateKey: e.target.value })}
++                            onChange={(e) => { setFormData({ ...formData, privateKey: e.target.value }); }}
+diff --git a/apps/dashboard/services/payment/payment.service.ts b/apps/dashboard/services/payment/payment.service.ts
+--- a/apps/dashboard/services/payment/payment.service.ts
++++ b/apps/dashboard/services/payment/payment.service.ts
+@@ -79,1 +79,1 @@
+-    async handleWebhook(providerId: string, payload: string, signature: string, eventData: any) {
++    async handleWebhook(providerId: string, payload: string, signature: string, eventData: unknown) {
+diff --git a/packages/core/src/ssh/client.ts b/packages/core/src/ssh/client.ts
+--- a/packages/core/src/ssh/client.ts
++++ b/packages/core/src/ssh/client.ts
+@@ -32,1 +32,1 @@
+-                    return reject(new Error(`Failed to read private key at ${this.config.privateKeyPath}: ${err}`));
++                    reject(new Error(`Failed to read private key at ${this.config.privateKeyPath}: ${err}`)); return;
+@@ -47,1 +47,1 @@
+-                if (err) return reject(err);
++                if (err) { reject(err); return; }
+@@ -52,1 +52,1 @@
+-                stream.on('close', (code: number, signal: any) => {
++                stream.on('close', (code: number, signal: unknown) => {
+@@ -54,1 +54,1 @@
+-                }).on('data', (data: any) => {
++                }).on('data', (data: unknown) => {
+@@ -56,1 +56,1 @@
+-                }).stderr.on('data', (data: any) => {
++                }).stderr.on('data', (data: unknown) => {
+@@ -72,1 +72,1 @@
+-                stream.on('data', (data: any) => {
++                stream.on('data', (data: unknown) => {
+@@ -76,1 +76,1 @@
+-                stream.stderr.on('data', (data: any) => {
++                stream.stderr.on('data', (data: unknown) => {
+@@ -85,1 +85,1 @@
+-            this.client.sftp((err: any, sftp) => {
++            this.client.sftp((err: unknown, sftp) => {
+@@ -87,1 +87,1 @@
+-                sftp.fastPut(localPath, remotePath, (err: any) => {
++                sftp.fastPut(localPath, remotePath, (err: unknown) => {
+@@ -100,1 +100,1 @@
+-                stream.on('close', () => resolve());
++                stream.on('close', () => { resolve(); });
+@@ -101,1 +101,1 @@
+-                stream.on('error', (err: any) => reject(err));
++                stream.on('error', (err: unknown) => reject(err));
+diff --git a/apps/dashboard/app/api/billing/checkout/route.ts b/apps/dashboard/app/api/billing/checkout/route.ts
+--- a/apps/dashboard/app/api/billing/checkout/route.ts
++++ b/apps/dashboard/app/api/billing/checkout/route.ts
+@@ -26,1 +26,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/services/github.service.ts b/apps/dashboard/services/github.service.ts
+--- a/apps/dashboard/services/github.service.ts
++++ b/apps/dashboard/services/github.service.ts
+@@ -147,1 +147,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/billing/payment/[planId]/page.tsx b/apps/dashboard/app/billing/payment/[planId]/page.tsx
+--- a/apps/dashboard/app/billing/payment/[planId]/page.tsx
++++ b/apps/dashboard/app/billing/payment/[planId]/page.tsx
+@@ -38,1 +38,1 @@
+-        fetchPlan();
++        void fetchPlan();
+@@ -63,1 +63,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/projects/[id]/domains/route.ts b/apps/dashboard/app/api/projects/[id]/domains/route.ts
+--- a/apps/dashboard/app/api/projects/[id]/domains/route.ts
++++ b/apps/dashboard/app/api/projects/[id]/domains/route.ts
+@@ -33,1 +33,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+@@ -119,1 +119,1 @@
+-            ...project.domains.map((d: any) => ({
++            ...project.domains.map((d: unknown) => ({
+@@ -233,1 +233,1 @@
+-                .filter((d: any) => d.hostname !== hostname)
++                .filter((d: unknown) => d.hostname !== hostname)
+@@ -234,1 +234,1 @@
+-                .map((d: any) => ({
++                .map((d: unknown) => ({
+@@ -245,1 +245,1 @@
+-        } catch (sshError: any) {
++        } catch (sshError: unknown) {
+diff --git a/apps/dashboard/app/admin/servers/page.tsx b/apps/dashboard/app/admin/servers/page.tsx
+--- a/apps/dashboard/app/admin/servers/page.tsx
++++ b/apps/dashboard/app/admin/servers/page.tsx
+@@ -42,1 +42,1 @@
+-            .catch(() => setLoading(false));
++            .catch(() => { setLoading(false); });
+@@ -127,1 +127,1 @@
+-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
++                                    onClick={() => { setPage(p => Math.max(1, p - 1)); }}
+@@ -134,1 +134,1 @@
+-                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
++                                    onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
+diff --git a/apps/dashboard/services/payment/flutterwave.ts b/apps/dashboard/services/payment/flutterwave.ts
+--- a/apps/dashboard/services/payment/flutterwave.ts
++++ b/apps/dashboard/services/payment/flutterwave.ts
+@@ -42,1 +42,1 @@
+-        const payload: any = {
++        const payload: unknown = {
+@@ -101,1 +101,1 @@
+-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
++    parseWebhookEvent(payload: unknown): ParsedWebhookEvent {
+diff --git a/apps/dashboard/app/admin/plans/new/page.tsx b/apps/dashboard/app/admin/plans/new/page.tsx
+--- a/apps/dashboard/app/admin/plans/new/page.tsx
++++ b/apps/dashboard/app/admin/plans/new/page.tsx
+@@ -36,1 +36,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+@@ -63,1 +63,1 @@
+-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
++                                onChange={e => { setFormData({ ...formData, name: e.target.value }); }}
+@@ -76,1 +76,1 @@
+-                                    onChange={e => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
++                                    onChange={e => { setFormData({ ...formData, amount: parseFloat(e.target.value) }); }}
+@@ -84,1 +84,1 @@
+-                                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
++                                    onChange={e => { setFormData({ ...formData, currency: e.target.value }); }}
+@@ -97,1 +97,1 @@
+-                                onChange={e => setFormData({ ...formData, interval: e.target.value })}
++                                onChange={e => { setFormData({ ...formData, interval: e.target.value }); }}
+@@ -110,1 +110,1 @@
+-                                onChange={e => setFormData({ ...formData, description: e.target.value })}
++                                onChange={e => { setFormData({ ...formData, description: e.target.value }); }}
+diff --git a/apps/dashboard/test-crypto.ts b/apps/dashboard/test-crypto.ts
+--- a/apps/dashboard/test-crypto.ts
++++ b/apps/dashboard/test-crypto.ts
+@@ -43,1 +43,1 @@
+-main().finally(() => prisma.$disconnect());
++void main().finally(() => prisma.$disconnect());
+diff --git a/apps/dashboard/app/(auth)/register/page.tsx b/apps/dashboard/app/(auth)/register/page.tsx
+--- a/apps/dashboard/app/(auth)/register/page.tsx
++++ b/apps/dashboard/app/(auth)/register/page.tsx
+@@ -36,1 +36,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+@@ -74,1 +74,1 @@
+-                                onChange={(e) => setOrgName(e.target.value)}
++                                onChange={(e) => { setOrgName(e.target.value); }}
+@@ -89,1 +89,1 @@
+-                                onChange={(e) => setEmail(e.target.value)}
++                                onChange={(e) => { setEmail(e.target.value); }}
+@@ -105,1 +105,1 @@
+-                                    onChange={(e) => setPassword(e.target.value)}
++                                    onChange={(e) => { setPassword(e.target.value); }}
+@@ -111,1 +111,1 @@
+-                                    onClick={() => setShowPassword(!showPassword)}
++                                    onClick={() => { setShowPassword(!showPassword); }}
+diff --git a/apps/dashboard/app/api/webhooks/deploy-complete/route.ts b/apps/dashboard/app/api/webhooks/deploy-complete/route.ts
+--- a/apps/dashboard/app/api/webhooks/deploy-complete/route.ts
++++ b/apps/dashboard/app/api/webhooks/deploy-complete/route.ts
+@@ -64,1 +64,1 @@
+-            targetProjects = projects.filter((p: any) => !p.branch || p.branch === branchName);
++            targetProjects = projects.filter((p: unknown) => !p.branch || p.branch === branchName);
+@@ -95,1 +95,1 @@
+-            }).catch(e => console.error('[Webhook Deploy Task Error]', e));
++            }).catch(e => { console.error('[Webhook Deploy Task Error]', e); });
+@@ -102,1 +102,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/components/GitHubConnect.tsx b/apps/dashboard/components/GitHubConnect.tsx
+--- a/apps/dashboard/components/GitHubConnect.tsx
++++ b/apps/dashboard/components/GitHubConnect.tsx
+@@ -47,1 +47,1 @@
+-        fetchRepos();
++        void fetchRepos();
+diff --git a/apps/dashboard/components/NewDeploymentModal.tsx b/apps/dashboard/components/NewDeploymentModal.tsx
+--- a/apps/dashboard/components/NewDeploymentModal.tsx
++++ b/apps/dashboard/components/NewDeploymentModal.tsx
+@@ -67,1 +67,1 @@
+-                            onChange={(e) => setSelectedProjectId(e.target.value)}
++                            onChange={(e) => { setSelectedProjectId(e.target.value); }}
+diff --git a/packages/core/src/rollback.ts b/packages/core/src/rollback.ts
+--- a/packages/core/src/rollback.ts
++++ b/packages/core/src/rollback.ts
+@@ -33,1 +33,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/github/link/page.tsx b/apps/dashboard/app/github/link/page.tsx
+--- a/apps/dashboard/app/github/link/page.tsx
++++ b/apps/dashboard/app/github/link/page.tsx
+@@ -46,1 +46,1 @@
+-            } catch (err: any) {
++            } catch (err: unknown) {
+@@ -52,1 +52,1 @@
+-        linkApp();
++        void linkApp();
+@@ -69,1 +69,1 @@
+-                            onClick={() => router.replace('/')}
++                            onClick={() => { router.replace('/'); }}
+diff --git a/apps/dashboard/app/api/tokens/[id]/route.ts b/apps/dashboard/app/api/tokens/[id]/route.ts
+--- a/apps/dashboard/app/api/tokens/[id]/route.ts
++++ b/apps/dashboard/app/api/tokens/[id]/route.ts
+@@ -41,1 +41,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/packages/core/src/domain.ts b/packages/core/src/domain.ts
+--- a/packages/core/src/domain.ts
++++ b/packages/core/src/domain.ts
+@@ -22,1 +22,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/admin/plans/[id]/sync/route.ts b/apps/dashboard/app/api/admin/plans/[id]/sync/route.ts
+--- a/apps/dashboard/app/api/admin/plans/[id]/sync/route.ts
++++ b/apps/dashboard/app/api/admin/plans/[id]/sync/route.ts
+@@ -23,1 +23,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/deployments/page.tsx b/apps/dashboard/app/deployments/page.tsx
+--- a/apps/dashboard/app/deployments/page.tsx
++++ b/apps/dashboard/app/deployments/page.tsx
+@@ -54,1 +54,1 @@
+-            .catch(() => setLoading(false));
++            .catch(() => { setLoading(false); });
+@@ -217,1 +217,1 @@
+-                                        onChange={(e) => setSelectedServerId(e.target.value)}
++                                        onChange={(e) => { setSelectedServerId(e.target.value); }}
+diff --git a/apps/dashboard/services/payment/paystack.ts b/apps/dashboard/services/payment/paystack.ts
+--- a/apps/dashboard/services/payment/paystack.ts
++++ b/apps/dashboard/services/payment/paystack.ts
+@@ -100,1 +100,1 @@
+-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
++    parseWebhookEvent(payload: unknown): ParsedWebhookEvent {
+@@ -123,1 +123,1 @@
+-            const orgField = data.metadata.custom_fields.find((f: any) => f.variable_name === 'organizationId');
++            const orgField = data.metadata.custom_fields.find((f: unknown) => f.variable_name === 'organizationId');
+diff --git a/packages/cli/src/commands/build.ts b/packages/cli/src/commands/build.ts
+--- a/packages/cli/src/commands/build.ts
++++ b/packages/cli/src/commands/build.ts
+@@ -55,1 +55,1 @@
+-        console.error(chalk.red((error as any).stdout || error.message));
++        console.error(chalk.red((error as unknown).stdout || error.message));
+diff --git a/apps/dashboard/components/ProvisionTerminalModal.tsx b/apps/dashboard/components/ProvisionTerminalModal.tsx
+--- a/apps/dashboard/components/ProvisionTerminalModal.tsx
++++ b/apps/dashboard/components/ProvisionTerminalModal.tsx
+@@ -91,1 +91,1 @@
+-        const handleResize = () => fitAddon.fit();
++        const handleResize = () => { fitAddon.fit(); };
+@@ -95,1 +95,1 @@
+-        setTimeout(() => triggerSetup(), 500);
++        setTimeout(() => { triggerSetup(); }, 500);
+diff --git a/apps/dashboard/app/api/admin/users/[id]/route.ts b/apps/dashboard/app/api/admin/users/[id]/route.ts
+--- a/apps/dashboard/app/api/admin/users/[id]/route.ts
++++ b/apps/dashboard/app/api/admin/users/[id]/route.ts
+@@ -40,1 +40,1 @@
+-        let servers: any[] = [];
++        let servers: unknown[] = [];
+@@ -41,1 +41,1 @@
+-        let projects: any[] = [];
++        let projects: unknown[] = [];
+@@ -69,1 +69,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/admin/users/route.ts b/apps/dashboard/app/api/admin/users/route.ts
+--- a/apps/dashboard/app/api/admin/users/route.ts
++++ b/apps/dashboard/app/api/admin/users/route.ts
+@@ -53,1 +53,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/admin/deployments/route.ts b/apps/dashboard/app/api/admin/deployments/route.ts
+--- a/apps/dashboard/app/api/admin/deployments/route.ts
++++ b/apps/dashboard/app/api/admin/deployments/route.ts
+@@ -63,1 +63,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/api/projects/[id]/domains/verify/route.ts b/apps/dashboard/app/api/projects/[id]/domains/verify/route.ts
+--- a/apps/dashboard/app/api/projects/[id]/domains/verify/route.ts
++++ b/apps/dashboard/app/api/projects/[id]/domains/verify/route.ts
+@@ -93,1 +93,1 @@
+-            const allDomains: DomainConfig[] = domain.project.domains.map((d: any) => ({
++            const allDomains: DomainConfig[] = domain.project.domains.map((d: unknown) => ({
+@@ -118,1 +118,1 @@
+-        } catch (sshError: any) {
++        } catch (sshError: unknown) {
+@@ -133,1 +133,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/app/admin/activity/page.tsx b/apps/dashboard/app/admin/activity/page.tsx
+--- a/apps/dashboard/app/admin/activity/page.tsx
++++ b/apps/dashboard/app/admin/activity/page.tsx
+@@ -64,1 +64,1 @@
+-        loadOrgs();
++        void loadOrgs();
+@@ -86,1 +86,1 @@
+-            } catch (e: any) {
++            } catch (e: unknown) {
+@@ -93,1 +93,1 @@
+-        loadContent();
++        void loadContent();
+@@ -181,1 +181,1 @@
+-                        onClick={() => setPage(p => Math.max(1, p - 1))}
++                        onClick={() => { setPage(p => Math.max(1, p - 1)); }}
+@@ -191,1 +191,1 @@
+-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
++                        onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
+diff --git a/packages/core/src/deploy.ts b/packages/core/src/deploy.ts
+--- a/packages/core/src/deploy.ts
++++ b/packages/core/src/deploy.ts
+@@ -228,1 +228,1 @@
+-            } catch (e: any) {
++            } catch (e: unknown) {
+@@ -496,1 +496,1 @@
+-            } catch (err: any) {
++            } catch (err: unknown) {
+diff --git a/apps/dashboard/app/admin/plans/page.tsx b/apps/dashboard/app/admin/plans/page.tsx
+--- a/apps/dashboard/app/admin/plans/page.tsx
++++ b/apps/dashboard/app/admin/plans/page.tsx
+@@ -41,1 +41,1 @@
+-        fetchPlans();
++        void fetchPlans();
+@@ -57,1 +57,1 @@
+-        } catch (err: any) {
++        } catch (err: unknown) {
+diff --git a/packages/core/src/monitoring.ts b/packages/core/src/monitoring.ts
+--- a/packages/core/src/monitoring.ts
++++ b/packages/core/src/monitoring.ts
+@@ -33,1 +33,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/admin/activity/route.ts b/apps/dashboard/app/api/admin/activity/route.ts
+--- a/apps/dashboard/app/api/admin/activity/route.ts
++++ b/apps/dashboard/app/api/admin/activity/route.ts
+@@ -21,1 +21,1 @@
+-        const where: any = {};
++        const where: unknown = {};
+@@ -51,1 +51,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/debug-paystack.ts b/apps/dashboard/debug-paystack.ts
+--- a/apps/dashboard/debug-paystack.ts
++++ b/apps/dashboard/debug-paystack.ts
+@@ -36,1 +36,1 @@
+-testPaystack();
++void testPaystack();
+diff --git a/apps/dashboard/app/admin/deployments/page.tsx b/apps/dashboard/app/admin/deployments/page.tsx
+--- a/apps/dashboard/app/admin/deployments/page.tsx
++++ b/apps/dashboard/app/admin/deployments/page.tsx
+@@ -64,1 +64,1 @@
+-            .catch(() => setLoading(false));
++            .catch(() => { setLoading(false); });
+@@ -151,1 +151,1 @@
+-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
++                                    onClick={() => { setPage(p => Math.max(1, p - 1)); }}
+@@ -158,1 +158,1 @@
+-                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
++                                    onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
+diff --git a/apps/dashboard/app/api/projects/route.ts b/apps/dashboard/app/api/projects/route.ts
+--- a/apps/dashboard/app/api/projects/route.ts
++++ b/apps/dashboard/app/api/projects/route.ts
+@@ -94,1 +94,1 @@
+-                .catch(err => console.error('[Projects API] Workflow provision failed:', err));
++                .catch(err => { console.error('[Projects API] Workflow provision failed:', err); });
+diff --git a/apps/dashboard/app/api/admin/plans/route.ts b/apps/dashboard/app/api/admin/plans/route.ts
+--- a/apps/dashboard/app/api/admin/plans/route.ts
++++ b/apps/dashboard/app/api/admin/plans/route.ts
+@@ -10,1 +10,1 @@
+-    } catch (err: any) {
++    } catch (err: unknown) {
+diff --git a/apps/dashboard/app/api/admin/organizations/route.ts b/apps/dashboard/app/api/admin/organizations/route.ts
+--- a/apps/dashboard/app/api/admin/organizations/route.ts
++++ b/apps/dashboard/app/api/admin/organizations/route.ts
+@@ -46,1 +46,1 @@
+-    } catch (error: any) {
++    } catch (error: unknown) {
+diff --git a/apps/dashboard/components/DeploymentHistory.tsx b/apps/dashboard/components/DeploymentHistory.tsx
+--- a/apps/dashboard/components/DeploymentHistory.tsx
++++ b/apps/dashboard/components/DeploymentHistory.tsx
+@@ -72,1 +72,1 @@
+-            .catch(() => setLoading(false));
++            .catch(() => { setLoading(false); });

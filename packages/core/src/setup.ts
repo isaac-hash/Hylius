@@ -119,12 +119,13 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
             durationMs
         };
 
-    } catch (err: any) {
-        log(`\x1b[31mSetup failed: ${err.message}\x1b[0m\n`);
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        log(`\x1b[31mSetup failed: ${errorMessage}\x1b[0m\n`);
         return {
             success: false,
             durationMs: Date.now() - startTime,
-            error: err.message
+            error: errorMessage
         };
     } finally {
         client.end();

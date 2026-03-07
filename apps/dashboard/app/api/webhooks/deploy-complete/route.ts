@@ -92,15 +92,17 @@ export async function POST(request: Request) {
                 projectId: project.id,
                 trigger: 'webhook',
                 onLog: (chunk) => process.stdout.write(`[Deploy Worker] ${chunk}`)
-            }).catch(e => console.error('[Webhook Deploy Task Error]', e));
+            }).catch(e => { console.error('[Webhook Deploy Task Error]', e); });
 
             deployStats.push({ project: project.name, status: 'triggered' });
         }
 
         return NextResponse.json({ success: true, targets: deployStats });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[Deploy Webhook] Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Internal Server Error'
+        }, { status: 500 });
     }
 }

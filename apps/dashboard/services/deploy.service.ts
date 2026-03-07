@@ -140,7 +140,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         project: projectConfig,
         trigger,
         domains: domainConfigs,
-        onLog: (chunk) => log(chunk),
+        onLog: (chunk) => { log(chunk); },
     });
 
     // Update GitHub Deployment Status

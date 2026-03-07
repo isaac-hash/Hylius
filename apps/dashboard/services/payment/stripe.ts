@@ -9,7 +9,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
     constructor() {
         this.publicKey = process.env.STRIPE_PUBLIC_KEY || '';
         this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock', {
-            apiVersion: '2024-10-28.acacia' as any
+            apiVersion: '2024-10-28.acacia' as unknown
         });
         this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -62,7 +62,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
         }
     }
 
-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
+    parseWebhookEvent(payload: unknown): ParsedWebhookEvent {
         const type = payload.type;
         const isSubscription = type && type.startsWith('customer.subscription.');
 

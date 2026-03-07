@@ -19,11 +19,13 @@ export async function verifyDns(hostname: string, expectedIp: string): Promise<{
         const addresses = await resolve(hostname, 'A');
         const verified = addresses.includes(expectedIp);
         return { verified, resolvedIps: addresses };
-    } catch (err: any) {
-        if (err.code === 'ENOTFOUND' || err.code === 'ENODATA') {
-            return { verified: false, resolvedIps: [], error: `No DNS A record found for ${hostname}` };
+    } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'code' in err) {
+            if (err.code === 'ENOTFOUND' || err.code === 'ENODATA') {
+                return { verified: false, resolvedIps: [], error: `No DNS A record found for ${hostname}` };
+            }
         }
-        return { verified: false, resolvedIps: [], error: `DNS lookup failed: ${err.message}` };
+        return { verified: false, resolvedIps: [], error: `DNS lookup failed: ${err instanceof Error ? err.message : String(err)}` };
     }
 }
 
@@ -231,13 +233,14 @@ export async function setupDomain(
             sslProvisioned,
         };
 
-    } catch (err: any) {
-        log(`Domain setup failed: ${err.message}`);
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        log(`Domain setup failed: ${errorMessage}`);
         return {
             success: false,
             hostname: newHostname,
             sslProvisioned: false,
-            error: err.message,
+            error: errorMessage,
         };
     } finally {
         client.end();

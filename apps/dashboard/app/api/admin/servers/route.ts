@@ -54,7 +54,7 @@ export async function GET(request: Request) {
                 totalPages: Math.ceil(total / limit)
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (error.message === 'Forbidden: Platform Admin access required') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

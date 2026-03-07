@@ -36,7 +36,7 @@ export async function GET(request: Request) {
         if (accountType) redirectUrl.searchParams.set('account_type', accountType);
 
         return NextResponse.redirect(redirectUrl);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[GitHub Callback] Error:', error);
         return NextResponse.redirect(new URL('/?error=github_callback_failed', request.url));
     }

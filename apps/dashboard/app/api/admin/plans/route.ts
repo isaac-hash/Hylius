@@ -7,7 +7,7 @@ export async function GET(request: Request) {
         await requirePlatformAdmin(request);
         const plans = await planService.listPlans();
         return NextResponse.json(plans);
-    } catch (err: any) {
+    } catch (err: unknown) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
         const plan = await planService.createPlan(data);
         return NextResponse.json(plan);
-    } catch (err: any) {
+    } catch (err: unknown) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }

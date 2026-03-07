@@ -9,4 +9,4 @@ async function main() {
     }
 }
 
-main();
+void void void main();

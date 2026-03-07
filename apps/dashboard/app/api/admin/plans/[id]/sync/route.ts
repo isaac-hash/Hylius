@@ -20,7 +20,7 @@ export async function POST(
         }
 
         return NextResponse.json(plan);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Plan sync failed:', err.message);
         return NextResponse.json({ error: err.message }, { status: 500 });
     }

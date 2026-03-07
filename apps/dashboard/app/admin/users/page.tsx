@@ -41,7 +41,7 @@ export default function AdminUsersPage() {
 
             setUsers(data.users);
             setTotalPages(data.pagination.totalPages);
-        } catch (e: any) {
+        } catch (e: unknown) {
             setError(e.message);
         } finally {
             setIsLoading(false);
@@ -49,7 +49,7 @@ export default function AdminUsersPage() {
     };
 
     useEffect(() => {
-        loadContent();
+        void loadContent();
     }, [token, page]);
 
     const toggleUserStatus = async (id: string, currentStatus: boolean) => {
@@ -67,8 +67,8 @@ export default function AdminUsersPage() {
             if (!res.ok) throw new Error('Failed to update status');
 
             // Reload logs/users
-            loadContent();
-        } catch (e: any) {
+            void loadContent();
+        } catch (e: unknown) {
             alert(e.message);
         }
     };
@@ -139,7 +139,7 @@ export default function AdminUsersPage() {
             {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-6">
                     <button
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        onClick={() => { setPage(p => Math.max(1, p - 1)); }}
                         disabled={page === 1}
                         className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-md hover:bg-gray-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed text-white"
                     >
@@ -149,7 +149,7 @@ export default function AdminUsersPage() {
                         Page {page} of {totalPages}
                     </span>
                     <button
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        onClick={() => { setPage(p => Math.min(totalPages, p + 1)); }}
                         disabled={page === totalPages}
                         className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-md hover:bg-gray-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed text-white"
                     >

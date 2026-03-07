@@ -48,7 +48,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
             await client.exec(`rm -rf ${deployPath}`);
 
             client.end();
-        } catch (sshError: any) {
+        } catch (sshError: unknown) {
             // Server may be offline — log but don't block DB deletion
             console.warn(`PM2 teardown failed for project ${project.name}: ${sshError.message}`);
         }
@@ -63,7 +63,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         });
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         return NextResponse.json({ error: error.message || 'Failed to delete project' }, { status: 500 });
     }
 }

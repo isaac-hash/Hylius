@@ -209,7 +209,7 @@ export const setupCommand = new Command('setup')
 
             ssh.dispose();
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             spinner.fail(chalk.red(`Setup failed: ${error.message}`));
             ssh.dispose();
             process.exit(1);

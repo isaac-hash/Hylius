@@ -76,7 +76,7 @@ export class PaymentService {
      * Handle webhook coming from a payment provider
      * Webhooks modify DB directly here ONLY.
      */
-    async handleWebhook(providerId: string, payload: string, signature: string, eventData: any) {
+    async handleWebhook(providerId: string, payload: string, signature: string, eventData: unknown) {
         const provider = this.providers[providerId];
         if (!provider) throw new Error('Unknown provider');
 

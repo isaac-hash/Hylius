@@ -38,14 +38,14 @@ export function BillingHistory({ isAdmin = false }: BillingHistoryProps) {
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
                 setPayments(data.payments || []);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 setError(err.message);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchHistory();
+        void fetchHistory();
     }, [isAdmin]);
 
     if (loading) return <div className="text-gray-400 text-sm py-4 italic">Loading history...</div>;

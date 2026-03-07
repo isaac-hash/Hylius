@@ -23,7 +23,7 @@ function SuccessContent() {
             });
         }, 1000);
 
-        return () => clearInterval(timer);
+        return () => { clearInterval(timer); };
     }, []);
 
     return (

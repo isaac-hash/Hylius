@@ -51,7 +51,7 @@ export default function DeploymentPage() {
                 }
                 setLoading(false);
             })
-            .catch(() => setLoading(false));
+            .catch(() => { setLoading(false); });
     }, [token]);
 
     const fetchServers = useCallback(() => {
@@ -214,7 +214,7 @@ export default function DeploymentPage() {
                                 <div className="mb-3">
                                     <select
                                         value={selectedServerId}
-                                        onChange={(e) => setSelectedServerId(e.target.value)}
+                                        onChange={(e) => { setSelectedServerId(e.target.value); }}
                                         className="w-full bg-gray-900 border border-gray-800 rounded-md px-3 py-2 text-sm text-white focus:border-blue-600 focus:outline-none transition-colors"
                                     >
                                         <option value="">All Servers</option>

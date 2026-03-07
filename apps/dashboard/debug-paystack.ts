@@ -33,4 +33,4 @@ async function testPaystack() {
     }
 }
 
-testPaystack();
+void void void testPaystack();

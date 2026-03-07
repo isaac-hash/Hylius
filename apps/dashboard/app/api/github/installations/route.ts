@@ -55,9 +55,9 @@ export async function POST(request: Request) {
         console.log(`[GitHub API] Installation ${id} linked to org ${auth.organizationId}`);
 
         return NextResponse.json({ success: true, installation });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[GitHub API] Failed to link installation:', error);
-        if (error.message === 'Unauthorized') {
+        if (error instanceof Error && error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

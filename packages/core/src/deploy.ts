@@ -225,8 +225,8 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                         break;
                     }
                 }
-            } catch (e: any) {
-                log(`Failed to find dynamic port, falling back to 3011: ${e.message}`);
+            } catch (e: unknown) {
+                log(`Failed to find dynamic port, falling back to 3011: ${e instanceof Error ? e.message : String(e)}`);
             }
 
             log(`Assigning port ${port} and replacing container: ${containerName}`);
@@ -354,8 +354,8 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                             log(`No build script found in package.json`);
                         }
                     }
-                } catch (e: any) {
-                    log(`Failed to read package.json for build detection: ${e.message}`);
+                } catch (e: unknown) {
+                    log(`Failed to read package.json for build detection: ${e instanceof Error ? e.message : String(e)}`);
                 }
             }
 
@@ -493,8 +493,8 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 const protocol = options.tlsMode === 'internal' ? 'https' : 'https';
                 finalUrl = `${protocol}://${options.domains[0].hostname}`;
                 log(`\x1b[36m🔒 Domain URL: ${finalUrl}\x1b[0m`);
-            } catch (err: any) {
-                log(`\x1b[33mWarning: Caddy update failed (deploy still succeeded): ${err.message}\x1b[0m`);
+            } catch (err: unknown) {
+                log(`\x1b[33mWarning: Caddy update failed (deploy still succeeded): ${err instanceof Error ? err.message : String(err)}\x1b[0m`);
             }
         }
 
@@ -515,13 +515,14 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             url: finalUrl || `http://${options.server.host}:3000`
         };
 
-    } catch (err: any) {
-        log(`Deployment failed: ${err.message}`);
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        log(`Deployment failed: ${errorMessage}`);
         return {
             success: false,
             releaseId,
             durationMs: Date.now() - startTime,
-            error: err.message
+            error: errorMessage
         };
     } finally {
         client.end();

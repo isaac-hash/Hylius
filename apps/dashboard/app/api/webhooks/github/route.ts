@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    let body: any;
+    let body: unknown;
     try {
         body = JSON.parse(payload);
     } catch {
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
         // Unhandled event type — acknowledge but do nothing
         return NextResponse.json({ message: `Ignored event: ${event}` });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error(`[GitHub Webhook] Error handling ${event}:`, err);
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
 // ─── Push Event Handler ─────────────────────────────────────
 
-async function handlePush(body: any) {
+async function handlePush(body: unknown) {
     const repoFullName: string = body.repository?.full_name;
     const ref: string = body.ref || '';
     const defaultBranch: string = body.repository?.default_branch || 'main';
@@ -97,7 +97,7 @@ async function handlePush(body: any) {
                 },
             });
             results.push({ projectId: project.id, name: project.name, success: result.success });
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(`[GitHub Webhook] Deploy failed for ${project.name}:`, err.message);
             results.push({ projectId: project.id, name: project.name, success: false, error: err.message });
         }
@@ -108,7 +108,7 @@ async function handlePush(body: any) {
 
 // ─── Installation Event Handler ─────────────────────────────
 
-async function handleInstallation(body: any) {
+async function handleInstallation(body: unknown) {
     const action: string = body.action;
     const installationId: number = body.installation?.id;
     const accountLogin: string = body.installation?.account?.login || '';

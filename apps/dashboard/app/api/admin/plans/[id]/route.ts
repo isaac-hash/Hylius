@@ -13,7 +13,7 @@ export async function PATCH(
 
         const plan = await planService.updatePlan(id, data);
         return NextResponse.json(plan);
-    } catch (err: any) {
+    } catch (err: unknown) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }

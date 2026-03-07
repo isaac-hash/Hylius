@@ -41,14 +41,14 @@ export default function TransactionsPage() {
                 }
                 const data = await res.json();
                 setTransactions(data);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 setError(err.message);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchTransactions();
+        void fetchTransactions();
     }, [token]);
 
     const getStatusColor = (status: string) => {

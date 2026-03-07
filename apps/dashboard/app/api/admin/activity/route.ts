@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
         const skip = (page - 1) * limit;
 
-        const where: any = {};
+        const where: unknown = {};
         if (orgId) where.organizationId = orgId;
         if (action) where.action = action;
 
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
                 totalPages: Math.ceil(total / limit)
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (error.message === 'Forbidden: Platform Admin access required') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

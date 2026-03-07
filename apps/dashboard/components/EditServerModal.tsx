@@ -65,7 +65,7 @@ export default function EditServerModal({ isOpen, onClose, onUpdated, server }: 
 
             onUpdated();
             onClose();
-        } catch (err: any) {
+        } catch (err: unknown) {
             alert('Failed to update server: ' + err.message);
         } finally {
             setLoading(false);
@@ -83,7 +83,7 @@ export default function EditServerModal({ isOpen, onClose, onUpdated, server }: 
                             className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-blue-500 outline-none"
                             placeholder="My Production VPS"
                             value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
                             required
                         />
                     </div>
@@ -96,7 +96,7 @@ export default function EditServerModal({ isOpen, onClose, onUpdated, server }: 
                                     className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-blue-500 outline-none"
                                     placeholder="203.0.113.1"
                                     value={formData.ip}
-                                    onChange={(e) => setFormData({ ...formData, ip: e.target.value })}
+                                    onChange={(e) => { setFormData({ ...formData, ip: e.target.value }); }}
                                 />
                             </div>
                             <div className="w-24">
@@ -107,7 +107,7 @@ export default function EditServerModal({ isOpen, onClose, onUpdated, server }: 
                                     className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-blue-500 outline-none"
                                     placeholder="22"
                                     value={formData.port}
-                                    onChange={(e) => setFormData({ ...formData, port: e.target.value })}
+                                    onChange={(e) => { setFormData({ ...formData, port: e.target.value }); }}
                                 />
                             </div>
                         </div>
@@ -117,7 +117,7 @@ export default function EditServerModal({ isOpen, onClose, onUpdated, server }: 
                                 className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-blue-500 outline-none"
                                 placeholder="root"
                                 value={formData.username}
-                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                onChange={(e) => { setFormData({ ...formData, username: e.target.value }); }}
                                 required
                             />
                         </div>
@@ -129,7 +129,7 @@ export default function EditServerModal({ isOpen, onClose, onUpdated, server }: 
                             className="w-full h-32 bg-black border border-gray-800 rounded p-2 text-white focus:border-blue-500 outline-none font-mono text-xs"
                             placeholder="Optionally paste a new key to overwrite the current one."
                             value={formData.privateKey}
-                            onChange={(e) => setFormData({ ...formData, privateKey: e.target.value })}
+                            onChange={(e) => { setFormData({ ...formData, privateKey: e.target.value }); }}
                         />
                         <p className="text-xs text-gray-600 mt-1">Leave empty to keep the current credentials.</p>
                     </div>

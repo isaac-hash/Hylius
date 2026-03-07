@@ -30,7 +30,7 @@ export async function rollback(options: RollbackOptions): Promise<DeployResult> 
             durationMs: Date.now() - startTime
         };
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         return {
             success: false,
             releaseId,

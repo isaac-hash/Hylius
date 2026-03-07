@@ -44,11 +44,13 @@ export async function GET(request: Request) {
             },
             repos,
         });
-    } catch (error: any) {
-        if (error.message === 'Unauthorized') {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         console.error('[GitHub Repos API] Error:', error);
-        return NextResponse.json({ error: error.message || 'Failed to list repos' }, { status: 500 });
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Failed to list repos'
+        }, { status: 500 });
     }
 }

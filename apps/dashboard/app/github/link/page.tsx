@@ -43,13 +43,13 @@ export default function GitHubLinkPage() {
                     const data = await res.json();
                     throw new Error(data.error || 'Failed to link');
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error(err);
                 setError(err.message || 'An error occurred during linking.');
             }
         };
 
-        linkApp();
+        void linkApp();
     }, [token, searchParams, router]);
 
     return (
@@ -66,7 +66,7 @@ export default function GitHubLinkPage() {
                         <h2 className="text-xl font-bold text-white mb-2">Linking Failed</h2>
                         <p className="text-gray-400 text-sm mb-6">{error}</p>
                         <button
-                            onClick={() => router.replace('/')}
+                            onClick={() => { router.replace('/'); }}
                             className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
                         >
                             Back to Dashboard

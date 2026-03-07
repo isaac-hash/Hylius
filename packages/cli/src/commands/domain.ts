@@ -43,7 +43,7 @@ async function getServerConfig() {
     return { host, username, port, password, privateKey, privateKeyPath };
 }
 
-async function connectSSH(config: any): Promise<NodeSSH> {
+async function connectSSH(config: unknown): Promise<NodeSSH> {
     const ssh = new NodeSSH();
     await ssh.connect({
         host: config.host,
@@ -100,7 +100,7 @@ domainCommand
                         return;
                     }
                     spinner.text = `DNS verified: ${hostname} → ${serverConfig.host}`;
-                } catch (dnsErr: any) {
+                } catch (dnsErr: unknown) {
                     spinner.warn(`DNS lookup failed for ${hostname}: ${dnsErr.message}`);
                     console.log(chalk.yellow(`\n  Add an A record for ${hostname} → ${serverConfig.host}`));
                     console.log(chalk.yellow(`  Then run: ${chalk.white.bold(`hylius domain verify ${hostname}`)}\n`));
@@ -159,7 +159,7 @@ domainCommand
                 console.log(chalk.dim('  Using internal TLS (self-signed certificate for testing).'));
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             spinner.fail(chalk.red(`Failed to add domain: ${error.message}`));
             process.exit(1);
         }

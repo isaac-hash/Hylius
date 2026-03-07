@@ -44,7 +44,7 @@ export default function GitHubConnect({ compact = false }: GitHubConnectProps) {
             }
         };
 
-        fetchRepos();
+        void fetchRepos();
     }, [token]);
 
     const installUrl = `https://github.com/apps/${appSlug}/installations/new`;

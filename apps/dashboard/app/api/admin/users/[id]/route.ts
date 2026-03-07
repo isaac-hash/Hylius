@@ -37,8 +37,8 @@ export async function GET(
 
         // Fetch additional data if user belongs to an org
         let deploymentsCount = 0;
-        let servers: any[] = [];
-        let projects: any[] = [];
+        let servers: unknown[] = [];
+        let projects: unknown[] = [];
 
         if (user.organizationId) {
             [deploymentsCount, servers, projects] = await Promise.all([
@@ -66,7 +66,7 @@ export async function GET(
             servers,
             projects
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (error.message === 'Forbidden: Platform Admin access required') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -93,7 +93,7 @@ export async function PATCH(
         });
 
         return NextResponse.json(user);
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         if (error.message === 'Forbidden: Platform Admin access required') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

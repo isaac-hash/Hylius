@@ -63,10 +63,10 @@ export async function autoProvisionWorkflow(
       if (data && !Array.isArray(data) && 'sha' in data) {
         sha = data.sha;
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // 404 means the file doesn't exist yet, which is fine
-      if (e.status !== 404) {
-        console.warn(`[GitHub Workflow] Could not check existing file: ${e.message}`);
+      if ((e as any).status !== 404) {
+        console.warn(`[GitHub Workflow] Could not check existing file: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
@@ -84,8 +84,8 @@ export async function autoProvisionWorkflow(
     console.log(`[GitHub Workflow] Successfully provisioned workflow for ${repoFullName}`);
     return true;
 
-  } catch (error: any) {
-    console.error(`[GitHub Workflow] Failed to provision workflow for ${repoFullName}:`, error);
+  } catch (error: unknown) {
+    console.error(`[GitHub Workflow] Failed to provision workflow for ${repoFullName}@${branch}:`, error instanceof Error ? error.message : String(error));
     return false;
   }
 }

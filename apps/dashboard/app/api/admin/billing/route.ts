@@ -36,7 +36,7 @@ export async function GET(request: Request) {
             subscriptions,
             payments,
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Admin billing fetch failed:', err.message);
         return NextResponse.json({ error: err.message }, { status: 500 });
     }

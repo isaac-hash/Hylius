@@ -5,7 +5,7 @@ export async function GET() {
     try {
         const plans = await planService.listPlans(true); // Only active plans
         return NextResponse.json(plans);
-    } catch (err: any) {
+    } catch (err: unknown) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }

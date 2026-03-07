@@ -50,7 +50,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
 
     useEffect(() => {
         if (isOpen && mode === 'github' && repos.length === 0) {
-            fetchRepos();
+            void fetchRepos();
         }
     }, [isOpen, mode]);
 
@@ -193,7 +193,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                 <div className="flex gap-1 mb-5 bg-black/50 rounded-lg p-1 border border-gray-800">
                     <button
                         type="button"
-                        onClick={() => setMode('manual')}
+                        onClick={() => { setMode('manual'); }}
                         className={`flex-1 text-sm py-2 px-3 rounded-md transition-colors ${mode === 'manual'
                             ? 'bg-gray-800 text-white font-medium'
                             : 'text-gray-500 hover:text-gray-300'
@@ -203,7 +203,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                     </button>
                     <button
                         type="button"
-                        onClick={() => setMode('github')}
+                        onClick={() => { setMode('github'); }}
                         className={`flex-1 text-sm py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-1.5 ${mode === 'github'
                             ? 'bg-gray-800 text-white font-medium'
                             : 'text-gray-500 hover:text-gray-300'
@@ -249,7 +249,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                     type="text"
                                     placeholder="Search repositories..."
                                     value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
+                                    onChange={e => { setSearchQuery(e.target.value); }}
                                     className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm placeholder-gray-600 focus:border-blue-600 focus:outline-none transition-colors mb-3"
                                 />
                                 <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -260,7 +260,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                             <button
                                                 key={repo.id}
                                                 type="button"
-                                                onClick={() => selectRepo(repo)}
+                                                onClick={() => { selectRepo(repo); }}
                                                 className="w-full text-left p-3 rounded-lg border border-gray-800 hover:border-blue-500/50 hover:bg-gray-800/50 transition-all group"
                                             >
                                                 <div className="flex items-center justify-between">
@@ -310,7 +310,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                 </span>
                                 <button
                                     type="button"
-                                    onClick={() => setGithubMeta(null)}
+                                    onClick={() => { setGithubMeta(null); }}
                                     className="ml-auto text-blue-400 hover:text-blue-300 text-xs"
                                 >
                                     ✕
@@ -324,7 +324,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                     <input
                                         type="checkbox"
                                         checked={useGitHubActions}
-                                        onChange={(e) => setUseGitHubActions(e.target.checked)}
+                                        onChange={(e) => { setUseGitHubActions(e.target.checked); }}
                                         className="mt-1 w-4 h-4 rounded border-gray-600 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900 bg-gray-700 cursor-pointer"
                                     />
                                     <div>

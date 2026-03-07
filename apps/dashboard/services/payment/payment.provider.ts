@@ -52,5 +52,5 @@ export interface PaymentProviderAdapter {
     /**
      * Parse and standardize provider-specific webhook payloads
      */
-    parseWebhookEvent(payload: any): ParsedWebhookEvent;
+    parseWebhookEvent(payload: unknown): ParsedWebhookEvent;
 }

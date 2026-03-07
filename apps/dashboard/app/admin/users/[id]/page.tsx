@@ -55,14 +55,14 @@ export default function UserDetailsPage() {
                 if (!res.ok) throw new Error('Failed to fetch user details');
                 const json = await res.json();
                 setData(json);
-            } catch (e: any) {
+            } catch (e: unknown) {
                 setError(e.message);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        loadContent();
+        void loadContent();
     }, [token, id]);
 
     if (isLoading) return <div className="p-8 text-gray-400">Loading user info...</div>;
@@ -76,7 +76,7 @@ export default function UserDetailsPage() {
             <div className="mb-8 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => router.back()}
+                        onClick={() => { router.back(); }}
                         className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

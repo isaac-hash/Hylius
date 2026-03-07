@@ -141,7 +141,7 @@ async function getConfiguration(): Promise<{ server: ServerConfig; project: Proj
     return { server, project };
 }
 
-export async function deploy(options: any) {
+export async function deploy(options: unknown) {
     let server: ServerConfig;
     let project: ProjectConfig;
 
@@ -186,7 +186,7 @@ export async function deploy(options: any) {
                     const errorMsg = tarResult.stderr?.toString() || tarResult.error?.message || 'Unknown error';
                     throw new Error(errorMsg);
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 spinner.fail(chalk.red(`Bundling failed: ${error.message}`));
                 process.exit(1);
             }
@@ -202,7 +202,7 @@ export async function deploy(options: any) {
                 project.localBundlePath = remoteBundlePath;
                 spinner.succeed(chalk.dim('Local bundle uploaded.'));
                 spinner.start('Proceeding with deployment...');
-            } catch (error: any) {
+            } catch (error: unknown) {
                 spinner.fail(chalk.red(`Upload failed: ${error.message}`));
                 if (fs.existsSync(localBundlePath)) fs.unlinkSync(localBundlePath);
                 process.exit(1);

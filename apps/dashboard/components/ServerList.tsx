@@ -69,7 +69,7 @@ export default function ServerList() {
                 <h2 className="text-2xl font-bold text-white">Your Servers</h2>
                 <button
                     className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md transition-colors"
-                    onClick={() => setIsServerModalOpen(true)}
+                    onClick={() => { setIsServerModalOpen(true); }}
                 >
                     + Add Server
                 </button>
@@ -77,7 +77,7 @@ export default function ServerList() {
 
             <AddServerModal
                 isOpen={isServerModalOpen}
-                onClose={() => setIsServerModalOpen(false)}
+                onClose={() => { setIsServerModalOpen(false); }}
                 onAdded={() => {
                     fetchServers();
                 }}
@@ -85,7 +85,7 @@ export default function ServerList() {
 
             <AddProjectModal
                 isOpen={projectModal.open}
-                onClose={() => setProjectModal({ open: false, serverId: '', serverName: '' })}
+                onClose={() => { setProjectModal({ open: false, serverId: '', serverName: '' }); }}
                 serverId={projectModal.serverId}
                 serverName={projectModal.serverName}
                 onAdded={() => {
@@ -95,7 +95,7 @@ export default function ServerList() {
 
             <ProvisionTerminalModal
                 isOpen={provisionModal.open}
-                onClose={() => setProvisionModal({ open: false, serverId: '', serverName: '' })}
+                onClose={() => { setProvisionModal({ open: false, serverId: '', serverName: '' }); }}
                 serverId={provisionModal.serverId}
                 serverName={provisionModal.serverName}
             />
@@ -106,7 +106,7 @@ export default function ServerList() {
                     <p className="text-sm text-gray-500">Connect a VPS to start deploying.</p>
                     <button
                         className="mt-4 text-blue-400 hover:text-blue-300 underline"
-                        onClick={() => setIsServerModalOpen(true)}
+                        onClick={() => { setIsServerModalOpen(true); }}
                     >
                         Add your first server
                     </button>

@@ -91,7 +91,7 @@ export async function POST(request: Request) {
         if (deployStrategy === 'ghcr-pull' && githubInstallationId && githubRepoFullName) {
             // Non-blocking fire-and-forget so UI returns quickly
             autoProvisionWorkflow(githubInstallationId, githubRepoFullName, project.branch)
-                .catch(err => console.error('[Projects API] Workflow provision failed:', err));
+                .catch(err => { console.error('[Projects API] Workflow provision failed:', err); });
         }
 
         return NextResponse.json(project);

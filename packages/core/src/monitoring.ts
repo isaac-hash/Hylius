@@ -30,7 +30,7 @@ export async function getPulse(server: ServerConfig): Promise<PulseMetrics> {
             throw new Error(`Failed to parse Pulse metrics: ${parseErr}, raw: ${stdout}`);
         }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         throw new Error(`Pulse check failed: ${err.message}`);
     } finally {
         client.end();

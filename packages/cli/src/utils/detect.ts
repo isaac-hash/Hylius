@@ -6,7 +6,7 @@ export interface RailpackPlan {
   providers?: string[];
   buildPlanned?: boolean;
   error?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**

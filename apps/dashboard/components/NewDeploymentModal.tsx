@@ -64,7 +64,7 @@ export default function NewDeploymentModal({ isOpen, onClose, preSelectedProject
                         <select
                             className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-blue-600 focus:outline-none transition-colors"
                             value={selectedProjectId}
-                            onChange={(e) => setSelectedProjectId(e.target.value)}
+                            onChange={(e) => { setSelectedProjectId(e.target.value); }}
                         >
                             {projects.map(p => (
                                 <option key={p.id} value={p.id}>

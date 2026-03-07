@@ -39,7 +39,7 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
     ): Promise<{ url: string; sessionId: string }> {
         const txRef = `tx_flw_${Date.now()}`;
 
-        const payload: any = {
+        const payload: unknown = {
             tx_ref: txRef,
             amount,
             currency,
@@ -98,7 +98,7 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
         return isValid;
     }
 
-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
+    parseWebhookEvent(payload: unknown): ParsedWebhookEvent {
         // Handle both v3 (event) and v4 (type) payload structures
         const event = payload.event || payload.type;
         const data = payload.data;

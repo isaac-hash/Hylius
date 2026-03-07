@@ -144,8 +144,8 @@ export async function createGitHubDeployment(params: GitHubCreateDeploymentParam
             return data.id;
         }
         return null;
-    } catch (error: any) {
-        console.error(`[GitHub] Failed to create deployment for ${repoFullName}@${ref}:`, error.message);
+    } catch (error: unknown) {
+        console.error(`[GitHub] Failed to create deployment for ${repoFullName}@${ref}:`, error instanceof Error ? error.message : String(error));
         return null;
     }
 }
@@ -181,7 +181,7 @@ export async function updateGitHubDeploymentStatus(params: GitHubUpdateDeploymen
             description,
             auto_inactive: true, // auto mark older deployments to this environment as inactive
         });
-    } catch (error: any) {
-        console.error(`[GitHub] Failed to update status ${deploymentId} to ${state}:`, error.message);
+    } catch (error: unknown) {
+        console.error(`[GitHub] Failed to update status ${deploymentId} to ${state}:`, error instanceof Error ? error.message : String(error));
     }
 }

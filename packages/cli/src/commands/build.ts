@@ -52,7 +52,7 @@ export const buildCommand = new Command('build')
     } catch (error) {
       spinner.fail(chalk.red('Build failed'));
       if (error instanceof Error && 'stdout' in error) {
-        console.error(chalk.red((error as any).stdout || error.message));
+        console.error(chalk.red((error as unknown).stdout || error.message));
       }
       process.exit(1);
     }

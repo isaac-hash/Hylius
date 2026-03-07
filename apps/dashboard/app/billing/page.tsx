@@ -32,7 +32,7 @@ export default function BillingPage() {
                 setLoading(false);
             }
         };
-        fetchPlans();
+        void fetchPlans();
     }, []);
 
     return (

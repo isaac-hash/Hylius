@@ -85,8 +85,8 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
             }
             const data = await res.json();
             setMetrics(data);
-        } catch (err: any) {
-            setPulseError(err.message || 'Pulse check failed');
+        } catch (err: unknown) {
+            setPulseError(err instanceof Error ? err.message : 'Pulse check failed');
         } finally {
             setPulseLoading(false);
         }
@@ -140,8 +140,8 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
             } else {
                 alert('Failed to delete server');
             }
-        } catch (err: any) {
-            alert(err.message || 'Failed to delete server');
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : 'Failed to delete server');
         }
     };
 
@@ -166,8 +166,8 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
 
             // Refresh the server details to update the project list
             fetchServer();
-        } catch (err: any) {
-            alert(err.message || 'Failed to delete project');
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : 'Failed to delete project');
         } finally {
             setDeletingProject(null);
         }
@@ -239,14 +239,14 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                 </div>
                                 <div className="flex items-center gap-3 w-full md:w-auto">
                                     <button
-                                        onClick={() => setProvisionModalOpen(true)}
+                                        onClick={() => { setProvisionModalOpen(true); }}
                                         className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-[0_0_15px_rgba(37,99,235,0.3)] flex items-center justify-center gap-2"
                                     >
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                         Provision Server
                                     </button>
                                     <button
-                                        onClick={() => setEditServerModalOpen(true)}
+                                        onClick={() => { setEditServerModalOpen(true); }}
                                         className="p-2.5 rounded-lg border border-gray-600/30 text-gray-300 hover:bg-gray-700/50 transition-colors"
                                         title="Edit Server"
                                     >
@@ -273,7 +273,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                             Projects ({server.projects.length})
                                         </h2>
                                         <button
-                                            onClick={() => setAddProjectModalOpen(true)}
+                                            onClick={() => { setAddProjectModalOpen(true); }}
                                             className="bg-gray-800 hover:bg-gray-700 text-sm text-gray-300 px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 border border-gray-700"
                                         >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -285,7 +285,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                         <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-400">
                                             <p className="mb-2">No projects on this server yet.</p>
                                             <button
-                                                onClick={() => setAddProjectModalOpen(true)}
+                                                onClick={() => { setAddProjectModalOpen(true); }}
                                                 className="text-blue-400 hover:text-blue-300 text-sm underline"
                                             >
                                                 Add your first project
@@ -343,7 +343,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                     )}
                                                                 </button>
                                                                 <button
-                                                                    onClick={() => setActiveDeployProjectId(project.id)}
+                                                                    onClick={() => { setActiveDeployProjectId(project.id); }}
                                                                     disabled={activeDeployProjectId !== null || deletingProject !== null}
                                                                     className={`bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-[0_0_10px_rgba(22,163,74,0.3)] flex items-center gap-2 ${activeDeployProjectId !== null || deletingProject !== null ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
@@ -518,14 +518,14 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
 
                 <ProvisionTerminalModal
                     isOpen={provisionModalOpen}
-                    onClose={() => setProvisionModalOpen(false)}
+                    onClose={() => { setProvisionModalOpen(false); }}
                     serverId={server?.id || ''}
                     serverName={server?.name || ''}
                 />
 
                 <AddProjectModal
                     isOpen={addProjectModalOpen}
-                    onClose={() => setAddProjectModalOpen(false)}
+                    onClose={() => { setAddProjectModalOpen(false); }}
                     serverId={server?.id || ''}
                     serverName={server?.name || ''}
                     onAdded={() => {
@@ -536,7 +536,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
 
                 <EditServerModal
                     isOpen={editServerModalOpen}
-                    onClose={() => setEditServerModalOpen(false)}
+                    onClose={() => { setEditServerModalOpen(false); }}
                     onUpdated={() => {
                         setRefreshKey(k => k + 1);
                     }}

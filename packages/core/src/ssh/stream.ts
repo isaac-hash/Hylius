@@ -9,10 +9,10 @@ export class SSHStream {
     static async uploadFile(client: Client, localPath: string, remotePath: string): Promise<void> {
         return new Promise((resolve, reject) => {
             client.sftp((err, sftp) => {
-                if (err) return reject(err);
+                if (err) { reject(err); return; }
 
                 sftp.fastPut(localPath, remotePath, (err) => {
-                    if (err) return reject(err);
+                    if (err) { reject(err); return; }
                     resolve();
                 });
             });

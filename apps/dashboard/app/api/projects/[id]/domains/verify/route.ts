@@ -115,25 +115,28 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
                 verified: true,
                 domain: await prisma.domain.findUnique({ where: { id: domain.id } }),
             });
-        } catch (sshError: any) {
+        } catch (sshError: unknown) {
+            const errorMessage = sshError instanceof Error ? sshError.message : String(sshError);
             await prisma.domain.update({
                 where: { id: domain.id },
                 data: {
                     status: 'DNS_VERIFIED',
-                    errorMessage: `DNS verified but Caddy configuration failed: ${sshError.message}`,
+                    errorMessage: `DNS verified but Caddy configuration failed: ${errorMessage}`,
                 },
             });
 
             return NextResponse.json({
                 verified: true,
                 caddyConfigured: false,
-                error: `DNS verified but Caddy configuration failed: ${sshError.message}`,
+                error: `DNS verified but Caddy configuration failed: ${errorMessage}`,
             }, { status: 500 });
         }
-    } catch (error: any) {
-        if (error.message === 'Unauthorized') {
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'Unauthorized') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-        return NextResponse.json({ error: error.message || 'Failed to verify domain' }, { status: 500 });
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Failed to verify domain'
+        }, { status: 500 });
     }
 }
