@@ -2,11 +2,16 @@ import { PaymentProviderAdapter, ParsedWebhookEvent } from './payment.provider';
 import * as crypto from 'crypto';
 
 export class PaystackAdapter implements PaymentProviderAdapter {
-    private secretKey = 'sk_test_b2dc57e3bdb7ce7837caa38d4414fee46de6e5b3';
-    private publicKey = 'pk_test_6633afe27e72a0911dc341b64dfa28fb9c124c8a';
+    private secretKey: string;
+    private publicKey: string;
     private baseUrl = 'https://api.paystack.co';
 
     constructor() {
+        this.secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+        this.publicKey = process.env.PAYSTACK_PUBLIC_KEY || '';
+        if (!this.secretKey || !this.publicKey) {
+            throw new Error('Paystack secret key and public key are required');
+        }
         console.log(`[PaystackAdapter] Initialized with key starting with: ${this.secretKey.substring(0, 8)}`);
     }
 
