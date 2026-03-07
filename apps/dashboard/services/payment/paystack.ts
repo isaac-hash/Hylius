@@ -45,7 +45,7 @@ export class PaystackAdapter implements PaymentProviderAdapter {
     ): Promise<{ url: string; sessionId: string }> {
         console.log(`[PaystackAdapter] using secret key: ${this.secretKey.substring(0, 8)}...`);
         // Find email by customer code
-        const cusRes = await fetch(`${this.baseUrl}/customer/${customerId}`, { headers: this.getHeaders() });
+        const cusRes = await fetch(`${this.baseUrl}/customer/${encodeURIComponent(customerId)}`, { headers: this.getHeaders() });
         const cusData = await cusRes.json();
         if (!cusData.status) throw new Error('Paystack customer not found');
 
@@ -129,24 +129,24 @@ export class PaystackAdapter implements PaymentProviderAdapter {
         if (data.status === 'past_due' || data.status === 'failed') internalStatus = 'PAST_DUE';
 
         let organizationId = undefined;
-        const metadata = data.metadata as any;
+        const metadata = data.metadata;
         if (metadata && metadata.custom_fields) {
-            const orgField = metadata.custom_fields.find((f: any) => f.variable_name === 'organizationId');
-            if (orgField) organizationId = orgField.value as string;
+            const orgField = metadata.custom_fields.find((f) => f.variable_name === 'organizationId');
+            if (orgField) organizationId = orgField.value;
         }
 
         return {
             isSubscriptionChange: isSubscription || isSubscriptionPayment,
             isPayment: isPayment,
-            subscriptionId: (data.subscription_code as string) || undefined,
-            customerId: (data.customer as any)?.customer_code || (data.customer as any)?.email,
+            subscriptionId: data.subscription_code || undefined,
+            customerId: data.customer?.customer_code || data.customer?.email,
             status: internalStatus,
-            currentPeriodEnd: data.next_payment_date ? new Date(data.next_payment_date as string) : undefined,
+            currentPeriodEnd: data.next_payment_date ? new Date(data.next_payment_date) : undefined,
             organizationId,
             // Payment fields
             amount: data.amount ? data.amount / 100 : undefined, // Paystack is in kobo
-            currency: (data.currency as string) || 'NGN',
-            transactionId: (data.reference as string)
+            currency: data.currency || 'NGN',
+            transactionId: data.reference
         };
     }
 }

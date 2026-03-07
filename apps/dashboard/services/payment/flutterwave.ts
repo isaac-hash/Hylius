@@ -39,7 +39,7 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
     ): Promise<{ url: string; sessionId: string }> {
         const txRef = `tx_flw_${Date.now()}`;
 
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             tx_ref: txRef,
             amount,
             currency,
@@ -80,7 +80,7 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
     }
 
     async cancelSubscription(subscriptionId: string): Promise<void> {
-        const res = await fetch(`${this.baseUrl}/subscriptions/${subscriptionId}/cancel`, {
+        const res = await fetch(`${this.baseUrl}/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {
             method: 'PUT',
             headers: this.getHeaders(),
         });
@@ -101,13 +101,13 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
     parseWebhookEvent(payload: WebhookPayload): ParsedWebhookEvent {
         // Handle both v3 (event) and v4 (type) payload structures
         const flwPayload = payload as FlutterwaveWebhook;
-        const event = (flwPayload as any).event || (flwPayload as any).type;
+        const eventBoundary = ('event' in flwPayload) ? flwPayload.event : flwPayload.type;
         const data = flwPayload.data;
 
-        console.log(`[FlutterwaveAdapter] Parsing event: ${event}`);
+        console.log(`[FlutterwaveAdapter] Parsing event: ${eventBoundary}`);
 
-        const isChargeEvent = event === 'charge.completed' || event === 'charge.succeeded';
-        const isSubscriptionEvent = event === 'subscription.cancelled' || event === 'subscription.activated';
+        const isChargeEvent = eventBoundary === 'charge.completed' || eventBoundary === 'charge.succeeded';
+        const isSubscriptionEvent = eventBoundary === 'subscription.cancelled' || eventBoundary === 'subscription.activated';
 
         if (!data || (!isChargeEvent && !isSubscriptionEvent)) {
             console.log(`[FlutterwaveAdapter] Event ignored: missing data or unsupported event type`);
@@ -116,15 +116,15 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
 
         // Handle both 'successful' (v3), 'succeeded' (v4), and 'cancelled'
         const isSuccessful = data.status === 'successful' || data.status === 'succeeded';
-        const isCancelled = data.status === 'cancelled' || event === 'subscription.cancelled';
+        const isCancelled = data.status === 'cancelled' || eventBoundary === 'subscription.cancelled';
 
-        // Extract metadata which can be in data.meta or top-level meta_data (with underscore)
-        const meta = (data as any).meta || (flwPayload as any).meta || (flwPayload as any).meta_data;
-        const organizationId = meta?.organizationId as string | undefined;
-        const planId = meta?.planId as string | undefined;
+        // Extract metadata which can be in data.meta or top-level meta or meta_data
+        const meta = data.meta || flwPayload.meta || flwPayload.meta_data;
+        const organizationId = meta?.organizationId;
+        const planId = meta?.planId;
 
         // A subscription charge usually has payment_plan, but we can also infer it from our custom planId in meta
-        const isSubscription = !!((data as any).payment_plan || planId || isSubscriptionEvent);
+        const isSubscription = !!(data.payment_plan || planId || isSubscriptionEvent);
 
         console.log(`[FlutterwaveAdapter] Event details:`, {
             isSuccessful,
@@ -132,7 +132,7 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
             isSubscription,
             txRef: data.tx_ref,
             amount: data.amount,
-            plan: (data as any).payment_plan || planId,
+            plan: data.payment_plan || planId,
             organizationId
         });
 
@@ -145,16 +145,16 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
             isSubscriptionChange: isSubscription,
             isPayment: isChargeEvent,
             transactionId: data.tx_ref || data.id?.toString(),
-            amount: data.amount as number | undefined,
-            currency: (data as any).currency as string | undefined,
+            amount: data.amount,
+            currency: data.currency,
             // If it's a subscription, we use the tx_ref as a fallback ID if data.id is not suitable
             subscriptionId: isSubscription ? (data.id ? data.id.toString() : data.tx_ref) : undefined,
-            customerId: (data as any).customer?.email,
+            customerId: data.customer?.email,
             status,
             currentPeriodEnd: undefined, // Flutterwave doesn't always provide this in the charge.completed event
             organizationId,
-            flwCustomerId: (data as any).customer?.id?.toString(),
-            flwPaymentMethodId: (data as any).card?.token,
+            flwCustomerId: data.customer?.id?.toString(),
+            flwPaymentMethodId: data.card?.token,
             planId
         };
     }

@@ -9,7 +9,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
     constructor() {
         this.publicKey = process.env.STRIPE_PUBLIC_KEY || '';
         this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock', {
-            apiVersion: '2024-10-28.acacia' as any
+            apiVersion: '2026-01-28.clover'
         });
         this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -75,13 +75,13 @@ export class StripeAdapter implements PaymentProviderAdapter {
             return { isSubscriptionChange: false };
         }
 
-        const obj = stripePayload.data.object as any; // Using any here because Stripe's object structure is complex, but we know it has status, id, etc.
+        const obj = stripePayload.data.object;
         let internalStatus = 'INCOMPLETE';
         if (obj.status === 'active') internalStatus = 'ACTIVE';
         if (obj.status === 'canceled') internalStatus = 'CANCELED';
         if (obj.status === 'past_due') internalStatus = 'PAST_DUE';
 
-        const metadata = obj.metadata as Record<string, string | undefined>;
+        const metadata = obj.metadata;
 
         return {
             isSubscriptionChange: true,
