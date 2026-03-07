@@ -1,5 +1,6 @@
 import { PaymentProviderAdapter, ParsedWebhookEvent, WebhookPayload, FlutterwaveWebhook } from './payment.provider';
 import { prisma } from '../prisma';
+import * as crypto from 'crypto';
 
 export class FlutterwaveAdapter implements PaymentProviderAdapter {
     private secretKey = process.env.FLUTTERWAVE_SECRET_KEY || '';
@@ -90,10 +91,18 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
 
     verifyWebhookSignature(payload: string, signature: string): boolean {
         // Flutterwave passes the signature verif-hash in the headers
-        const isValid = signature === this.webhookSecret;
+        const secret = this.webhookSecret;
+        const sigBuffer = Buffer.from(signature);
+        const secretBuffer = Buffer.from(secret);
+
+        if (sigBuffer.length !== secretBuffer.length) {
+            return false;
+        }
+
+        const isValid = crypto.timingSafeEqual(sigBuffer, secretBuffer);
         console.log(`[FlutterwaveAdapter] Signature verification: ${isValid ? 'PASSED' : 'FAILED'}`);
         if (!isValid) {
-            console.log(`[FlutterwaveAdapter] Expected: ${this.webhookSecret}, Received: ${signature}`);
+            console.log(`[FlutterwaveAdapter] Expected: [hidden], Received: ${signature}`);
         }
         return isValid;
     }

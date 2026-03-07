@@ -98,8 +98,14 @@ export class PaystackAdapter implements PaymentProviderAdapter {
 
     verifyWebhookSignature(payload: string, signature: string): boolean {
         // Paystack uses the Secret Key to sign webhook payloads, there is no separate webhook secret
-        const hash = crypto.createHmac('sha512', this.secretKey).update(payload).digest('hex');
-        return hash === signature;
+        const hash = crypto.createHmac('sha512', this.secretKey).update(payload).digest();
+        const sigBuffer = Buffer.from(signature, 'hex');
+
+        if (hash.length !== sigBuffer.length) {
+            return false;
+        }
+
+        return crypto.timingSafeEqual(hash, sigBuffer);
     }
 
     parseWebhookEvent(payload: WebhookPayload): ParsedWebhookEvent {
