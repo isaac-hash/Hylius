@@ -105,3 +105,83 @@ export async function getAuthenticatedCloneUrl(
 
     return `https://x-access-token:${token}@github.com/${repoFullName}.git`;
 }
+
+// ─── Deployments ────────────────────────────────────────────
+
+export interface GitHubCreateDeploymentParams {
+    installationId: number;
+    repoFullName: string; // "owner/repo"
+    ref: string; // branch name or commit hash
+    environment?: string; // e.g. "production" or "Preview"
+    description?: string;
+}
+
+/**
+ * Creates a new GitHub deployment (status: pending).
+ * Returns the deployment ID if successful, or null on failure.
+ */
+export async function createGitHubDeployment(params: GitHubCreateDeploymentParams): Promise<number | null> {
+    const { installationId, repoFullName, ref, environment = 'production', description } = params;
+
+    if (!repoFullName.includes('/')) return null;
+    const [owner, repo] = repoFullName.split('/');
+
+    try {
+        const octokit = await getInstallationOctokit(installationId);
+        const { data } = await octokit.repos.createDeployment({
+            owner,
+            repo,
+            ref,
+            environment,
+            description,
+            auto_merge: false,
+            required_contexts: [], // bypass status checks
+        });
+
+        // GitHub API can sometimes return a message object if creation failed 
+        // due to commit status checks (though we pass required_contexts: [])
+        if ('id' in data) {
+            return data.id;
+        }
+        return null;
+    } catch (error: any) {
+        console.error(`[GitHub] Failed to create deployment for ${repoFullName}@${ref}:`, error.message);
+        return null;
+    }
+}
+
+export interface GitHubUpdateDeploymentStatusParams {
+    installationId: number;
+    repoFullName: string;
+    deploymentId: number;
+    state: 'error' | 'failure' | 'inactive' | 'in_progress' | 'queued' | 'pending' | 'success';
+    environmentUrl?: string; // URL of the live site
+    logUrl?: string; // URL back to dashboard logs
+    description?: string;
+}
+
+/**
+ * Updates the state of an existing GitHub deployment.
+ */
+export async function updateGitHubDeploymentStatus(params: GitHubUpdateDeploymentStatusParams): Promise<void> {
+    const { installationId, repoFullName, deploymentId, state, environmentUrl, logUrl, description } = params;
+
+    if (!repoFullName.includes('/')) return;
+    const [owner, repo] = repoFullName.split('/');
+
+    try {
+        const octokit = await getInstallationOctokit(installationId);
+        await octokit.repos.createDeploymentStatus({
+            owner,
+            repo,
+            deployment_id: deploymentId,
+            state,
+            environment_url: environmentUrl,
+            log_url: logUrl,
+            description,
+            auto_inactive: true, // auto mark older deployments to this environment as inactive
+        });
+    } catch (error: any) {
+        console.error(`[GitHub] Failed to update status ${deploymentId} to ${state}:`, error.message);
+    }
+}

@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 // @ts-ignore - Local workspace package
 import { deploy, DeployOptions, ServerConfig, ProjectConfig, DeployResult } from '@hylius/core';
 import { decrypt } from './crypto.service';
-import { getAuthenticatedCloneUrl } from './github.service';
+import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus } from './github.service';
 
 import { prisma } from './prisma';
 
@@ -107,6 +107,31 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         ? project.domains.map((d: any) => ({ hostname: d.hostname, upstreamPort: '3000' }))
         : undefined;
 
+    // GitHub Deployments Integration: Create deployment and set to in_progress
+    let githubDeploymentId: number | null = null;
+    const isGithubApp = !!(project.githubInstallationId && project.githubRepoFullName);
+
+    if (isGithubApp) {
+        log(`[GitHub] Creating deployment status...\n`);
+        githubDeploymentId = await createGitHubDeployment({
+            installationId: project.githubInstallationId!,
+            repoFullName: project.githubRepoFullName!,
+            ref: project.branch || 'main',
+            description: `Deployed via Hylius (${trigger})`,
+            environment: 'Production',
+        });
+
+        if (githubDeploymentId) {
+            await updateGitHubDeploymentStatus({
+                installationId: project.githubInstallationId!,
+                repoFullName: project.githubRepoFullName!,
+                deploymentId: githubDeploymentId,
+                state: 'in_progress',
+                description: 'Build and deployment in progress...',
+            });
+        }
+    }
+
     // 4. Execute Deployment
     log(`\x1b[36mStarting deployment for ${project.name}...  (trigger: ${trigger})\x1b[0m\n`);
 
@@ -117,6 +142,20 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         domains: domainConfigs,
         onLog: (chunk) => log(chunk),
     });
+
+    // Update GitHub Deployment Status
+    if (isGithubApp && githubDeploymentId) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || '';
+        await updateGitHubDeploymentStatus({
+            installationId: project.githubInstallationId!,
+            repoFullName: project.githubRepoFullName!,
+            deploymentId: githubDeploymentId,
+            state: result.success ? 'success' : 'failure',
+            environmentUrl: result.url || undefined,
+            logUrl: baseUrl ? `${baseUrl}` : undefined,
+            description: result.success ? 'Deployment successful' : 'Deployment failed',
+        });
+    }
 
     // 5. Update Status
     // @ts-ignore
