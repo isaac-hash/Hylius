@@ -1,22 +1,38 @@
-# hylius
+# Hylius
 
-Hylius is a monorepo that includes a Docker/deployment CLI and a web dashboard for managing servers, projects, and deployments.
+Hylius is an advanced infrastructure and deployment platform that brings a Vercel-like experience to your own servers. Featuring a comprehensive, beautiful web dashboard and a powerful backing agent-less CLI, Hylius makes it easy to manage servers, deploy projects with zero downtime, and automate your CI/CD pipelines.
 
 ## Features
 
-- 🔍 Automatic project type detection (Node.js, Python, Go, Java, PHP)
-- 🐳 Optimized Docker configurations for different frameworks
-- 🚀 Quick development environment setup
-- 📦 Production-ready build configurations
-- 🛠️ **Server Provisioning** (`hylius setup`) - Automatic Docker/Firewall setup
-- 🚢 **Atomic Deployment** (`hylius deploy`) - Zero-downtime push to VPS
-- 📦 **Smart runtime deploy strategy** - Auto uses Docker Compose / Dockerfile and can scaffold Node/Next.js Docker artifacts on deploy when missing
-- 🤖 **CI/CD Automation** (`hylius ci-generate`) - Quick GitHub Actions scaffolding
-- 🎨 **Beautiful colored terminal output with spinners**
-- 📊 **Real-time streaming command output**
-- 🖥️ **Dashboard UI** (`apps/dashboard`) for server, project, billing, and deployment management
+- 🖥️ **Comprehensive Web Dashboard:** A centralized, modern interface for managing servers, projects, deployments, users, and organizations.
+- 🔗 **Beautiful UI & Real-Time Deployments:** Includes dynamic status tracking and live-streaming deployment logs right in your browser.
+- 🛠️ **Seamless Server Provisioning:** Add a raw VPS and let Hylius automatically configure Docker, firewall rules, and dependencies.
+- 🔒 **Auto-HTTPS:** Automatic SSL certificate provisioning via Caddy for all your connected domains.
+- 🚢 **Atomic Deployments:** Zero-downtime pushes to your VPS with intelligent rollback capabilities.
+- 🐙 **First-Class GitHub Integration:** Auto-deploy on `git push` via a dedicated GitHub App webhook integration.
+- 🏗️ **CI/CD Automation:** Scaffolds GitHub Actions workflows so you can offload builds to GitHub and pull pre-built images to your servers.
+- 💼 **Built-In Billing & Subscriptions:** Integrated payment plans via Flutterwave and Paystack for platform monetization.
+- 🤖 **Agent-less Architecture:** Passive, zero-footprint monitoring (SSH-based `docker stats` polling) keeps your servers clean and lightweight.
+- 🔍 **Smart Runtime Strategy:** Auto-detects frameworks (Next.js, Vite, Node.js, Python, Go, Java, PHP) and scaffolds appropriate Docker Compose/Dockerfile assets automatically.
 
-## Installation
+## Why Hylius?
+
+Hylius was built to solve the "expensive build" problem of self-hosted PaaS solutions. While other platforms make your VPS choke during deployments, Hylius offloads the heavy lifting to the cloud.
+
+### Comparison
+
+| Feature | **Hylius** | Dokploy / Coolify | Vercel |
+| :--- | :--- | :--- | :--- |
+| **Build Location** | **GitHub Actions (Free Cloud)** | Local VPS (Heavy CPU usage) | Managed |
+| **Server Footprint** | **Zero (Agent-less SSH)** | 200MB - 1GB+ (Agents/Panels) | N/A |
+| **HTTPS/SSL** | Automatic (Caddy) | Traefik / Nginx | Automatic |
+| **Infrastructure** | Your own $5 VPS | Your own VPS | Proprietary SaaS |
+| **Lock-in** | **None (Pure Docker)** | Low | High |
+| **Pricing** | Self-hosted / Fixed | Self-hosted | Per-seat / Bandwidth |
+
+**The Hylius Advantage:** Others install heavy agents on your server and build code locally, which can crash small VPS instances. Hylius uses **SSH and GitHub Container Registry (GHCR)** to deliver pre-built images, keeping your production server fast and idle even during large deployments.
+
+## CLI Installation
 
 
 ### Using npm
