@@ -1,4 +1,4 @@
-import { PaymentProviderAdapter, ParsedWebhookEvent } from './payment.provider';
+import { PaymentProviderAdapter, ParsedWebhookEvent, WebhookPayload, StripeWebhook } from './payment.provider';
 import Stripe from 'stripe';
 
 export class StripeAdapter implements PaymentProviderAdapter {
@@ -62,19 +62,26 @@ export class StripeAdapter implements PaymentProviderAdapter {
         }
     }
 
-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
-        const type = payload.type;
+    parseWebhookEvent(payload: WebhookPayload): ParsedWebhookEvent {
+        if (!('type' in payload)) {
+            return { isSubscriptionChange: false };
+        }
+
+        const stripePayload = payload as StripeWebhook;
+        const type = stripePayload.type;
         const isSubscription = type && type.startsWith('customer.subscription.');
 
         if (!isSubscription) {
             return { isSubscriptionChange: false };
         }
 
-        const obj = payload.data.object;
+        const obj = stripePayload.data.object as any; // Using any here because Stripe's object structure is complex, but we know it has status, id, etc.
         let internalStatus = 'INCOMPLETE';
         if (obj.status === 'active') internalStatus = 'ACTIVE';
         if (obj.status === 'canceled') internalStatus = 'CANCELED';
         if (obj.status === 'past_due') internalStatus = 'PAST_DUE';
+
+        const metadata = obj.metadata as Record<string, string | undefined>;
 
         return {
             isSubscriptionChange: true,
@@ -82,7 +89,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
             customerId: obj.customer,
             status: internalStatus,
             currentPeriodEnd: new Date(obj.current_period_end * 1000),
-            organizationId: obj.metadata?.organizationId
+            organizationId: metadata?.organizationId
         };
     }
 }

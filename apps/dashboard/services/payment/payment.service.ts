@@ -2,7 +2,7 @@ import { prisma } from '../prisma';
 import { StripeAdapter } from './stripe';
 import { PaystackAdapter } from './paystack';
 import { FlutterwaveAdapter } from './flutterwave';
-import { PaymentProviderAdapter } from './payment.provider';
+import { PaymentProviderAdapter, WebhookPayload } from './payment.provider';
 
 export class PaymentService {
     private providers: Record<string, PaymentProviderAdapter> = {
@@ -76,7 +76,7 @@ export class PaymentService {
      * Handle webhook coming from a payment provider
      * Webhooks modify DB directly here ONLY.
      */
-    async handleWebhook(providerId: string, payload: string, signature: string, eventData: any) {
+    async handleWebhook(providerId: string, payload: string, signature: string, eventData: WebhookPayload) {
         const provider = this.providers[providerId];
         if (!provider) throw new Error('Unknown provider');
 
@@ -91,8 +91,10 @@ export class PaymentService {
 
         // 2. Parse Event via Provider
         const parsedEvent = provider.parseWebhookEvent(eventData);
+        const eventName = ('event' in eventData) ? eventData.event : ('type' in eventData ? eventData.type : 'unknown');
+
         console.log(`[PaymentService] Processing ${providerId} event:`, {
-            event: eventData.event,
+            event: eventName,
             isPayment: parsedEvent.isPayment,
             isSubscription: parsedEvent.isSubscriptionChange
         });

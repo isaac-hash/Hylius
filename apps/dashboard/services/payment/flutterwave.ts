@@ -1,4 +1,4 @@
-import { PaymentProviderAdapter, ParsedWebhookEvent } from './payment.provider';
+import { PaymentProviderAdapter, ParsedWebhookEvent, WebhookPayload, FlutterwaveWebhook } from './payment.provider';
 import { prisma } from '../prisma';
 
 export class FlutterwaveAdapter implements PaymentProviderAdapter {
@@ -98,10 +98,11 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
         return isValid;
     }
 
-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
+    parseWebhookEvent(payload: WebhookPayload): ParsedWebhookEvent {
         // Handle both v3 (event) and v4 (type) payload structures
-        const event = payload.event || payload.type;
-        const data = payload.data;
+        const flwPayload = payload as FlutterwaveWebhook;
+        const event = (flwPayload as any).event || (flwPayload as any).type;
+        const data = flwPayload.data;
 
         console.log(`[FlutterwaveAdapter] Parsing event: ${event}`);
 
@@ -118,12 +119,12 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
         const isCancelled = data.status === 'cancelled' || event === 'subscription.cancelled';
 
         // Extract metadata which can be in data.meta or top-level meta_data (with underscore)
-        const meta = data.meta || payload.meta || payload.meta_data;
-        const organizationId = meta?.organizationId;
-        const planId = meta?.planId;
+        const meta = (data as any).meta || (flwPayload as any).meta || (flwPayload as any).meta_data;
+        const organizationId = meta?.organizationId as string | undefined;
+        const planId = meta?.planId as string | undefined;
 
         // A subscription charge usually has payment_plan, but we can also infer it from our custom planId in meta
-        const isSubscription = !!(data.payment_plan || planId || isSubscriptionEvent);
+        const isSubscription = !!((data as any).payment_plan || planId || isSubscriptionEvent);
 
         console.log(`[FlutterwaveAdapter] Event details:`, {
             isSuccessful,
@@ -131,7 +132,7 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
             isSubscription,
             txRef: data.tx_ref,
             amount: data.amount,
-            plan: data.payment_plan || planId,
+            plan: (data as any).payment_plan || planId,
             organizationId
         });
 
@@ -144,16 +145,16 @@ export class FlutterwaveAdapter implements PaymentProviderAdapter {
             isSubscriptionChange: isSubscription,
             isPayment: isChargeEvent,
             transactionId: data.tx_ref || data.id?.toString(),
-            amount: data.amount,
-            currency: data.currency,
+            amount: data.amount as number | undefined,
+            currency: (data as any).currency as string | undefined,
             // If it's a subscription, we use the tx_ref as a fallback ID if data.id is not suitable
             subscriptionId: isSubscription ? (data.id ? data.id.toString() : data.tx_ref) : undefined,
-            customerId: data.customer?.email,
+            customerId: (data as any).customer?.email,
             status,
             currentPeriodEnd: undefined, // Flutterwave doesn't always provide this in the charge.completed event
             organizationId,
-            flwCustomerId: data.customer?.id?.toString(),
-            flwPaymentMethodId: data.card?.token,
+            flwCustomerId: (data as any).customer?.id?.toString(),
+            flwPaymentMethodId: (data as any).card?.token,
             planId
         };
     }

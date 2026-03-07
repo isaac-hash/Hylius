@@ -1,4 +1,4 @@
-import { PaymentProviderAdapter, ParsedWebhookEvent } from './payment.provider';
+import { PaymentProviderAdapter, ParsedWebhookEvent, WebhookPayload, PaystackWebhook } from './payment.provider';
 import * as crypto from 'crypto';
 
 export class PaystackAdapter implements PaymentProviderAdapter {
@@ -102,9 +102,14 @@ export class PaystackAdapter implements PaymentProviderAdapter {
         return hash === signature;
     }
 
-    parseWebhookEvent(payload: any): ParsedWebhookEvent {
-        const event = payload.event;
-        const data = payload.data;
+    parseWebhookEvent(payload: WebhookPayload): ParsedWebhookEvent {
+        if (!('event' in payload)) {
+            return { isSubscriptionChange: false };
+        }
+
+        const paystackPayload = payload as PaystackWebhook;
+        const event = paystackPayload.event;
+        const data = paystackPayload.data;
 
         const isSubscription = event === 'subscription.create' || event === 'subscription.disable';
         const isPayment = event === 'charge.success';
@@ -124,23 +129,24 @@ export class PaystackAdapter implements PaymentProviderAdapter {
         if (data.status === 'past_due' || data.status === 'failed') internalStatus = 'PAST_DUE';
 
         let organizationId = undefined;
-        if (data.metadata && data.metadata.custom_fields) {
-            const orgField = data.metadata.custom_fields.find((f: any) => f.variable_name === 'organizationId');
-            if (orgField) organizationId = orgField.value;
+        const metadata = data.metadata as any;
+        if (metadata && metadata.custom_fields) {
+            const orgField = metadata.custom_fields.find((f: any) => f.variable_name === 'organizationId');
+            if (orgField) organizationId = orgField.value as string;
         }
 
         return {
             isSubscriptionChange: isSubscription || isSubscriptionPayment,
             isPayment: isPayment,
-            subscriptionId: data.subscription_code || undefined,
-            customerId: data.customer?.customer_code || data.customer?.email,
+            subscriptionId: (data.subscription_code as string) || undefined,
+            customerId: (data.customer as any)?.customer_code || (data.customer as any)?.email,
             status: internalStatus,
-            currentPeriodEnd: data.next_payment_date ? new Date(data.next_payment_date) : undefined,
+            currentPeriodEnd: data.next_payment_date ? new Date(data.next_payment_date as string) : undefined,
             organizationId,
             // Payment fields
             amount: data.amount ? data.amount / 100 : undefined, // Paystack is in kobo
-            currency: data.currency || 'NGN',
-            transactionId: data.reference
+            currency: (data.currency as string) || 'NGN',
+            transactionId: (data.reference as string)
         };
     }
 }
