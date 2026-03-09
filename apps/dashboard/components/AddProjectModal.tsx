@@ -113,6 +113,8 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                 body.githubInstallationId = githubMeta.installationId;
                 if (useGitHubActions) {
                     body.deployStrategy = 'ghcr-pull';
+                } else {
+                    body.deployStrategy = 'auto';
                 }
             }
 

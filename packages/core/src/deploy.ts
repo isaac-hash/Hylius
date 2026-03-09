@@ -130,6 +130,13 @@ function getImageName(project: ProjectConfig): string {
     return project.dockerImage || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}:latest`;
 }
 
+function getDockerEnvArgs(env?: Record<string, string>): string {
+    if (!env) return '';
+    return Object.entries(env)
+        .map(([k, v]) => ` -e "${k}=${String(v).replace(/"/g, '\\"')}"`)
+        .join('');
+}
+
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
     const { server, project, onLog } = options;
     const client = new SSHClient(server);
@@ -204,7 +211,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
         } else if (strategy === 'ghcr-pull') {
             const image = project.ghcrImage;
-            if (!image) throw new Error("ghcrImage is required for the ghcr-pull deploy strategy.");
+            if (!image) throw new Error("Initial deployment must be triggered by GitHub Actions. Please wait for your workflow to finish building the image.");
 
             const containerName = getContainerName(project);
 
@@ -229,21 +236,57 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 log(`Failed to find dynamic port, falling back to 3011: ${e.message}`);
             }
 
-            log(`Assigning port ${port} and replacing container: ${containerName}`);
+            // Detect exposed port from the Docker image
+            log(`Detecting exposed port from image...`);
+            let containerPort = '3000';
+            try {
+                const { stdout: inspectOut } = await client.exec(`docker inspect --format='{{json .Config.ExposedPorts}}' ${image}`);
+                if (inspectOut && inspectOut.trim() !== 'null') {
+                    const exposedPorts = JSON.parse(inspectOut.trim());
+                    if (exposedPorts) {
+                        const ports = Object.keys(exposedPorts).map(p => p.split('/')[0]);
+                        if (ports.length > 0) {
+                            containerPort = ports[0];
+                            log(`Detected exposed port: ${containerPort}`);
+                        } else {
+                            log(`No exposed ports found in image, defaulting to 3000`);
+                        }
+                    }
+                } else {
+                    log(`No exposed ports found in image, defaulting to 3000`);
+                }
+            } catch (e: any) {
+                log(`Failed to detect exposed port, defaulting to 3000: ${e.message}`);
+            }
+
+            if (project.env && project.env.PORT) {
+                containerPort = project.env.PORT;
+                log(`Overriding container port to ${containerPort} from environment variables`);
+            }
+
+            const envArgs = getDockerEnvArgs(project.env);
+            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${containerPort}"`;
+
+            log(`Assigning host port ${port} -> container port ${containerPort} and replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
                 `docker rm -f ${containerName} >/dev/null 2>&1 || true && \
-                 docker run -d --name ${containerName} --restart unless-stopped -p ${port}:3000 ${image}`,
+                 docker run -d --name ${containerName}${envArgs}${portEnvArg} --restart unless-stopped -p ${port}:${containerPort} ${image}`,
                 'Docker run',
                 onLog,
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
+            const appUrl = `http://${options.server.host}:${port}`;
+            log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
+            finalUrl = appUrl;
+
         } else if (strategy === 'dockerfile') {
             const imageName = getImageName(project);
             const containerName = getContainerName(project);
-            const runCommand = project.dockerRunCommand || `docker run -d --name ${containerName} --restart unless-stopped ${imageName}`;
+            const envArgs = getDockerEnvArgs(project.env);
+            const runCommand = project.dockerRunCommand || `docker run -d --name ${containerName}${envArgs} --restart unless-stopped ${imageName}`;
 
             log(`Building Docker image: ${imageName}`);
             await execStreamOrThrow(
@@ -270,8 +313,15 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             // Detect runtime for port mapping
             log('Detecting project runtime...');
             const runtime = await detectRuntime(client, releasePath);
-            const port = getRuntimePort(runtime);
+            let port = getRuntimePort(runtime);
+            if (project.env && project.env.PORT) {
+                port = project.env.PORT;
+                log(`Overriding container port to ${port} from environment variables`);
+            }
             log(`Detected runtime: ${runtime || 'unknown'} (port ${port})`);
+
+            const envArgs = getDockerEnvArgs(project.env);
+            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${port}"`;
 
             // Build with Railpack — it auto-detects everything and sets the start command
             log(`Building container image with Railpack: ${imageName}`);
@@ -286,12 +336,16 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
-                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName} --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --restart unless-stopped -p ${port}:${port} ${imageName}`,
                 'Docker run',
                 onLog,
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+            const appUrl = `http://${options.server.host}:${port}`;
+            log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
+            finalUrl = appUrl;
 
         } else if (strategy === 'nixpacks') {
             const imageName = getImageName(project);
@@ -300,8 +354,15 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             // Detect runtime for port mapping
             log('Detecting project runtime...');
             const runtime = await detectRuntime(client, releasePath);
-            const port = getRuntimePort(runtime);
+            let port = getRuntimePort(runtime);
+            if (project.env && project.env.PORT) {
+                port = project.env.PORT;
+                log(`Overriding container port to ${port} from environment variables`);
+            }
             log(`Detected runtime: ${runtime || 'unknown'} (port ${port})`);
+
+            const envArgs = getDockerEnvArgs(project.env);
+            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${port}"`;
 
             // Build with Nixpacks
             log(`Building container image with Nixpacks: ${imageName}`);
@@ -316,12 +377,16 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
-                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName} --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --restart unless-stopped -p ${port}:${port} ${imageName}`,
                 'Docker run',
                 onLog,
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+            const appUrl = `http://${options.server.host}:${port}`;
+            log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
+            finalUrl = appUrl;
 
         } else {
             // PM2 strategy (no containerization)
@@ -469,6 +534,20 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const appUrl = `http://${options.server.host}:${appPort}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
             finalUrl = appUrl;
+        }
+
+        // ─── Post-deploy: Open UFW port for direct IP access ───
+        if (finalUrl) {
+            try {
+                const urlObj = new URL(finalUrl);
+                const portToOpen = urlObj.port || '80';
+                if (portToOpen !== '80' && portToOpen !== '443') {
+                    log(`Opening UFW firewall for port ${portToOpen}...`);
+                    await client.exec(`ufw allow ${portToOpen}/tcp > /dev/null 2>&1 || true`);
+                }
+            } catch (err) {
+                // Ignore URL parse errors
+            }
         }
 
         // ─── Post-deploy: Update Caddy reverse proxy if domains are configured ───

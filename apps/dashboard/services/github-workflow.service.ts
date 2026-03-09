@@ -1,10 +1,10 @@
 import { getInstallationOctokit } from './github.service';
 
-const WORKFLOW_YAML = `name: Hylius Build & Deploy via GHCR
+const getWorkflowYaml = (branch: string) => `name: Hylius Build & Deploy via GHCR
 
 on:
   push:
-    branches: [main]
+    branches: [${branch}]
 
 jobs:
   build-and-push:
@@ -28,14 +28,16 @@ jobs:
         run: curl -sSL https://railpack.com/install.sh | bash
       - name: Build and push image with Railpack
         run: |
-          railpack build . --name ghcr.io/\${{ github.repository }}:\${{ github.sha }}
-          docker push ghcr.io/\${{ github.repository }}:\${{ github.sha }}
+          REPO_LOWER=$(echo "\${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          railpack build . --name ghcr.io/$REPO_LOWER:\${{ github.sha }}
+          docker push ghcr.io/$REPO_LOWER:\${{ github.sha }}
       - name: Notify Hylius
         run: |
+          REPO_LOWER=$(echo "\${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           curl -X POST "\$HYLIUS_WEBHOOK" \\
             -H "Content-Type: application/json" \\
             -H "Authorization: Bearer \$HYLIUS_TOKEN" \\
-            -d '{"image":"ghcr.io/\${{ github.repository }}:\${{ github.sha }}","sha":"\${{ github.sha }}","repo":"\${{ github.repository }}","ref":"\${{ github.ref }}"}'
+            -d "{\\"image\\":\\"ghcr.io/$REPO_LOWER:\${{ github.sha }}\\",\\"sha\\":\\"\${{ github.sha }}\\",\\"repo\\":\\"\${{ github.repository }}\\",\\"ref\\":\\"\${{ github.ref }}\\"}"
         env:
           HYLIUS_WEBHOOK: \${{ secrets.HYLIUS_WEBHOOK_URL }}
           HYLIUS_TOKEN: \${{ secrets.HYLIUS_API_TOKEN }}
@@ -75,8 +77,8 @@ export async function autoProvisionWorkflow(
       owner,
       repo,
       path,
-      message: 'ci: add Hylius GHCR build workflow',
-      content: Buffer.from(WORKFLOW_YAML).toString('base64'),
+      message: `ci: add Hylius GHCR build workflow for ${branch}`,
+      content: Buffer.from(getWorkflowYaml(branch)).toString('base64'),
       branch,
       sha, // If it exists, we must provide the sha to overwrite it
     });

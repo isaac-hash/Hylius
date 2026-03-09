@@ -44,7 +44,8 @@ app.prepare().then(() => {
             activeDeployments.add(projectId);
 
             try {
-                socket.emit(`deploy_start:${projectId}`, { projectId });
+                // Emit an initial deploy_start so UI knows it started
+                socket.emit(`deploy_start:${projectId}`, { deploymentId: 'pending' });
 
                 const result = await executeDeployment({
                     projectId,

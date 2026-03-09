@@ -1,0 +1,231 @@
+[
+    {
+        "Id": "9b05b0c9128e62f4e12cb753f8788f0475a24b651b54a64b51933dc52e50235f",
+        "Created": "2026-03-09T00:10:11.793340398Z",
+        "Path": "/bin/bash",
+        "Args": [
+            "-c",
+            "caddy run --config /Caddyfile --adapter caddyfile 2>&1"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 7625,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-03-09T00:10:11.84347256Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:6bbf6d8f9fd3c276cea1c01c7245aff824cd4077bc280b82835b81de2e4ffa64",
+        "ResolvConfPath": "/var/lib/docker/containers/9b05b0c9128e62f4e12cb753f8788f0475a24b651b54a64b51933dc52e50235f/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/9b05b0c9128e62f4e12cb753f8788f0475a24b651b54a64b51933dc52e50235f/hostname",
+        "HostsPath": "/var/lib/docker/containers/9b05b0c9128e62f4e12cb753f8788f0475a24b651b54a64b51933dc52e50235f/hosts",
+        "LogPath": "/var/lib/docker/containers/9b05b0c9128e62f4e12cb753f8788f0475a24b651b54a64b51933dc52e50235f/9b05b0c9128e62f4e12cb753f8788f0475a24b651b54a64b51933dc52e50235f-json.log",
+        "Name": "/Teladoc-app",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "3000/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "3011"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "9b05b0c9128e",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "3000/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "CI=true",
+                "MISE_CACHE_DIR=/mise/cache",
+                "MISE_CONFIG_DIR=/mise",
+                "MISE_DATA_DIR=/mise",
+                "MISE_IDIOMATIC_VERSION_FILE_ENABLE_TOOLS=python,node,ruby,elixir,go,java,yarn",
+                "MISE_INSTALLS_DIR=/mise/installs",
+                "MISE_NODE_VERIFY=false",
+                "MISE_PARANOID=1",
+                "MISE_SHIMS_DIR=/mise/shims",
+                "MISE_TRUSTED_CONFIG_PATHS=/app",
+                "NODE_ENV=production",
+                "NPM_CONFIG_FUND=false",
+                "NPM_CONFIG_PRODUCTION=false",
+                "NPM_CONFIG_UPDATE_NOTIFIER=false",
+                "PATH=/app/node_modules/.bin:/mise/shims:/railpack/caddy:/railpack/caddy:/railpack/caddy/bin:/railpack/caddy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "caddy run --config /Caddyfile --adapter caddyfile 2>&1"
+            ],
+            "Image": "ghcr.io/isaac-hash/teladoc:7202f46a84ae7df4e8c55ca6651c2caee4231c05",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "/bin/bash",
+                "-c"
+            ],
+            "Labels": {}
+        },
+        "NetworkSettings": {
+            "SandboxID": "4c651ae42c666b5cd2c74fcf317e96eeb01acbe22a6457546838dad8eb6dda75",
+            "SandboxKey": "/var/run/docker/netns/4c651ae42c66",
+            "Ports": {
+                "3000/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "3011"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "3011"
+                    }
+                ]
+            },
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "fec42ceebff66e724361c51d47a4b95735f9135ce1fdbd87a7e2f5ec8dd0ad99",
+                    "EndpointID": "6b48e52ad2760ac217a79c1f577df9215c4edd8e4fd82e557c89589ac90a6c1d",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.2",
+                    "MacAddress": "4e:5a:26:e6:45:51",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+            "digest": "sha256:6bbf6d8f9fd3c276cea1c01c7245aff824cd4077bc280b82835b81de2e4ffa64",
+            "size": 1577,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

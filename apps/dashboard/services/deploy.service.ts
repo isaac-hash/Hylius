@@ -91,6 +91,15 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         }
     }
 
+    let envVars: Record<string, string> | undefined = undefined;
+    if (project.envVars) {
+        try {
+            envVars = JSON.parse(project.envVars as string);
+        } catch (e: any) {
+            log(`Warning: Failed to parse project envVars: ${e.message}\n`);
+        }
+    }
+
     const projectConfig: ProjectConfig = {
         name: project.name,
         repoUrl,
@@ -100,6 +109,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         startCommand: project.startCommand || undefined,
         deployStrategy: (project.deployStrategy as any) || 'auto',
         ghcrImage: project.ghcrImage || undefined,
+        env: envVars,
     };
 
     // Build domain configs if domains exist
