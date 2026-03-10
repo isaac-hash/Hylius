@@ -63,6 +63,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
     const [editServerModalOpen, setEditServerModalOpen] = useState(false);
     const [activeDeployProjectId, setActiveDeployProjectId] = useState<string | null>(null);
     const [deletingProject, setDeletingProject] = useState<string | null>(null);
+    const [newlyProvisionedProjects, setNewlyProvisionedProjects] = useState<Record<string, { token: string; webhookUrl: string }>>({});
     const [refreshKey, setRefreshKey] = useState(0);
 
     // Metrics state
@@ -352,6 +353,44 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                 </button>
                                                             </div>
                                                         </div>
+
+                                                        {newlyProvisionedProjects[project.id] && (
+                                                            <div className="mb-4 bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-lg">
+                                                                <div className="flex items-start gap-3 mb-3">
+                                                                    <svg className="w-5 h-5 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                    <div>
+                                                                        <h3 className="font-medium text-green-300">Project Created & Workflow Provisioned!</h3>
+                                                                        <p className="text-sm mt-1 text-green-100/70">A GitHub Actions workflow file has been committed to your repository. To allow the workflow to notify Hylius when a build is complete, please add these two repository secrets in GitHub:</p>
+                                                                    </div>
+                                                                    <button onClick={() => {
+                                                                        const copy = { ...newlyProvisionedProjects };
+                                                                        delete copy[project.id];
+                                                                        setNewlyProvisionedProjects(copy);
+                                                                    }} className="ml-auto text-green-400 hover:text-green-300">
+                                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                                    </button>
+                                                                </div>
+                                                                <div className="space-y-3 pl-8">
+                                                                    <div>
+                                                                        <label className="block text-xs text-green-400/80 font-mono mb-1">HYLIUS_WEBHOOK_URL</label>
+                                                                        <div className="flex bg-black/50 border border-green-500/30 rounded overflow-hidden">
+                                                                            <input readOnly value={newlyProvisionedProjects[project.id].webhookUrl} className="flex-1 bg-transparent p-2 text-sm text-green-100 font-mono outline-none" />
+                                                                            <button onClick={() => navigator.clipboard.writeText(newlyProvisionedProjects[project.id].webhookUrl)} className="px-3 bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors" title="Copy">📋</button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-xs text-green-400/80 font-mono mb-1">HYLIUS_API_TOKEN</label>
+                                                                        <div className="flex bg-black/50 border border-green-500/30 rounded overflow-hidden">
+                                                                            <input readOnly value={newlyProvisionedProjects[project.id].token} className="flex-1 bg-transparent p-2 text-sm text-green-100 font-mono outline-none" />
+                                                                            <button onClick={() => navigator.clipboard.writeText(newlyProvisionedProjects[project.id].token)} className="px-3 bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors" title="Copy">📋</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         <div className="grid grid-cols-2 gap-4 text-sm text-gray-400 font-mono bg-black/30 p-3 rounded-lg border border-gray-800/80">
                                                             <div>
                                                                 <span className="text-gray-500 text-xs uppercase tracking-wider block mb-1">Deploy Path</span>
@@ -528,8 +567,11 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                     onClose={() => setAddProjectModalOpen(false)}
                     serverId={server?.id || ''}
                     serverName={server?.name || ''}
-                    onAdded={() => {
+                    onAdded={(newProjectId, successData) => {
                         setAddProjectModalOpen(false);
+                        if (newProjectId && successData) {
+                            setNewlyProvisionedProjects(prev => ({ ...prev, [newProjectId]: successData }));
+                        }
                         setRefreshKey(k => k + 1); // Refresh server details to show new project
                     }}
                 />

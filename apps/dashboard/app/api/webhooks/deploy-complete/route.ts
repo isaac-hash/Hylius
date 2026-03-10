@@ -36,10 +36,13 @@ export async function POST(request: Request) {
         });
 
         const body = await request.json();
-        const { image, sha, repo, ref } = body;
+        const { image, sha, repo, ref, compose } = body;
 
-        if (!image || !repo) {
-            return NextResponse.json({ error: 'Missing required fields: image, repo' }, { status: 400 });
+        if (!repo) {
+            return NextResponse.json({ error: 'Missing required field: repo' }, { status: 400 });
+        }
+        if (!compose && !image) {
+            return NextResponse.json({ error: 'Missing required field: image' }, { status: 400 });
         }
 
         // 2. Find matching project for this repo
@@ -72,20 +75,30 @@ export async function POST(request: Request) {
         // 4. Trigger deployments
         const deployStats = [];
         for (const project of targetProjects) {
-            // Validate that the project is configured for GHCR pull
-            if (project.deployStrategy !== 'ghcr-pull') {
-                console.log(`[Deploy Webhook] Skipping ${project.name} because deployStrategy is ${project.deployStrategy}`);
-                deployStats.push({ project: project.name, status: 'skipped (not ghcr-pull)' });
-                continue;
+            if (compose) {
+                if (project.deployStrategy !== 'compose-registry') {
+                    console.log(`[Deploy Webhook] Skipping ${project.name} because deployStrategy is ${project.deployStrategy} (expected compose-registry)`);
+                    deployStats.push({ project: project.name, status: 'skipped (not compose-registry)' });
+                    continue;
+                }
+            } else {
+                // Validate that the project is configured for GHCR pull
+                if (project.deployStrategy !== 'ghcr-pull') {
+                    console.log(`[Deploy Webhook] Skipping ${project.name} because deployStrategy is ${project.deployStrategy}`);
+                    deployStats.push({ project: project.name, status: 'skipped (not ghcr-pull)' });
+                    continue;
+                }
             }
 
-            console.log(`[Deploy Webhook] Triggering deploy for ${project.name} (GHCR Image: ${image})`);
+            console.log(`[Deploy Webhook] Triggering deploy for ${project.name} (${compose ? 'compose' : 'image: ' + image})`);
 
-            // Update the project with the specific image tag for this deployment
-            await prisma.project.update({
-                where: { id: project.id },
-                data: { ghcrImage: image }
-            });
+            if (!compose) {
+                // Update the project with the specific image tag for this deployment
+                await prisma.project.update({
+                    where: { id: project.id },
+                    data: { ghcrImage: image }
+                });
+            }
 
             // Note: fire-and-forget in background since it might take a few seconds
             executeDeployment({

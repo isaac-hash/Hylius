@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../services/prisma';
 import { requireAuth } from '../../../../services/auth.service';
-import { getInstallationOctokit } from '../../../../services/github.service';
+import { getAppOctokit } from '../../../../services/github.service';
 
 /**
  * Handle POST /api/github/installations
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         // If accountLogin wasn't provided, fetch it from the GitHub API
         if (!accountLogin || accountLogin === 'unknown') {
             try {
-                const octokit = await getInstallationOctokit(id);
+                const octokit = getAppOctokit();
                 const { data } = await octokit.apps.getInstallation({ installation_id: id });
                 accountLogin = (data.account as any)?.login || 'unknown';
                 accountType = (data.account as any)?.type || 'User';

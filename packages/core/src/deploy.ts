@@ -95,7 +95,7 @@ function getRuntimePort(runtime: ProjectRuntime | null): string {
     }
 }
 
-type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2' | 'ghcr-pull';
+type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2' | 'ghcr-pull' | 'compose-registry' | 'compose-server';
 
 /**
  * Determine how to deploy the project based on existing files or explicit config.
@@ -203,11 +203,90 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Running Docker Compose using ${composeFile}...`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && docker compose -f ${composeFile} up -d --build --remove-orphans`,
+                `cd ${releasePath} && docker compose -p ${project.name} -f ${composeFile} up -d --build --remove-orphans`,
                 'Docker Compose deploy',
                 onLog,
             );
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+        } else if (strategy === 'compose-registry') {
+            log(`Deploying via docker-compose (Pulling from Registry)...`);
+            const composeFile = project.dockerComposeFile || 'docker-compose.yml';
+            const fallbackComposeFile = 'compose.yaml';
+
+            const fileToUse = (await hasFile(client, `${releasePath}/${composeFile}`)) ? composeFile : fallbackComposeFile;
+
+            await execStreamOrThrow(
+                client,
+                `cd ${releasePath} && docker compose -f ${fileToUse} pull`,
+                'Docker Compose Pull',
+                onLog
+            );
+
+            log(`Running docker-compose up for project ${project.name}...`);
+            await execStreamOrThrow(
+                client,
+                `cd ${releasePath} && docker compose -p ${project.name} -f ${fileToUse} up -d --remove-orphans`,
+                'Docker Compose Up',
+                onLog
+            );
+
+            await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+            log(`Detecting exposed port from compose stack...`);
+            let composePort = '';
+            try {
+                const { stdout: psOut } = await client.exec(
+                    `docker ps --filter "name=${project.name}" --format "{{.Ports}}"`
+                );
+                const match = psOut.match(/:(\d+)->/);
+                if (match && match[1]) {
+                    composePort = match[1];
+                    log(`Detected compose mapped port: ${composePort}`);
+                }
+            } catch (e: any) {
+                log(`Failed to detect compose port: ${e.message}`);
+            }
+            finalUrl = `http://${options.server.host}${composePort ? `:${composePort}` : ''}`;
+
+        } else if (strategy === 'compose-server') {
+            log(`Deploying via docker-compose (Building on Server)...`);
+            const composeFile = project.dockerComposeFile || 'docker-compose.yml';
+            const fallbackComposeFile = 'compose.yaml';
+
+            const fileToUse = (await hasFile(client, `${releasePath}/${composeFile}`)) ? composeFile : fallbackComposeFile;
+
+            // Patch compose target from development to production for server deployments
+            log('Patching compose target to production...');
+            await client.exec(
+                `cd ${releasePath} && sed -i 's/target: development/target: production/g' ${fileToUse}`
+            );
+
+            log(`Running docker-compose up --build for project ${project.name}...`);
+            await execStreamOrThrow(
+                client,
+                `cd ${releasePath} && docker compose -p ${project.name} -f ${fileToUse} up -d --build --remove-orphans`,
+                'Docker Compose Up (Build)',
+                onLog
+            );
+
+            await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+            log(`Detecting exposed port from compose stack...`);
+            let composePort = '';
+            try {
+                const { stdout: psOut } = await client.exec(
+                    `docker ps --filter "name=${project.name}" --format "{{.Ports}}"`
+                );
+                const match = psOut.match(/:(\d+)->/);
+                if (match && match[1]) {
+                    composePort = match[1];
+                    log(`Detected compose mapped port: ${composePort}`);
+                }
+            } catch (e: any) {
+                log(`Failed to detect compose port: ${e.message}`);
+            }
+            finalUrl = `http://${options.server.host}${composePort ? `:${composePort}` : ''}`;
 
         } else if (strategy === 'ghcr-pull') {
             const image = project.ghcrImage;

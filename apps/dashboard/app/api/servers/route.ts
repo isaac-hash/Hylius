@@ -47,10 +47,13 @@ export async function POST(request: Request) {
             keyIv = encrypted.iv;
         }
 
+        // Clean the IP address (remove http:// or https:// if user accidentally included it)
+        const cleanIp = ip.replace(/^https?:\/\//, '').split('/')[0];
+
         const server = await prisma.server.create({
             data: {
                 name,
-                ip,
+                ip: cleanIp,
                 username,
                 port: port || 22,
                 privateKeyEncrypted,

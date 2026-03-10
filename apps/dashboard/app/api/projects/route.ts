@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../services/prisma';
 import { requireAuth } from '../../../services/auth.service';
-import { autoProvisionWorkflow } from '../../../services/github-workflow.service';
+import { autoProvisionWorkflow, autoProvisionComposeWorkflow } from '../../../services/github-workflow.service';
 
 export async function GET(request: Request) {
     try {
@@ -92,6 +92,9 @@ export async function POST(request: Request) {
             // Non-blocking fire-and-forget so UI returns quickly
             autoProvisionWorkflow(githubInstallationId, githubRepoFullName, project.branch)
                 .catch(err => console.error('[Projects API] Workflow provision failed:', err));
+        } else if (deployStrategy === 'compose-registry' && githubInstallationId && githubRepoFullName) {
+            autoProvisionComposeWorkflow(githubInstallationId, githubRepoFullName, project.branch)
+                .catch(err => console.error('[Projects API] Compose workflow provision failed:', err));
         }
 
         return NextResponse.json(project);
