@@ -88,17 +88,39 @@ async function handlePush(body: any) {
         }
 
         try {
+            if ((global as any).io) {
+                (global as any).io.emit(`deploy_start:${project.id}`, { deploymentId: 'pending' });
+            }
+
             const result = await executeDeployment({
                 projectId: project.id,
                 trigger: 'webhook',
                 onLog: (chunk) => {
                     // Webhook deploys are fire-and-forget — log to console
                     process.stdout.write(`[webhook:${project.name}] ${chunk}`);
+                    if ((global as any).io) {
+                        (global as any).io.emit(`log:${project.id}`, chunk);
+                    }
                 },
             });
+
+            if ((global as any).io) {
+                if (result.success) {
+                    (global as any).io.emit(`deploy_success:${project.id}`, result);
+                    (global as any).io.emit(`log:${project.id}`, `\n\x1b[32mDeployment Successful! Release: ${result.releaseId}\x1b[0m\n`);
+                } else {
+                    (global as any).io.emit(`deploy_error:${project.id}`, result.error);
+                    (global as any).io.emit(`log:${project.id}`, `\n\x1b[31mDeployment Failed: ${result.error}\x1b[0m\n`);
+                }
+            }
+
             results.push({ projectId: project.id, name: project.name, success: result.success });
         } catch (err: any) {
             console.error(`[GitHub Webhook] Deploy failed for ${project.name}:`, err.message);
+            if ((global as any).io) {
+                (global as any).io.emit(`error:${project.id}`, err.message);
+                (global as any).io.emit(`log:${project.id}`, `\n\x1b[31mSystem Error: ${err.message}\x1b[0m\n`);
+            }
             results.push({ projectId: project.id, name: project.name, success: false, error: err.message });
         }
     }

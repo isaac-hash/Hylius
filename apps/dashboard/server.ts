@@ -27,6 +27,7 @@ app.prepare().then(() => {
     const httpServer = createServer(handler);
 
     const io = new Server(httpServer);
+    (global as any).io = io; // Expose globally for API routes (e.g. webhooks)
 
     io.on('connection', (socket) => {
         console.log('Client connected:', socket.id);

@@ -101,11 +101,36 @@ export async function POST(request: Request) {
             }
 
             // Note: fire-and-forget in background since it might take a few seconds
+            if ((global as any).io) {
+                (global as any).io.emit(`deploy_start:${project.id}`, { deploymentId: 'pending' });
+            }
+
             executeDeployment({
                 projectId: project.id,
                 trigger: 'webhook',
-                onLog: (chunk) => process.stdout.write(`[Deploy Worker] ${chunk}`)
-            }).catch(e => console.error('[Webhook Deploy Task Error]', e));
+                onLog: (chunk) => {
+                    process.stdout.write(`[Deploy Worker] ${chunk}`);
+                    if ((global as any).io) {
+                        (global as any).io.emit(`log:${project.id}`, chunk);
+                    }
+                }
+            }).then(result => {
+                if ((global as any).io) {
+                    if (result.success) {
+                        (global as any).io.emit(`deploy_success:${project.id}`, result);
+                        (global as any).io.emit(`log:${project.id}`, `\n\x1b[32mDeployment Successful! Release: ${result.releaseId}\x1b[0m\n`);
+                    } else {
+                        (global as any).io.emit(`deploy_error:${project.id}`, result.error);
+                        (global as any).io.emit(`log:${project.id}`, `\n\x1b[31mDeployment Failed: ${result.error}\x1b[0m\n`);
+                    }
+                }
+            }).catch(e => {
+                console.error('[Webhook Deploy Task Error]', e);
+                if ((global as any).io) {
+                    (global as any).io.emit(`error:${project.id}`, e.message);
+                    (global as any).io.emit(`log:${project.id}`, `\n\x1b[31mSystem Error: ${e.message}\x1b[0m\n`);
+                }
+            });
 
             deployStats.push({ project: project.name, status: 'triggered' });
         }
