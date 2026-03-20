@@ -7,7 +7,7 @@ import next from 'next';
 import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 // @ts-ignore - Local workspace package
-import { setup, ServerConfig, SetupOptions } from '@hylius/core';
+import { setup, ServerConfig, SetupOptions, SSHClient } from '@hylius/core';
 import { decrypt } from './services/crypto.service';
 import { executeDeployment } from './services/deploy.service';
 
@@ -22,6 +22,9 @@ const prisma = new PrismaClient();
 // Track active deployments to prevent concurrent duplicate calls or spam
 const activeDeployments = new Set<string>();
 const activeSetups = new Set<string>();
+
+// Track active log streams: projectId → SSHClient (so we can destroy on unwatch/disconnect)
+const activeLogStreams = new Map<string, SSHClient>();
 
 app.prepare().then(() => {
     const httpServer = createServer(handler);
@@ -159,6 +162,88 @@ app.prepare().then(() => {
                 socket.emit('log', `\n\x1b[31mSystem Error: ${error.message}\x1b[0m\n`);
             } finally {
                 activeSetups.delete(serverId);
+            }
+        });
+
+        // ─── watch-logs: stream runtime logs from the VPS ────────────────────
+        socket.on('watch-logs', async (data: { projectId: string }) => {
+            const { projectId } = data;
+
+            // Prevent duplicate stream for same project
+            if (activeLogStreams.has(projectId)) {
+                socket.emit(`logs:connected:${projectId}`);
+                return;
+            }
+
+            try {
+                const project = await prisma.project.findUnique({
+                    where: { id: projectId },
+                    include: { server: true },
+                });
+
+                if (!project) {
+                    socket.emit(`logs:error:${projectId}`, 'Project not found');
+                    return;
+                }
+
+                let privateKey = '';
+                if (project.server.privateKeyEncrypted && project.server.keyIv) {
+                    privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv);
+                }
+
+                const sshClient = new SSHClient({
+                    // @ts-ignore
+                    host: project.server.ip,
+                    port: project.server.port,
+                    username: project.server.username,
+                    privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                    password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
+                });
+
+                await sshClient.connect();
+                activeLogStreams.set(projectId, sshClient);
+                socket.emit(`logs:connected:${projectId}`);
+
+                const containerName = `${project.name}-app`;  // mirrors deploy.ts getContainerName()
+
+                // Try docker logs --follow first; if it fails (container not found), fall back to PM2
+                const { code: dockerCheck } = await sshClient.exec(
+                    `docker inspect ${containerName} --format='{{.State.Running}}' 2>/dev/null`
+                );
+
+                const logCommand = dockerCheck === 0
+                    ? `docker logs --tail 100 --follow ${containerName} 2>&1`
+                    : `pm2 logs ${project.name} --nocolor --lines 100 2>&1`;
+
+                // execStream keeps the SSH connection open and fires callbacks per chunk
+                sshClient.execStream(
+                    logCommand,
+                    (chunk: string) => socket.emit(`logs:data:${projectId}`, chunk),
+                    (chunk: string) => socket.emit(`logs:data:${projectId}`, chunk),
+                ).then(() => {
+                    socket.emit(`logs:closed:${projectId}`);
+                    activeLogStreams.delete(projectId);
+                    sshClient.end();
+                }).catch((err: Error) => {
+                    socket.emit(`logs:error:${projectId}`, err.message);
+                    activeLogStreams.delete(projectId);
+                    sshClient.end();
+                });
+
+            } catch (err: any) {
+                console.error('[watch-logs] error:', err);
+                socket.emit(`logs:error:${projectId}`, err.message || 'SSH connection failed');
+                activeLogStreams.delete(projectId);
+            }
+        });
+
+        // ─── unwatch-logs: client explicitly closes the log stream ───────────
+        socket.on('unwatch-logs', (data: { projectId: string }) => {
+            const { projectId } = data;
+            const sshClient = activeLogStreams.get(projectId);
+            if (sshClient) {
+                sshClient.end();
+                activeLogStreams.delete(projectId);
             }
         });
 

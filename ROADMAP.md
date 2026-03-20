@@ -46,7 +46,7 @@
 - **100% Agent-less**: Zero footprint on target servers — SSH in, execute, disconnect
 - **User-owned infrastructure**: No lock-in, standard Docker images
 - **Passive monitoring**: `docker stats` via SSH, no agents eating RAM
-- **Build offloading** (planned): GitHub Actions builds → GHCR pull on VPS
+- **Build offloading**: CI builds (GitHub Actions / GitLab CI / Bitbucket Pipelines) → registry pull on VPS
 
 ---
 
@@ -56,11 +56,12 @@
 |-------|---------|-----------------|--------|---------------|
 | **Phase 1** | 🔒 **Domain + SSL (Caddy)** | Production-grade URLs, HTTPS | Medium | ✅ Done |
 | **Phase 2** | 🔗 **GitHub App + Webhooks** | Auto-deploy on push from dashboard | Medium | ✅ Done |
-| **Phase 3** | 🏗️ **CI-Build via GitHub Actions + GHCR** | Offload builds, zero-downtime pulls | Medium | Pending |
+| **Phase 3** | 🏗️ **CI-Build via Dagger + GHCR** | Offload builds to CI compute, VPS only runs finished images | Medium | Pending |
+| **Phase 3.5** | 🌐 **Multi-Git-Provider (GitLab + Bitbucket)** | Same offloaded-build flow for GitLab and Bitbucket users | Medium | Pending |
 | **Phase 4** | 👁️ **Preview Deployments** | Per-branch URLs (requires Phase 1 + 2) | High | Pending |
 | **Phase 5** | 🌍 **Environment Variables UI** | Per-environment editor, secrets management | Low | Pending |
 | **Phase 6** | 📊 **Monitoring Dashboard** | Charts from existing `getPulse` data | Medium | Pending |
-| **Phase 7** | 💾 **Build Logs + GitHub Commit Statuses** | Vercel-style deploy status on GitHub, real-time log viewer | Medium | Pending |
+| **Phase 7** | 💾 **Build Logs + Commit Statuses** | Vercel-style deploy status on GitHub/GitLab/Bitbucket, real-time log viewer | Medium | Pending |
 | **Phase 8** | 🗄️ **Database Management** | Deploy Postgres/MySQL/Redis alongside apps | High | Pending |
 | **Phase 9** | 📦 **One-Click Templates** | WordPress, Ghost, etc. | Low | Pending |
 
@@ -86,15 +87,45 @@
 
 ---
 
-## Phase 3 Summary: CI-Build via GitHub Actions + GHCR
+## Phase 3 Summary: CI-Build via Dagger + GHCR
 
-> **Goal**: Offload expensive Docker builds from cheap VPSs to GitHub's free infrastructure (2,000 min/month).
+> **Goal**: Offload expensive Docker builds from cheap VPSs to GitHub's free infrastructure (2,000 min/month). Use Dagger as the build engine so pipelines are programmable, cached, and CI-provider agnostic from day one.
+
+### Core Philosophy
+
+The VPS should only ever be a **runtime**, not a build machine. Every strategy that currently builds on the VPS (railpack, nixpacks, dockerfile, pm2) gets replaced by: build in CI → push image → VPS does `docker pull` only.
 
 ### Architecture
 
-1. **`ci-generate.ts` produces a new workflow type**: Build with Railpack → Push to GHCR → Notify Hylius
-2. **Dashboard webhook** receives build-complete event, SSHs into VPS, runs `docker compose pull && docker compose up -d`
-3. **Result**: VPS only downloads pre-built layers — near-zero CPU spike during deploy
+1. **`ci-generate.ts` adds a `--dagger` flag** that generates 3 files instead of raw YAML:
+   - `.dagger/dagger.json` — Dagger module config
+   - `.dagger/src/index.ts` — The actual pipeline (auto-detects Dockerfile / railpack / nixpacks, builds image, pushes to registry, calls Hylius webhook)
+   - A thin CI wrapper (`.github/workflows/hylius.yml`) — just calls `dagger call build-and-push`
+2. **Build flow**: CI runner → Dagger engine → detect project type → build image → push to GHCR
+3. **Dashboard webhook** (`/api/webhooks/deploy-complete`) receives build-complete event → SSHs into VPS → `docker pull && docker run`
+4. **Result**: VPS only downloads pre-built layers — near-zero CPU spike during deploy
+
+### Why Dagger over raw GitHub Actions YAML
+
+| Property | Raw GitHub Actions YAML | Dagger |
+|----------|------------------------|--------|
+| Logic language | YAML | TypeScript (same as Hylius core) |
+| Caching | Manual cache actions | Automatic content-addressed caching |
+| CI portability | GitHub only | GitHub, GitLab, Bitbucket, local |
+| Local debugging | Push and pray | `dagger call build-and-push` locally |
+| Build speed (repeat) | ~3–5 min | ~30–60 sec (layers cached) |
+
+### Non-Containerized Projects (railpack/nixpacks)
+
+For projects without a Dockerfile, the Dagger module runs railpack or nixpacks in **generate mode** (produces a Dockerfile without needing a Docker daemon), then Dagger builds from that Dockerfile natively using its own BuildKit. No Docker-in-Docker, no VPS build load.
+
+```
+Project has no Dockerfile?
+  → railpack generate  (runs in CI, outputs Dockerfile)
+  → Dagger builds from generated Dockerfile
+  → Image pushed to GHCR
+  → VPS: docker pull + run ✅
+```
 
 ### The "Killer" Selling Point
 
@@ -102,7 +133,46 @@
 
 ---
 
-## Phase 7 Summary: Build Logs + GitHub Commit Statuses
+## Phase 3.5 Summary: Multi-Git-Provider Support (GitLab + Bitbucket)
+
+> **Goal**: Extend the platform beyond GitHub so users on GitLab or Bitbucket get the same auto-deploy + offloaded-build experience. Since all three platforms provide free CI compute, the Dagger module is identical — only the thin CI wrapper differs.
+
+### Why This Comes Right After Phase 3
+
+The Dagger architecture makes multi-provider support almost free to add. The `.dagger/src/index.ts` build pipeline is **identical** for all three platforms. The only difference is:
+- Which CI YAML wrapper gets generated
+- Which container registry the image is pushed to
+- How the platform OAuth and webhooks are configured
+
+### Architecture
+
+1. **New OAuth connections** in the dashboard: GitLab OAuth App + Bitbucket OAuth 2.0 (alongside existing GitHub App)
+2. **Provider detection**: Project stores `gitProvider` field → routing logic selects the right CI wrapper, registry, and webhook auth
+3. **CI wrappers generated per platform** (same Dagger module, different thin YAML):
+   - GitHub → `.github/workflows/hylius.yml` → image pushed to GHCR
+   - GitLab → `.gitlab-ci.yml` → image pushed to GitLab Container Registry
+   - Bitbucket → `bitbucket-pipelines.yml` → image pushed to DockerHub
+4. **New services**: `gitlab.service.ts`, `bitbucket.service.ts`, unified `git-provider.service.ts` router
+5. **Schema additions**: `gitProvider`, `gitlabProjectId`, `gitlabRepoFullName`, `bitbucketWorkspace`, `bitbucketRepoSlug`, `dockerhubUsername` on `Project`
+
+### Registry Strategy
+
+| Provider | Registry | Auth |
+|----------|----------|------|
+| GitHub | GHCR (`ghcr.io`) | `GITHUB_TOKEN` — built-in, zero config for user |
+| GitLab | GitLab Registry (`registry.gitlab.com`) | `CI_REGISTRY_USER/PASSWORD` — built-in GitLab vars |
+| Bitbucket | DockerHub (`docker.io`) | User provides `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` |
+
+> **Future**: A Hylius-managed registry removes the DockerHub dependency for Bitbucket users entirely and gives full control over the registry layer.
+
+### Build Order
+
+1. **GitLab first** — native registry, similar OAuth flow to GitHub App, better free CI tier than Bitbucket
+2. **Bitbucket second** — DockerHub as registry requirement initially
+3. **Hylius-managed registry later** — when scale justifies owning the registry
+
+---
+## Phase 7 Summary: Build Logs + Commit Statuses
 
 > **Goal**: Report deployment status back to GitHub (like Vercel) and provide a deployment detail page with real-time build logs.
 

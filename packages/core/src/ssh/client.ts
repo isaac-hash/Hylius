@@ -18,6 +18,7 @@ export class SSHClient {
                 port: this.config.port || 22,
                 username: this.config.username,
                 password: this.config.password,
+                readyTimeout: 5000,
             };
 
             if (this.config.privateKey) {

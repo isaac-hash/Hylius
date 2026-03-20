@@ -18,7 +18,12 @@ const ProvisionTerminalModal = dynamic(() => import('@/components/ProvisionTermi
 
 const DeploymentTerminal = dynamic(() => import('@/components/DeploymentTerminal'), {
     ssr: false,
-    loading: () => <div className="w-full h-[400px] bg-[#0d1117] rounded-lg border border-gray-800 flex items-center justify-center text-gray-500">Loading terminal...</div>
+    loading: () => <div className="w-full bg-[#0a0e14] rounded-xl border border-gray-800 flex items-center justify-center text-gray-600 py-12">Loading deployment console...</div>
+});
+
+const ProjectLogsTerminal = dynamic(() => import('@/components/ProjectLogsTerminal'), {
+    ssr: false,
+    loading: () => <div className="w-full bg-[#0a0e14] rounded-xl border border-gray-800 flex items-center justify-center text-gray-600 py-12">Loading log console...</div>
 });
 
 interface DetailedProject {
@@ -62,6 +67,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
     const [addProjectModalOpen, setAddProjectModalOpen] = useState(false);
     const [editServerModalOpen, setEditServerModalOpen] = useState(false);
     const [activeDeployProjectId, setActiveDeployProjectId] = useState<string | null>(null);
+    const [activeLogsProjectId, setActiveLogsProjectId] = useState<string | null>(null);
     const [deletingProject, setDeletingProject] = useState<string | null>(null);
     const [newlyProvisionedProjects, setNewlyProvisionedProjects] = useState<Record<string, { token: string; webhookUrl: string }>>({});
     const [refreshKey, setRefreshKey] = useState(0);
@@ -343,6 +349,21 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                                     )}
                                                                 </button>
+                                                                {/* Logs button */}
+                                                                <button
+                                                                    onClick={() => setActiveLogsProjectId(
+                                                                        activeLogsProjectId === project.id ? null : project.id
+                                                                    )}
+                                                                    disabled={deletingProject !== null}
+                                                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${activeLogsProjectId === project.id
+                                                                            ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                                                                            : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+                                                                        }`}
+                                                                    title="View live logs"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                                                    {activeLogsProjectId === project.id ? 'Close Logs' : 'Logs'}
+                                                                </button>
                                                                 <button
                                                                     onClick={() => setActiveDeployProjectId(project.id)}
                                                                     disabled={activeDeployProjectId !== null || deletingProject !== null}
@@ -411,30 +432,33 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                         token={token}
                                                     />
 
-                                                    {/* Active Deployment Terminal Dropdown inline */}
+                                                    {/* Active Deployment Terminal */}
                                                     {activeDeployProjectId === project.id && (
-                                                        <div className="border-t border-gray-800 bg-black p-4">
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <h4 className="text-sm font-semibold flex items-center gap-2 text-white">
-                                                                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                                                    Live Deployment Console
-                                                                </h4>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setActiveDeployProjectId(null);
-                                                                        setRefreshKey(k => k + 1); // Refresh page data on terminal close
-                                                                    }}
-                                                                    className="text-xs text-gray-400 hover:text-white"
-                                                                >
-                                                                    Close Terminal
-                                                                </button>
-                                                            </div>
+                                                        <div className="border-t border-gray-800">
                                                             <DeploymentTerminal
                                                                 projectId={project.id}
+                                                                projectName={project.name}
+                                                                branch={project.branch}
                                                                 active={true}
                                                                 onDeployFinished={() => {
                                                                     setRefreshKey(k => k + 1);
                                                                 }}
+                                                                onClose={() => {
+                                                                    setActiveDeployProjectId(null);
+                                                                    setRefreshKey(k => k + 1);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Live Logs Terminal */}
+                                                    {activeLogsProjectId === project.id && (
+                                                        <div className="border-t border-gray-800">
+                                                            <ProjectLogsTerminal
+                                                                projectId={project.id}
+                                                                projectName={project.name}
+                                                                active={true}
+                                                                onClose={() => setActiveLogsProjectId(null)}
                                                             />
                                                         </div>
                                                     )}

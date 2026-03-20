@@ -1,0 +1,26 @@
+[
+  {
+    "id": "cmmdqvft5002nkmfwy5zbhvur",
+    "name": "demo-vps",
+    "ip": "127.0.0.1",
+    "port": 2225
+  },
+  {
+    "id": "cmmia65qo0001ho37svb9ydyl",
+    "name": "dummy-vps",
+    "ip": "87.106.67.89",
+    "port": 22
+  },
+  {
+    "id": "cmmjt1um0000riui5p35m4pft",
+    "name": "my-vps",
+    "ip": "87.106.67.89",
+    "port": 22
+  },
+  {
+    "id": "cmmqhixwu004d4zwdbfo1naib",
+    "name": "vicade",
+    "ip": "87.106.67.89",
+    "port": 22
+  }
+]
