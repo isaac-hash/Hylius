@@ -107,7 +107,8 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         deployPath: project.deployPath,
         buildCommand: project.buildCommand || undefined,
         startCommand: project.startCommand || undefined,
-        deployStrategy: (project.deployStrategy as any) || 'auto',
+        // 'dagger' strategy produces a GHCR image just like 'ghcr-pull' — VPS behavior is identical
+        deployStrategy: (project.deployStrategy === 'dagger' ? 'ghcr-pull' : project.deployStrategy as any) || 'auto',
         ghcrImage: project.ghcrImage || undefined,
         env: envVars,
     };

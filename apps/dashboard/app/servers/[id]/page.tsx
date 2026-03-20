@@ -69,7 +69,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
     const [activeDeployProjectId, setActiveDeployProjectId] = useState<string | null>(null);
     const [activeLogsProjectId, setActiveLogsProjectId] = useState<string | null>(null);
     const [deletingProject, setDeletingProject] = useState<string | null>(null);
-    const [newlyProvisionedProjects, setNewlyProvisionedProjects] = useState<Record<string, { token: string; webhookUrl: string }>>({});
+    const [newlyProvisionedProjects, setNewlyProvisionedProjects] = useState<Record<string, { token: string; webhookUrl: string; prUrl?: string | null }>>({});
     const [refreshKey, setRefreshKey] = useState(0);
 
     // Metrics state
@@ -383,7 +383,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                     </svg>
                                                                     <div>
                                                                         <h3 className="font-medium text-green-300">Project Created & Workflow Provisioned!</h3>
-                                                                        <p className="text-sm mt-1 text-green-100/70">A GitHub Actions workflow file has been committed to your repository. To allow the workflow to notify Hylius when a build is complete, please add these two repository secrets in GitHub:</p>
+                                                                        <p className="text-sm mt-1 text-green-100/70">Add these two secrets to your GitHub repo so the workflow can notify Hylius when a build completes:</p>
                                                                     </div>
                                                                     <button onClick={() => {
                                                                         const copy = { ...newlyProvisionedProjects };
@@ -408,6 +408,24 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                             <button onClick={() => navigator.clipboard.writeText(newlyProvisionedProjects[project.id].token)} className="px-3 bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors" title="Copy">📋</button>
                                                                         </div>
                                                                     </div>
+
+                                                                    {/* Dagger PR merge CTA */}
+                                                                    {newlyProvisionedProjects[project.id].prUrl && (
+                                                                        <div className="mt-4 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg">
+                                                                            <p className="text-xs text-violet-300 mb-2">
+                                                                                ⚡ <strong>One more step:</strong> Merge the Dagger CI pipeline PR to activate auto-deploys.
+                                                                            </p>
+                                                                            <a
+                                                                                href={newlyProvisionedProjects[project.id].prUrl!}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+                                                                            >
+                                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                                                View & Merge PR on GitHub
+                                                                            </a>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         )}

@@ -8,7 +8,7 @@ interface AddProjectModalProps {
     onClose: () => void;
     serverId: string;
     serverName: string;
-    onAdded?: (projectId?: string, successData?: { token: string; webhookUrl: string }) => void;
+    onAdded?: (projectId?: string, successData?: { token: string; webhookUrl: string; prUrl?: string | null }) => void;
 }
 
 interface GitHubRepo {
@@ -36,7 +36,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         startCommand: '',
     });
     const [githubMeta, setGithubMeta] = useState<{ repoFullName: string; installationId: number } | null>(null);
-    const [deployStrategy, setDeployStrategy] = useState<'auto' | 'ghcr-pull' | 'compose-registry' | 'compose-server'>('auto');
+    const [deployStrategy, setDeployStrategy] = useState<'auto' | 'dagger' | 'ghcr-pull' | 'compose-registry' | 'compose-server'>('auto');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -129,7 +129,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
 
             const projectData = await res.json();
 
-            if (deployStrategy === 'ghcr-pull' || deployStrategy === 'compose-registry') {
+            if (deployStrategy === 'dagger' || deployStrategy === 'ghcr-pull' || deployStrategy === 'compose-registry') {
                 // Generate a deployment token automatically
                 const tokenRes = await fetch('/api/tokens', {
                     method: 'POST',
@@ -148,7 +148,8 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
 
                 const successData = {
                     token: deployToken,
-                    webhookUrl: `${window.location.origin}/api/webhooks/deploy-complete`
+                    webhookUrl: `${window.location.origin}/api/webhooks/deploy-complete`,
+                    prUrl: projectData.prUrl ?? null,
                 };
 
                 setForm({ name: '', repoUrl: '', branch: 'main', deployPath: '', buildCommand: '', startCommand: '' });
@@ -333,12 +334,18 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                 >
                                     <option value="auto">Build on Server (Auto-detect / PM2 / Native Docker)</option>
                                     <option value="compose-server">Build on Server (Docker Compose)</option>
-                                    <option value="ghcr-pull">Build on GitHub Actions (Native Docker)</option>
+                                    <option value="dagger">⚡ Build with Dagger on GitHub Actions (Recommended)</option>
+                                    <option value="ghcr-pull">Build on GitHub Actions (Native Docker — Legacy)</option>
                                     <option value="compose-registry">Build on GitHub Actions (Docker Compose)</option>
                                 </select>
+                                {deployStrategy === 'dagger' && (
+                                    <p className="text-xs text-violet-400 mt-2">
+                                        Hylius will open a <strong>Pull Request</strong> in your repo with a Dagger-powered pipeline. Merge it once — every push after that auto-builds on GitHub and deploys to your VPS with zero CPU load.
+                                    </p>
+                                )}
                                 {(deployStrategy === 'ghcr-pull' || deployStrategy === 'compose-registry') && (
                                     <p className="text-xs text-blue-400 mt-2">
-                                        Hylius will automatically commit a reusable CI/CD workflow to your repository to build your project as a Docker container using GitHub Actions. Saves VPS resources.
+                                        Hylius will automatically commit a CI/CD workflow to your repository to build and push your Docker image using GitHub Actions.
                                     </p>
                                 )}
                             </div>

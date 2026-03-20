@@ -179,7 +179,7 @@ model Project {
   buildCommand   String?
   startCommand   String?
   envVars        String?      // JSON string of env vars
-  deployStrategy String?      // 'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'ghcr-pull'
+  deployStrategy String?      // 'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'ghcr-pull' | 'dagger' | 'compose-registry' | 'compose-server'
   ghcrImage      String?      // e.g. 'ghcr.io/isaac-hash/my-app:latest'
   githubRepoFullName    String?   // e.g. "user/repo" — links to GitHub App webhook
   githubInstallationId  Int?      // GitHub App installation ID for this repo

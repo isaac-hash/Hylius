@@ -82,10 +82,11 @@ export async function POST(request: Request) {
                     continue;
                 }
             } else {
-                // Validate that the project is configured for GHCR pull
-                if (project.deployStrategy !== 'ghcr-pull') {
+                // Validate that the project is configured for GHCR image pull
+                // 'dagger' strategy also produces a GHCR image, so treat it the same as 'ghcr-pull'
+                if (project.deployStrategy !== 'ghcr-pull' && project.deployStrategy !== 'dagger') {
                     console.log(`[Deploy Webhook] Skipping ${project.name} because deployStrategy is ${project.deployStrategy}`);
-                    deployStats.push({ project: project.name, status: 'skipped (not ghcr-pull)' });
+                    deployStats.push({ project: project.name, status: 'skipped (not ghcr-pull or dagger)' });
                     continue;
                 }
             }

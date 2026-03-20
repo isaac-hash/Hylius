@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../services/prisma';
 import { requireAuth } from '../../../services/auth.service';
-import { autoProvisionWorkflow, autoProvisionComposeWorkflow } from '../../../services/github-workflow.service';
+import { autoProvisionWorkflow, autoProvisionComposeWorkflow, autoProvisionDaggerWorkflow } from '../../../services/github-workflow.service';
 
 export async function GET(request: Request) {
     try {
@@ -87,9 +87,19 @@ export async function POST(request: Request) {
             }
         });
 
-        // If the user chose to use GitHub Actions, provision the workflow file in their repo
-        if (deployStrategy === 'ghcr-pull' && githubInstallationId && githubRepoFullName) {
-            // Non-blocking fire-and-forget so UI returns quickly
+        // If the user chose to use GitHub Actions, provision the workflow in their repo
+        let prUrl: string | null = null;
+
+        if (deployStrategy === 'dagger' && githubInstallationId && githubRepoFullName) {
+            // Dagger: open a PR on a separate branch — no direct commit to main
+            try {
+                const pr = await autoProvisionDaggerWorkflow(githubInstallationId, githubRepoFullName, project.branch);
+                prUrl = pr?.prUrl ?? null;
+            } catch (err) {
+                console.error('[Projects API] Dagger PR provisioning failed:', err);
+            }
+        } else if (deployStrategy === 'ghcr-pull' && githubInstallationId && githubRepoFullName) {
+            // Legacy: direct commit to main
             autoProvisionWorkflow(githubInstallationId, githubRepoFullName, project.branch)
                 .catch(err => console.error('[Projects API] Workflow provision failed:', err));
         } else if (deployStrategy === 'compose-registry' && githubInstallationId && githubRepoFullName) {
@@ -97,7 +107,7 @@ export async function POST(request: Request) {
                 .catch(err => console.error('[Projects API] Compose workflow provision failed:', err));
         }
 
-        return NextResponse.json(project);
+        return NextResponse.json({ ...project, prUrl });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         if (message === 'Unauthorized') {
