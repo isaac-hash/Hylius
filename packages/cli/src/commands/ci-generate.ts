@@ -1,4 +1,4 @@
-﻿import { Command } from 'commander';
+import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import fs from 'fs';
@@ -131,11 +131,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure Dockerfile exists
+        run: |
+          if [ ! -f "Dockerfile" ]; then
+            echo "No Dockerfile found — generating one with Nixpacks..."
+            curl -sSL https://nixpacks.com/install.sh | bash
+            nixpacks build . -o /tmp/nixout
+            cp /tmp/nixout/.nixpacks/Dockerfile .
+            cp -r /tmp/nixout/.nixpacks .
+            echo "Dockerfile generated successfully"
+          fi
+
       - name: Build & push image via Dagger
         uses: dagger/dagger-for-github@v7
         with:
           verb: call
-          args: build-and-push --source=. --registry=ghcr.io --image=ghcr.io/\${{ github.repository }} --tag=\${{ github.sha }} --webhook-url=\${{ secrets.HYLIUS_WEBHOOK_URL }} --webhook-token=\${{ secrets.HYLIUS_API_TOKEN }} --repo=\${{ github.repository }} --sha=\${{ github.sha }} --ref=\${{ github.ref }}
+          args: build-and-push --source=. --registry=ghcr.io --image=ghcr.io/\${{ github.repository }} --tag=\${{ github.sha }} --webhook-url=\${{ secrets.HYLIUS_WEBHOOK_URL }} --webhook-token=\${{ secrets.HYLIUS_API_TOKEN }} --repo=\${{ github.repository }} --sha=\${{ github.sha }} --ref=\${{ github.ref }} --github-token=env:GITHUB_TOKEN
           module: .dagger
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
@@ -144,7 +155,7 @@ jobs:
 const DAGGER_MODULE_JSON = JSON.stringify({
   name: 'hylius-pipeline',
   sdk: 'typescript',
-  engineVersion: '0.15.0',
+  engineVersion: '0.15.4',
 }, null, 2);
 
 const DAGGER_PACKAGE_JSON = JSON.stringify({
@@ -153,7 +164,7 @@ const DAGGER_PACKAGE_JSON = JSON.stringify({
   version: '1.0.0',
   main: 'src/index.ts',
   scripts: {},
-  dependencies: { '@dagger.io/dagger': '^0.15.0' },
+  dependencies: { '@dagger.io/dagger': '^0.15.4' },
 }, null, 2);
 
 const DAGGER_TSCONFIG = JSON.stringify({
@@ -171,18 +182,14 @@ const DAGGER_TSCONFIG = JSON.stringify({
 
 const DAGGER_PIPELINE_TS = `import {
   dag,
-  Container,
   Directory,
+  Secret,
   object,
   func,
 } from "@dagger.io/dagger";
 
 @object()
 export class HyliusPipeline {
-  /**
-   * Build a Docker image and push it to GHCR,
-   * then notify the Hylius dashboard to trigger VPS deployment.
-   */
   @func()
   async buildAndPush(
     source: Directory,
@@ -194,39 +201,45 @@ export class HyliusPipeline {
     repo: string,
     sha: string,
     ref: string,
+    githubToken: Secret,
   ): Promise<string> {
     const imageFull = \`\${image.toLowerCase()}:\${tag}\`;
-    const built = await this.buildImage(source);
+
+    // Build and authenticate with registry
+    const built = dag.container()
+      .build(source)
+      .withRegistryAuth("ghcr.io", "github-actions", githubToken);
+
+    // Push to registry
     const digest = await built.publish(imageFull);
+
+    // Notify Hylius dashboard
     await this.notifyHylius({ webhookUrl, webhookToken, image: imageFull, sha, repo, ref });
+
     return \`Published \${imageFull} @ \${digest}\`;
   }
 
-  private async buildImage(source: Directory): Promise<Container> {
-    const entries = await source.entries();
-    if (entries.includes("Dockerfile")) {
-      return dag.container().build(source);
-    }
-    // No Dockerfile â€” generate one with Railpack then build
-    const withDockerfile = await dag
-      .container()
-      .from("node:20-alpine")
-      .withExec(["sh", "-c", "curl -sSL https://railpack.com/install.sh | sh"])
-      .withMountedDirectory("/app", source)
-      .withWorkdir("/app")
-      .withExec(["railpack", "generate"])
-      .directory("/app");
-    return dag.container().build(withDockerfile);
-  }
-
   private async notifyHylius(opts: {
-    webhookUrl: string; webhookToken: string;
-    image: string; sha: string; repo: string; ref: string;
+    webhookUrl: string;
+    webhookToken: string;
+    image: string;
+    sha: string;
+    repo: string;
+    ref: string;
   }): Promise<void> {
-    const payload = JSON.stringify({ image: opts.image, sha: opts.sha, repo: opts.repo, ref: opts.ref });
-    await dag.container().from("curlimages/curl:latest")
+    const payload = JSON.stringify({
+      image: opts.image,
+      sha: opts.sha,
+      repo: opts.repo,
+      ref: opts.ref,
+    });
+
+    await dag
+      .container()
+      .from("curlimages/curl:latest")
       .withExec([
-        "curl", "-fsSL", "-X", "POST", opts.webhookUrl,
+        "curl", "-fsSL",
+        "-X", "POST", opts.webhookUrl,
         "-H", "Content-Type: application/json",
         "-H", \`Authorization: Bearer \${opts.webhookToken}\`,
         "-d", payload,
