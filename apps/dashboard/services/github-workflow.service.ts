@@ -24,12 +24,6 @@ jobs:
         run: |
           docker run -d --name buildkitd --privileged moby/buildkit:latest
           echo "BUILDKIT_HOST=docker-container://buildkitd" >> $GITHUB_ENV
-      - name: Setup Railpack (if needed)
-        run: |
-          if [ ! -f "Dockerfile" ]; then
-            echo "No Dockerfile found. Installing Railpack..."
-            curl -sSL https://railpack.com/install.sh | bash
-          fi
       - name: Build and push image
         run: |
           REPO_LOWER=$(echo "\${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -39,6 +33,14 @@ jobs:
             echo "Dockerfile found! Building with native Docker..."
             docker build -t $IMAGE .
           else
+            echo "No Dockerfile found. Installing Railpack..."
+            curl -sSL https://railpack.com/install.sh | bash
+            
+            # Fetch Build Env variables from Hylius Dashboard
+            HYLIUS_BASE_URL=$(echo "\${{ secrets.HYLIUS_WEBHOOK_URL }}" | sed 's|/api/webhooks/deploy-complete||')
+            curl -s -H "Authorization: Bearer \${{ secrets.HYLIUS_API_TOKEN }}" "$HYLIUS_BASE_URL/api/webhooks/env?repo=\${{ github.repository }}" > .hylius.env
+            
+            export $(grep -v '^#' .hylius.env | xargs)
             echo "Building with Railpack..."
             railpack build . --name $IMAGE
           fi
@@ -195,4 +197,14 @@ export async function autoProvisionComposeWorkflow(
     return false;
   }
 }
+
+export async function autoProvisionDaggerWorkflow(
+    installationId: number,
+    repoFullName: string,
+    branch: string = 'main'
+): Promise<{ prUrl: string } | null> {
+    console.log(`[GitHub Workflow] Stub: autoProvisionDaggerWorkflow for ${repoFullName}`);
+    return null;
+}
+
 

@@ -9,7 +9,7 @@ import { requireAuth } from '../../../../services/auth.service';
  */
 export async function DELETE(
     request: Request,
-    { params }: { params: { id: string } }
+    context: { params: Promise<{ id: string }> }
 ) {
     try {
         const auth = await requireAuth(request);
@@ -17,6 +17,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Organization required' }, { status: 400 });
         }
 
+        const params = await context.params;
         const tokenId = params.id;
         if (!tokenId) {
             return NextResponse.json({ error: 'Token ID required' }, { status: 400 });

@@ -95,7 +95,7 @@ function getRuntimePort(runtime: ProjectRuntime | null): string {
     }
 }
 
-type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2' | 'ghcr-pull' | 'compose-registry' | 'compose-server';
+type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2' | 'ghcr-pull' | 'compose-registry' | 'compose-server' | 'dagger';
 
 /**
  * Determine how to deploy the project based on existing files or explicit config.
@@ -123,7 +123,8 @@ async function resolveDeployStrategy(client: SSHClient, releasePath: string, pro
 }
 
 function getContainerName(project: ProjectConfig): string {
-    return project.containerName || `${project.name}-app`;
+    const base = project.containerName || `${project.name}-app`;
+    return project.previewId ? `${base}-${project.previewId}` : base;
 }
 
 function getImageName(project: ProjectConfig): string {
@@ -144,8 +145,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
     const date = new Date();
     const releaseId = date.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-    const releasePath = `${project.deployPath}/releases/${releaseId}`;
-    const currentPath = `${project.deployPath}/current`;
+    const environmentPath = project.previewId ? `${project.deployPath}/previews/${project.previewId}` : project.deployPath;
+    const releasePath = `${environmentPath}/releases/${releaseId}`;
+    const currentPath = `${environmentPath}/current`;
 
     const log = (msg: string) => {
         if (onLog) onLog(msg + '\n');
@@ -159,6 +161,10 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
         log(`Creating release directory: ${releasePath}`);
         await execOrThrow(client, `mkdir -p ${releasePath}`, 'Create release directory');
+
+        // ─── Pre-deploy: Proactively free up disk space ───
+        log('Proactively cleaning up unused Docker resources...');
+        await client.exec(`docker system prune -af --volumes > /dev/null 2>&1 || true`);
 
         let strategy: DeployStrategy | null = project.deployStrategy && project.deployStrategy !== 'auto'
             ? (project.deployStrategy as DeployStrategy)
@@ -288,7 +294,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             }
             finalUrl = `http://${options.server.host}${composePort ? `:${composePort}` : ''}`;
 
-        } else if (strategy === 'ghcr-pull') {
+        } else if (strategy === 'ghcr-pull' || strategy === 'dagger') {
             const image = project.ghcrImage;
             if (!image) throw new Error("Initial deployment must be triggered by GitHub Actions. Please wait for your workflow to finish building the image.");
 
@@ -296,23 +302,45 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
             log(`Pulling pre-built image: ${image}`);
             await execStreamOrThrow(client, `docker pull ${image}`, 'Docker pull', onLog);
-
-            // Find a free port starting from 3011 (since 3000-3010 are pre-bound by the Mock VPS)
-            log(`Finding a free port...`);
-            let port = '3011';
+            log(`Checking for existing container port...`);
+            let existingPort = '';
             try {
-                // Iteratively check ports starting from 3011 using Node.js loop over SSH
-                for (let p = 3011; p <= 3100; p++) {
-                    const { stdout: portStr } = await client.exec(
-                        `docker ps --format '{{.Ports}}' | grep -q ":${p}->" || echo "FREE"`
-                    );
-                    if (portStr.trim() === 'FREE') {
-                        port = p.toString();
-                        break;
-                    }
+                const { stdout: psOut } = await client.exec(
+                    `docker ps --filter "name=${containerName}" --format "{{.Ports}}"`
+                );
+                const match = psOut.match(/:(\d+)->/);
+                if (match && match[1]) {
+                    existingPort = match[1];
                 }
             } catch (e: any) {
-                log(`Failed to find dynamic port, falling back to 3011: ${e.message}`);
+                // ignore
+            }
+
+            // Always assign a new free port for Preview environments to avoid conflicting with Production!
+            if (project.previewId) {
+                existingPort = '';
+            }
+
+            let port = existingPort;
+            if (!port) {
+                log(`Finding a free port...`);
+                port = '3011';
+                try {
+                    // Iteratively check ports starting from 3011 using Node.js loop over SSH
+                    for (let p = 3011; p <= 3100; p++) {
+                        const { stdout: portStr } = await client.exec(
+                            `docker ps --format '{{.Ports}}' | grep -q ":${p}->" || echo "FREE"`
+                        );
+                        if (portStr.trim() === 'FREE') {
+                            port = p.toString();
+                            break;
+                        }
+                    }
+                } catch (e: any) {
+                    log(`Failed to find dynamic port, falling back to 3011: ${e.message}`);
+                }
+            } else {
+                log(`Reusing existing port: ${port}`);
             }
 
             // Detect exposed port from the Docker image

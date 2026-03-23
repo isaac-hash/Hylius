@@ -43,7 +43,7 @@ export default function ProjectEnvEditor({ projectId, projectName, isOpen, onClo
             const data = await res.json();
             const entries: EnvEntry[] = data.entries ?? [];
             setRows(entries.length > 0
-                ? entries.map(e => ({ key: e.key, value: e.masked ? '' : e.value }))
+                ? entries.map(e => ({ key: e.key, value: e.value }))
                 : [{ key: '', value: '' }]
             );
         } catch (e: any) {
@@ -96,7 +96,10 @@ export default function ProjectEnvEditor({ projectId, projectName, isOpen, onClo
 
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
         const text = e.clipboardData.getData('text');
-        if (!text.includes('=')) return; // Not .env format, let default paste happen
+        const isBulk = text.includes('\\n') && text.includes('=');
+        const isSingleAssignment = /^[A-Z_][A-Z0-9_]*\\s*=/.test(text.trim());
+        
+        if (!isBulk && !isSingleAssignment) return; // Let default browser paste happen!
         e.preventDefault();
         const parsed: Row[] = [];
         for (const line of text.split('\n')) {

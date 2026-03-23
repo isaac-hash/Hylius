@@ -22,6 +22,8 @@ export interface ProjectConfig {
     containerName?: string;
     dockerRunCommand?: string;
     ghcrImage?: string;
+    environment?: 'PRODUCTION' | 'PREVIEW';
+    previewId?: string; // e.g. "pr-12"
 }
 
 export type TriggerSource = 'cli' | 'dashboard' | 'webhook';
@@ -84,7 +86,7 @@ export interface SetupResult {
 
 export interface DomainConfig {
     hostname: string;
-    upstreamPort: string; // e.g. "3000"
+    upstreamPort?: string; // e.g. "3000"
 }
 
 export interface DomainResult {

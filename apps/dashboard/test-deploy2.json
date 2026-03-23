@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cmn1py9cz001vf5c5tdt9d6tj",
+    "releaseId": "20260322121420",
+    "commitHash": "unknown",
+    "environment": "PRODUCTION",
+    "pullRequestNumber": null,
+    "status": "SUCCESS",
+    "triggerSource": "WEBHOOK",
+    "durationMs": 14231,
+    "logPath": null,
+    "deployUrl": "http://87.106.67.89:3012",
+    "projectId": "cmmzho5u50011piwr0tr6eoc9",
+    "organizationId": "cmmdpqlhn0023kmfwlh85eeed",
+    "startedAt": "2026-03-22T12:14:18.852Z",
+    "finishedAt": "2026-03-22T12:14:34.757Z"
+  }
+]

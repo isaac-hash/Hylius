@@ -40,6 +40,8 @@ interface DetailedProject {
         status: string;
         startedAt: string;
         deployUrl: string | null;
+        environment: string;
+        pullRequestNumber?: number | null;
     }[];
 }
 
@@ -324,17 +326,32 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                 </a>
                                                                 {/* Deploy URL */}
                                                                 {(() => {
-                                                                    const lastSuccessful = project.deployments.find(d => d.status === 'SUCCESS' && d.deployUrl);
-                                                                    return lastSuccessful?.deployUrl ? (
-                                                                        <a href={lastSuccessful.deployUrl} target="_blank" rel="noreferrer" className="text-sm text-green-400 hover:underline flex items-center gap-1 mt-1">
-                                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-                                                                            {lastSuccessful.deployUrl}
-                                                                        </a>
-                                                                    ) : (
-                                                                        <span className="text-xs text-gray-600 flex items-center gap-1 mt-1">
-                                                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-                                                                            Not deployed yet
-                                                                        </span>
+                                                                    const lastSuccessful = project.deployments.find((d: any) => d.status === 'SUCCESS' && d.environment === 'PRODUCTION' && d.deployUrl);
+                                                                    const activePreviews = project.deployments.filter((d: any) => d.status === 'SUCCESS' && d.environment === 'PREVIEW' && d.deployUrl);
+                                                                    return (
+                                                                        <div className="flex flex-col gap-1 mt-1">
+                                                                            {lastSuccessful?.deployUrl ? (
+                                                                                <a href={lastSuccessful.deployUrl} target="_blank" rel="noreferrer" className="text-sm text-green-400 hover:underline flex items-center gap-1 w-fit">
+                                                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
+                                                                                    {lastSuccessful.deployUrl}
+                                                                                </a>
+                                                                            ) : (
+                                                                                <span className="text-[10px] text-amber-500/80 cursor-help flex items-center gap-1 w-fit" title="If your site uses Vite/React/Vue and Railpack returns a 403 Forbidden, you may need to configure your web server root according to Railpack documentation (https://railpack.com/)">
+                                                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
+                                                                                    Not deployed yet
+                                                                                </span>
+                                                                            )}
+                                                                            {activePreviews.length > 0 && (
+                                                                                <div className="flex flex-col gap-1 mt-1 border-l-2 border-violet-500/30 pl-2 ml-1">
+                                                                                    {activePreviews.map((preview: any) => (
+                                                                                        <a key={preview.id} href={preview.deployUrl} target="_blank" rel="noreferrer" className="text-xs text-violet-400 hover:underline flex items-center gap-1 w-fit">
+                                                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                                                                                            PR #{preview.pullRequestNumber} Preview
+                                                                                        </a>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     );
                                                                 })()}
                                                             </div>
@@ -358,8 +375,8 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                     )}
                                                                     disabled={deletingProject !== null}
                                                                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${activeLogsProjectId === project.id
-                                                                            ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
-                                                                            : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+                                                                        ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                                                                        : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
                                                                         }`}
                                                                     title="View live logs"
                                                                 >

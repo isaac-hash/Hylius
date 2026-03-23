@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         });
 
         const body = await request.json();
-        const { image, sha, repo, ref, compose } = body;
+        const { image, sha, repo, ref, compose, prNumber } = body;
 
         if (!repo) {
             return NextResponse.json({ error: 'Missing required field: repo' }, { status: 400 });
@@ -60,8 +60,9 @@ export async function POST(request: Request) {
         }
 
         // 3. Filter projects by branch (ref) if provided, otherwise deploy all
+        // Only filter by branch if it's NOT a Pull Request (Previews should build regardless of target branch logic here)
         let targetProjects = projects;
-        if (ref) {
+        if (ref && !prNumber) {
             // ref from GitHub Actions is usually like "refs/heads/main" or just "main"
             const branchName = ref.replace('refs/heads/', '');
             targetProjects = projects.filter((p: any) => !p.branch || p.branch === branchName);
@@ -109,6 +110,8 @@ export async function POST(request: Request) {
             executeDeployment({
                 projectId: project.id,
                 trigger: 'webhook',
+                prNumber: prNumber ? parseInt(prNumber, 10) : undefined,
+                commitSha: sha,
                 onLog: (chunk) => {
                     process.stdout.write(`[Deploy Worker] ${chunk}`);
                     if ((global as any).io) {

@@ -3,13 +3,15 @@ import { PrismaClient } from '@prisma/client';
 // @ts-ignore - Local workspace package
 import { deploy, DeployOptions, ServerConfig, ProjectConfig, DeployResult } from '@hylius/core';
 import { decrypt } from './crypto.service';
-import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus } from './github.service';
+import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus, createPullRequestComment } from './github.service';
 
 import { prisma } from './prisma';
 
 export interface DeployServiceOptions {
     projectId: string;
     trigger: 'dashboard' | 'webhook' | 'cli';
+    prNumber?: number;
+    commitSha?: string;
     /** Optional callback for real-time log streaming (e.g. socket.emit) */
     onLog?: (chunk: string) => void;
 }
@@ -20,7 +22,8 @@ export interface DeployServiceOptions {
  * both the Socket.io handler (dashboard) and the GitHub webhook endpoint.
  */
 export async function executeDeployment(options: DeployServiceOptions): Promise<DeployResult & { deploymentId: string }> {
-    const { projectId, trigger, onLog } = options;
+    const { projectId, trigger, prNumber, onLog } = options;
+    const isPreview = !!prNumber;
     const log = (msg: string) => { if (onLog) onLog(msg); };
 
     // 1. Fetch Project & Server Config
@@ -42,6 +45,8 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             status: 'PENDING',
             triggerSource: trigger.toUpperCase(),
             releaseId: 'pending',
+            environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
+            pullRequestNumber: prNumber || null,
         },
     });
 
@@ -110,13 +115,77 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         // 'dagger' strategy produces a GHCR image just like 'ghcr-pull' — VPS behavior is identical
         deployStrategy: (project.deployStrategy === 'dagger' ? 'ghcr-pull' : project.deployStrategy as any) || 'auto',
         ghcrImage: project.ghcrImage || undefined,
-        env: envVars,
+        env: envVars || {},
+        environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
+        previewId: isPreview ? `pr-${prNumber}` : undefined,
     };
+    
+    // Auto-inject URL environment variables
+    const serverIpSlug = project.server.ip.replace(/\./g, '-');
+    if (isPreview) {
+        const previewHostname = `pr-${prNumber}.${serverIpSlug}.sslip.io`;
+        // For previews, we definitively know the exact URL
+        projectConfig.env!['APP_URL'] = `https://${previewHostname}`;
+        projectConfig.env!['NEXT_PUBLIC_APP_URL'] = `https://${previewHostname}`;
+        projectConfig.env!['ASSET_URL'] = `https://${previewHostname}`;
+    } else if (project.domains.length > 0) {
+        // For production, inject the primary domain if one exists and user hasn't hardcoded it
+        if (!projectConfig.env!['APP_URL']) projectConfig.env!['APP_URL'] = `https://${project.domains[0].hostname}`;
+        if (!projectConfig.env!['NEXT_PUBLIC_APP_URL']) projectConfig.env!['NEXT_PUBLIC_APP_URL'] = `https://${project.domains[0].hostname}`;
+        if (!projectConfig.env!['ASSET_URL']) projectConfig.env!['ASSET_URL'] = `https://${project.domains[0].hostname}`;
+    }
 
-    // Build domain configs if domains exist
-    const domainConfigs = project.domains.length > 0
-        ? project.domains.map((d: any) => ({ hostname: d.hostname, upstreamPort: '3000' }))
-        : undefined;
+    // Fetch all active deployments to build the full Caddy proxy list (Production + Previews)
+    const activeDeployments = await prisma.deployment.findMany({
+        where: {
+            projectId: project.id,
+            status: 'SUCCESS',
+        },
+        orderBy: { startedAt: 'desc' }
+    });
+
+    const domainConfigs: any[] = [];
+    
+    // 1. Add Production Domains (if they exist)
+    if (project.domains.length > 0) {
+        // Find the latest production deployment port
+        const latestProd = activeDeployments.find((d: any) => d.environment === 'PRODUCTION');
+        let prodPort = '3000';
+        if (latestProd?.deployUrl) {
+            try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch {}
+        }
+        // Wait, the orchestrator naturally infers the appPort if we just pass `{ hostname: d.hostname }`
+        // BUT if we are currently deploying a PREVIEW, the orchestrator's `appPort` belongs to the PREVIEW!
+        // So we MUST explicitly lock the Production domains to their existing port (prodPort)!!
+        project.domains.forEach((d: any) => {
+            domainConfigs.push({ hostname: d.hostname, upstreamPort: isPreview ? prodPort : undefined });
+        });
+    }
+
+    // 2. Add Active Preview Domains
+    const activePreviews = activeDeployments.filter((d: any) => d.environment === 'PREVIEW' && d.pullRequestNumber);
+    
+    // Add previously built previews
+    activePreviews.forEach((d: any) => {
+        // Skip the one we are currently building, as it gets added natively below
+        if (d.pullRequestNumber === prNumber) return;
+        
+        const previewHostname = `pr-${d.pullRequestNumber}.${serverIpSlug}.sslip.io`;
+        let prePort = '3000';
+        if (d.deployUrl) {
+            try { prePort = new URL(d.deployUrl).port || '3000'; } catch {}
+        }
+        domainConfigs.push({ hostname: previewHostname, upstreamPort: prePort });
+    });
+
+    // 3. Add the current deployment's domain
+    if (isPreview) {
+        // Pseudo-subdomain for the current preview deployment
+        const previewHostname = `pr-${prNumber}.${serverIpSlug}.sslip.io`;
+        // Unshift ensures this is the PRIMARY domain orchestrator returns as the finalURL!
+        domainConfigs.unshift({ hostname: previewHostname }); 
+        log(`\\n\\x1b[35m[Preview] Automatically provisioning custom pseudodomain: ${previewHostname}\\x1b[0m\\n`);
+    }
 
     // GitHub Deployments Integration: Create deployment and set to in_progress
     let githubDeploymentId: number | null = null;
@@ -127,9 +196,9 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         githubDeploymentId = await createGitHubDeployment({
             installationId: project.githubInstallationId!,
             repoFullName: project.githubRepoFullName!,
-            ref: project.branch || 'main',
+            ref: options.commitSha || project.branch || 'main',
             description: `Deployed via Hylius (${trigger})`,
-            environment: 'Production',
+            environment: isPreview ? `Preview (PR #${prNumber})` : 'Production',
         });
 
         if (githubDeploymentId) {
@@ -166,6 +235,17 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             logUrl: baseUrl ? `${baseUrl}` : undefined,
             description: result.success ? 'Deployment successful' : 'Deployment failed',
         });
+
+        // For Previews: Leave a comment on the PR with the Preview URL
+        if (result.success && isPreview && prNumber && result.url) {
+            log(`[GitHub] Posting preview URL comment to PR #${prNumber}...\\n`);
+            await createPullRequestComment({
+                installationId: project.githubInstallationId!,
+                repoFullName: project.githubRepoFullName!,
+                prNumber,
+                body: `## 🚀 Preview Deployment Ready!\n\nYour preview environment has been successfully provisioned:\n\n🔗 **Preview URL**: [${result.url}](${result.url})\n\n> _Deployed by Hylius_`
+            });
+        }
     }
 
     // 5. Update Status
@@ -198,4 +278,107 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
     });
 
     return { ...result, deploymentId: deployment.id };
+}
+
+/**
+ * Destroy an active Preview Deployment container and remove its Caddy proxy records
+ */
+export async function destroyPreviewDeployment(projectId: string, prNumber: number): Promise<boolean> {
+    const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: { server: true, domains: true }
+    });
+
+    if (!project) throw new Error('Project not found');
+
+    let privateKey = '';
+    if (project.server.privateKeyEncrypted && project.server.keyIv) {
+        try { privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv); } catch {}
+    }
+
+    const { SSHClient, configureCaddy } = require('@hylius/core');
+    
+    const serverConfig = {
+        host: project.server.ip,
+        port: project.server.port,
+        username: project.server.username,
+        privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+        password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
+    };
+
+    const previewId = `pr-${prNumber}`;
+    const baseContainerName = `${project.name}-app`;
+    const containerName = `${baseContainerName}-${previewId}`;
+    const environmentPath = `${project.deployPath}/previews/${previewId}`;
+
+    const client = new SSHClient(serverConfig);
+    try {
+        await client.connect();
+        
+        // 1. Kill and remove the container running the preview build
+        await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+        
+        // 2. Remove the preview directory
+        await client.exec(`rm -rf ${environmentPath} > /dev/null 2>&1 || true`);
+
+        // 3. Update Caddy to remove this preview domain but keep production + other active previews
+        const activeDeployments = await prisma.deployment.findMany({
+            where: {
+                projectId: project.id,
+                status: 'SUCCESS',
+            },
+            orderBy: { startedAt: 'desc' }
+        });
+
+        const domainConfigs: any[] = [];
+        
+        // Add Production Domains
+        if (project.domains.length > 0) {
+            const latestProd = activeDeployments.find((d: any) => d.environment === 'PRODUCTION');
+            let prodPort = '3000';
+            if (latestProd?.deployUrl) {
+                try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch {}
+            }
+            project.domains.forEach((d: any) => {
+                domainConfigs.push({ hostname: d.hostname, upstreamPort: prodPort });
+            });
+        }
+
+        // Add OTHER Active Preview Domains (exluding the one we are destroying)
+        const activePreviews = activeDeployments.filter((d: any) => d.environment === 'PREVIEW' && d.pullRequestNumber && d.pullRequestNumber !== prNumber);
+        const serverIpSlug = project.server.ip.replace(/\./g, '-');
+        
+        activePreviews.forEach((d: any) => {
+            const previewHostname = `pr-${d.pullRequestNumber}.${serverIpSlug}.sslip.io`;
+            let prePort = '3000';
+            if (d.deployUrl) {
+                try { prePort = new URL(d.deployUrl).port || '3000'; } catch {}
+            }
+            domainConfigs.push({ hostname: previewHostname, upstreamPort: prePort });
+        });
+
+        if (domainConfigs.length > 0) {
+            await configureCaddy(client, { domains: domainConfigs, tlsMode: 'production' });
+        } else {
+            // If no domains left, just pass empty array to clear the file
+            await configureCaddy(client, { domains: [], tlsMode: 'production' });
+        }
+
+        // 4. Mark DB deployments as destroyed
+        await prisma.deployment.updateMany({
+            where: {
+                projectId: project.id,
+                environment: 'PREVIEW',
+                pullRequestNumber: prNumber
+            },
+            data: { status: 'DESTROYED' }
+        });
+
+        return true;
+    } catch (err: any) {
+        console.error(`Error destroying preview deployment ${previewId}:`, err);
+        throw err;
+    } finally {
+        client.end();
+    }
 }

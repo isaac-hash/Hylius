@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cmn1r98jj0001zkiimal7c9gs",
+    "releaseId": "test-preview",
+    "commitHash": null,
+    "environment": "PREVIEW",
+    "pullRequestNumber": 10,
+    "status": "PENDING",
+    "triggerSource": "WEBHOOK",
+    "durationMs": null,
+    "logPath": null,
+    "deployUrl": null,
+    "projectId": "cmmzho5u50011piwr0tr6eoc9",
+    "organizationId": "cmmdpqlhn0023kmfwlh85eeed",
+    "startedAt": "2026-03-22T12:50:50.613Z",
+    "finishedAt": null
+  }
+]

@@ -110,6 +110,13 @@ export class PaymentService {
             }
 
             if (resolvedOrgId) {
+                // Verify organization still exists before linking the payment
+                const orgExists = await prisma.organization.findUnique({ where: { id: resolvedOrgId } });
+                if (!orgExists) {
+                    console.warn(`[PaymentService] Ignoring payment event: Organization ${resolvedOrgId} no longer exists.`);
+                    return; // Return smoothly to ensure a 200 response stops webhook retries
+                }
+
                 await prisma.payment.upsert({
                     where: { externalTransactionId: parsedEvent.transactionId },
                     update: { status: 'SUCCESS' }, // Usually success in webhook, but we use upsert to be safe
@@ -141,6 +148,13 @@ export class PaymentService {
                 console.warn(`[PaymentService] Webhook ignored: Could not resolve organizationId for subscription ${subscriptionId}`);
                 console.log(`[PaymentService] Parsed event data:`, JSON.stringify(parsedEvent, null, 2));
                 return;
+            }
+
+            // Verify the organization still exists
+            const orgExists = await prisma.organization.findUnique({ where: { id: resolvedOrgId } });
+            if (!orgExists) {
+                console.warn(`[PaymentService] Ignoring subscription event: Organization ${resolvedOrgId} no longer exists.`);
+                return; // Return smoothly to ensure a 200 response stops webhook retries
             }
 
             // 4. Upsert subscription tracking

@@ -200,6 +200,8 @@ model Deployment {
   id             String       @id @default(cuid())
   releaseId      String       // Core-generated timestamp ID
   commitHash     String?
+  environment    String       @default("PRODUCTION") // "PRODUCTION" | "PREVIEW"
+  pullRequestNumber Int?      // The GitHub PR number if this is a preview deployment
   status         String       // "PENDING" | "BUILDING" | "SUCCESS" | "FAILED"
   triggerSource  String       // "CLI" | "DASHBOARD" | "WEBHOOK"
   durationMs     Int?

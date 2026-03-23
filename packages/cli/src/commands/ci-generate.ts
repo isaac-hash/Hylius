@@ -121,6 +121,8 @@ const DAGGER_WORKFLOW_YAML = (branch: string) => `name: Hylius Dagger CI
 on:
   push:
     branches: [${branch}]
+  pull_request:
+    branches: [${branch}]
 
 jobs:
   build-and-push:
@@ -131,25 +133,91 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ensure Dockerfile exists
+      - name: Log in to GitHub Container Registry
+        run: echo "\${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u \${{ github.actor }} --password-stdin
+
+      - name: Fetch Build Env from Hylius Dashboard
+        id: fetch-env
         run: |
-          if [ ! -f "Dockerfile" ]; then
-            echo "No Dockerfile found — generating one with Nixpacks..."
-            curl -sSL https://nixpacks.com/install.sh | bash
-            nixpacks build . -o /tmp/nixout
-            cp /tmp/nixout/.nixpacks/Dockerfile .
-            cp -r /tmp/nixout/.nixpacks .
-            echo "Dockerfile generated successfully"
+          if [ -n "\${{ secrets.HYLIUS_WEBHOOK_URL }}" ]; then
+            HYLIUS_BASE_URL=$(echo "\${{ secrets.HYLIUS_WEBHOOK_URL }}" | sed 's|/api/webhooks/deploy-complete||')
+            curl -s -f -H "Authorization: Bearer \${{ secrets.HYLIUS_API_TOKEN }}" \\
+              "$HYLIUS_BASE_URL/api/webhooks/env?repo=\${{ github.repository }}" > .hylius.env || true
+          fi
+          
+          if [ -s .hylius.env ]; then
+            grep -v '^#' .hylius.env | awk 'NF' >> \$GITHUB_ENV
+            echo "Build env vars fetched and exported successfully"
           fi
 
-      - name: Build & push image via Dagger
+      # ── Path A: Dockerfile exists → use Dagger ──
+      - name: Build & push via Dagger (Dockerfile found)
+        if: hashFiles('Dockerfile') != ''
         uses: dagger/dagger-for-github@v7
         with:
           verb: call
-          args: build-and-push --source=. --registry=ghcr.io --image=ghcr.io/\${{ github.repository }} --tag=\${{ github.sha }} --webhook-url=\${{ secrets.HYLIUS_WEBHOOK_URL }} --webhook-token=\${{ secrets.HYLIUS_API_TOKEN }} --repo=\${{ github.repository }} --sha=\${{ github.sha }} --ref=\${{ github.ref }} --github-token=env:GITHUB_TOKEN
+          args: build-and-push --source=. --registry=ghcr.io --image=ghcr.io/\${{ github.repository }} --tag=\${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }} --webhook-url=\${{ secrets.HYLIUS_WEBHOOK_URL }} --webhook-token=\${{ secrets.HYLIUS_API_TOKEN }} --repo=\${{ github.repository }} --sha=\${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }} --ref=\${{ github.ref }} --pr-number="\${{ github.event.pull_request.number }}" --github-token=env:GITHUB_TOKEN
           module: .dagger
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+
+      # ── Path B: No Dockerfile → use Railpack natively ──
+      - name: Set up Docker Buildx
+        if: hashFiles('Dockerfile') == ''
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push image with Railpack (no Dockerfile)
+        if: hashFiles('Dockerfile') == ''
+        run: |
+          echo "No Dockerfile found — installing Railpack..."
+          curl -sSL https://railpack.com/install.sh | bash
+          
+          # Load env vars if fetched
+          RAILPACK_ENV_ARGS=""
+          SECRET_ARGS=""
+          if [ -s .hylius.env ]; then
+            while IFS= read -r line; do
+              [[ "\$line" =~ ^#.*$ || -z "\$line" ]] && continue
+              # Extract KEY out of KEY=VALUE
+              KEY=$(echo "\$line" | cut -d '=' -f 1)
+              RAILPACK_ENV_ARGS="\$RAILPACK_ENV_ARGS --env \$KEY"
+              SECRET_ARGS="\$SECRET_ARGS --secret id=\$KEY,env=\$KEY"
+            done < .hylius.env
+          fi
+
+          IMAGE_TAG=\${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+          IMAGE_FULL="ghcr.io/\${{ github.repository }}:$IMAGE_TAG"
+          IMAGE_FULL=$(echo "$IMAGE_FULL" | tr '[:upper:]' '[:lower:]')
+
+          # Generate Railpack build plan
+          railpack prepare \$RAILPACK_ENV_ARGS --plan-out /tmp/railpack-plan.json .
+
+          # Build and push using docker buildx with the generated plan
+          docker buildx build \\
+            --build-arg BUILDKIT_SYNTAX=ghcr.io/railwayapp/railpack-frontend \\
+            -f /tmp/railpack-plan.json \\
+            \$SECRET_ARGS \\
+            --tag "\$IMAGE_FULL" \\
+            --push \\
+            .
+          
+          echo "Pushed \$IMAGE_FULL"
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Hylius Dashboard
+        if: hashFiles('Dockerfile') == ''
+        run: |
+          IMAGE_TAG=\${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+          IMAGE_FULL="ghcr.io/\${{ github.repository }}:$IMAGE_TAG"
+          IMAGE_FULL=$(echo "$IMAGE_FULL" | tr '[:upper:]' '[:lower:]')
+          SHA_VAL=\${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+          curl -fsSL -X POST "\${{ secrets.HYLIUS_WEBHOOK_URL }}" \\
+            -H "Content-Type: application/json" \\
+            -H "Authorization: Bearer \${{ secrets.HYLIUS_API_TOKEN }}" \\
+            -H "ngrok-skip-browser-warning: 69420" \\
+            -d "{\\"image\\": \\"$IMAGE_FULL\\", \\"sha\\": \\"$SHA_VAL\\", \\"repo\\": \\"\${{ github.repository }}\\", \\"ref\\": \\"\${{ github.ref }}\\", \\"prNumber\\": \\"\${{ github.event.pull_request.number }}\\"}"
 `;
 
 const DAGGER_MODULE_JSON = JSON.stringify({
@@ -201,6 +269,7 @@ export class HyliusPipeline {
     repo: string,
     sha: string,
     ref: string,
+    prNumber: string,
     githubToken: Secret,
   ): Promise<string> {
     const imageFull = \`\${image.toLowerCase()}:\${tag}\`;
@@ -214,7 +283,7 @@ export class HyliusPipeline {
     const digest = await built.publish(imageFull);
 
     // Notify Hylius dashboard
-    await this.notifyHylius({ webhookUrl, webhookToken, image: imageFull, sha, repo, ref });
+    await this.notifyHylius({ webhookUrl, webhookToken, image: imageFull, sha, repo, ref, prNumber });
 
     return \`Published \${imageFull} @ \${digest}\`;
   }
@@ -226,12 +295,14 @@ export class HyliusPipeline {
     sha: string;
     repo: string;
     ref: string;
+    prNumber: string;
   }): Promise<void> {
     const payload = JSON.stringify({
       image: opts.image,
       sha: opts.sha,
       repo: opts.repo,
       ref: opts.ref,
+      prNumber: opts.prNumber,
     });
 
     await dag
@@ -292,6 +363,11 @@ export const ciGenerateCommand = new Command('ci-generate')
       console.log(`     ${chalk.yellow('HYLIUS_WEBHOOK_URL')}  ${chalk.dim('Your Hylius dashboard webhook URL')}`);
       console.log(`     ${chalk.yellow('HYLIUS_API_TOKEN')}    ${chalk.dim('Your Hylius API token')}\n`);
       console.log(chalk.green('  Once secrets are set, every push to ') + chalk.white.bold(branch) + chalk.green(' will auto-build with Dagger and deploy! âš¡\n'));
+
+      console.log(chalk.yellow.bold('  [TIP] Nixpacks 403 Forbidden Error'));
+      console.log(chalk.gray('  If your site uses a frontend framework and returns 403 after deploy,'));
+      console.log(chalk.gray('  consult the Nixpacks documentation (https://nixpacks.com/) to configure the static output.'));
+
       return;
     }
 

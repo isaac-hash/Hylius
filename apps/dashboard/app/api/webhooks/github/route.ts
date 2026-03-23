@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../services/prisma';
 import { verifyWebhookSignature } from '../../../../services/github.service';
-import { executeDeployment } from '../../../../services/deploy.service';
+import { executeDeployment, destroyPreviewDeployment } from '../../../../services/deploy.service';
 
 /**
  * GitHub Webhook Endpoint
@@ -34,6 +34,8 @@ export async function POST(request: Request) {
     try {
         if (event === 'push') {
             return await handlePush(body);
+        } else if (event === 'pull_request') {
+            return await handlePullRequest(body);
         } else if (event === 'installation') {
             return await handleInstallation(body);
         } else if (event === 'ping') {
@@ -126,6 +128,47 @@ async function handlePush(body: any) {
     }
 
     return NextResponse.json({ deployed: results });
+}
+
+// ─── Pull Request Event Handler ───────────────────────────
+
+async function handlePullRequest(body: any) {
+    const action = body.action; // "opened", "closed", "synchronize", "reopened"
+    if (action !== 'closed') {
+        // Preview environment creation is handled by the Action Webhook.
+        // We only care about destroying it when the PR is closed or merged.
+        return NextResponse.json({ message: `Ignored PR action: ${action}` });
+    }
+
+    const repoFullName: string = body.repository?.full_name;
+    const prNumber: number = body.pull_request?.number;
+
+    if (!repoFullName || !prNumber) {
+        return NextResponse.json({ error: 'Missing repository or PR number' }, { status: 400 });
+    }
+
+    const projects = await prisma.project.findMany({
+        where: { githubRepoFullName: repoFullName },
+    });
+
+    if (projects.length === 0) {
+        return NextResponse.json({ message: `No projects linked to ${repoFullName}` });
+    }
+
+    console.log(`[GitHub Webhook] PR #${prNumber} closed for ${repoFullName}. Triggering preview cleanup...`);
+
+    const results = [];
+    for (const project of projects) {
+        try {
+            await destroyPreviewDeployment(project.id, prNumber);
+            results.push({ projectId: project.id, name: project.name, success: true });
+        } catch (err: any) {
+            console.error(`[GitHub Webhook] Cleanup failed for ${project.name}:`, err.message);
+            results.push({ projectId: project.id, name: project.name, success: false, error: err.message });
+        }
+    }
+
+    return NextResponse.json({ cleanup: results });
 }
 
 // ─── Installation Event Handler ─────────────────────────────

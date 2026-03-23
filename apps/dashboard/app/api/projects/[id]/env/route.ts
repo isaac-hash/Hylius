@@ -64,16 +64,30 @@ export async function PUT(request: Request, { params }: Params) {
 
         const project = await prisma.project.findUnique({
             where: { id },
-            select: { organizationId: true, name: true },
+            select: { organizationId: true, name: true, envVars: true },
         });
 
         if (!project || project.organizationId !== auth.organizationId) {
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
+        
+        const existingEnv: Record<string, string> = project.envVars ? JSON.parse(project.envVars as string) : {};
+        const finalEnv: Record<string, string> = {};
+        
+        for (const [k, v] of Object.entries(incoming)) {
+            // If the frontend sends back a purely masked string, retain the original database value
+            if (v.length > 0 && v.split('').every(char => char === '•')) {
+                if (existingEnv[k] !== undefined) {
+                    finalEnv[k] = existingEnv[k];
+                }
+            } else {
+                finalEnv[k] = v;
+            }
+        }
 
         await prisma.project.update({
             where: { id },
-            data: { envVars: JSON.stringify(incoming) },
+            data: { envVars: JSON.stringify(finalEnv) },
         });
 
         await prisma.auditLog.create({

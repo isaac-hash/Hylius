@@ -185,3 +185,31 @@ export async function updateGitHubDeploymentStatus(params: GitHubUpdateDeploymen
         console.error(`[GitHub] Failed to update status ${deploymentId} to ${state}:`, error.message);
     }
 }
+
+export interface GitHubCreateCommentParams {
+    installationId: number;
+    repoFullName: string;
+    prNumber: number;
+    body: string;
+}
+
+/**
+ * Creates a comment on a Pull Request.
+ */
+export async function createPullRequestComment(params: GitHubCreateCommentParams): Promise<void> {
+    const { installationId, repoFullName, prNumber, body } = params;
+    if (!repoFullName.includes('/')) return;
+    const [owner, repo] = repoFullName.split('/');
+
+    try {
+        const octokit = await getInstallationOctokit(installationId);
+        await octokit.issues.createComment({
+            owner,
+            repo,
+            issue_number: prNumber,
+            body
+        });
+    } catch (error: any) {
+        console.error(`[GitHub] Failed to create PR comment for ${repoFullName}#${prNumber}:`, error.message);
+    }
+}

@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth.provider';
 
-export default function GitHubLinkPage() {
+function GitHubLinkClient() {
     const { token } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -82,5 +82,13 @@ export default function GitHubLinkPage() {
 
             </div>
         </div>
+    );
+}
+
+export default function GitHubLinkPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center p-4"><div className="w-12 h-12 border-4 border-gray-800 border-t-blue-500 rounded-full animate-spin mx-auto"></div></div>}>
+            <GitHubLinkClient />
+        </Suspense>
     );
 }
