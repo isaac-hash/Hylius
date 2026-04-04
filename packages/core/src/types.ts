@@ -100,3 +100,94 @@ export interface ConfigureCaddyOptions {
     domains: DomainConfig[];
     tlsMode?: 'production' | 'internal'; // Default: 'production'
 }
+
+// ─── Database Management ─────────────────────────────────────────────────────
+
+export type DatabaseEngine = 'POSTGRES' | 'MYSQL' | 'REDIS';
+
+export interface DatabaseProvisionOptions {
+    server: ServerConfig;
+    /** User-friendly name → Docker container name: hylius-db-{name} */
+    name: string;
+    engine: DatabaseEngine;
+    /** Docker image tag. Defaults: POSTGRES→'16', MYSQL→'8', REDIS→'7' */
+    version?: string;
+    /** Database name inside the engine. Default: "{name}_db" */
+    dbName?: string;
+    /** DB username. Default: "{name}_user". Ignored for Redis. */
+    dbUser?: string;
+    /** Pre-generated password (caller is responsible for generating + encrypting) */
+    password: string;
+    onLog?: (chunk: string) => void;
+}
+
+export interface DatabaseProvisionResult {
+    success: boolean;
+    containerName: string;
+    port: number;
+    dbName: string;
+    dbUser: string;
+    /** Full connection string, e.g. postgres://user:pass@localhost:5432/db */
+    connectionString: string;
+    error?: string;
+    durationMs: number;
+}
+
+export interface DatabaseDestroyOptions {
+    server: ServerConfig;
+    containerName: string;
+    /** If true, removes the Docker volume (data loss). Default: false */
+    removeVolume?: boolean;
+    onLog?: (chunk: string) => void;
+}
+
+export interface DatabaseDestroyResult {
+    success: boolean;
+    error?: string;
+    durationMs: number;
+}
+
+export interface DatabaseStatusOptions {
+    server: ServerConfig;
+    containerName: string;
+}
+
+export interface DatabaseStatusResult {
+    running: boolean;
+    containerName: string;
+    port?: number;
+    uptime?: string;
+    error?: string;
+}
+
+export interface DatabaseBackupOptions {
+    server: ServerConfig;
+    containerName: string;
+    engine: DatabaseEngine;
+    dbName: string;
+    dbUser: string;
+    password: string;
+    onLog?: (chunk: string) => void;
+}
+
+export interface DatabaseBackupResult {
+    success: boolean;
+    /** Path on VPS: /opt/hylius/backups/{containerName}-{timestamp}.sql.gz */
+    backupPath: string;
+    sizeBytes?: number;
+    error?: string;
+    durationMs: number;
+}
+
+export interface DatabaseLogsOptions {
+    server: ServerConfig;
+    containerName: string;
+    /** Number of tail lines to fetch. Default: 100 */
+    tailLines?: number;
+}
+
+export interface DatabaseLogsResult {
+    success: boolean;
+    logs: string;
+    error?: string;
+}

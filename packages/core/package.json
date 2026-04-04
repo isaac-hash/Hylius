@@ -6,11 +6,13 @@
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "scripts": {
-        "build": "tsc"
+        "build": "tsc",
+        "test": "vitest run --reporter=verbose"
     },
     "devDependencies": {
         "@types/node": "^20.11.0",
-        "typescript": "^5.3.3"
+        "typescript": "^5.3.3",
+        "vitest": "^4.1.2"
     },
     "dependencies": {
         "@types/ssh2": "^1.15.5",

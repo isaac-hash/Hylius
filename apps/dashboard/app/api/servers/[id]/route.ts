@@ -28,7 +28,17 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
                 metrics: {
                     orderBy: { createdAt: 'desc' },
                     take: 24, // Last 24 metric points
-                }
+                },
+                // @ts-ignore
+                databases: {
+                    orderBy: { createdAt: 'desc' },
+                    select: {
+                        id: true, name: true, engine: true, version: true, status: true,
+                        containerName: true, port: true, dbName: true, dbUser: true,
+                        errorMessage: true, projectId: true, createdAt: true,
+                        project: { select: { id: true, name: true } },
+                    },
+                },
             },
         });
 

@@ -24,7 +24,23 @@ export interface DeployServiceOptions {
 export async function executeDeployment(options: DeployServiceOptions): Promise<DeployResult & { deploymentId: string }> {
     const { projectId, trigger, prNumber, onLog } = options;
     const isPreview = !!prNumber;
-    const log = (msg: string) => { if (onLog) onLog(msg); };
+
+    // We will buffer ALL logs here to save them to the DB later
+    let fullLogContent = '';
+    
+    // Create a wrapper for onLog that also buffers and broadcasts
+    const enhancedLog = (chunk: string) => {
+        fullLogContent += chunk;
+        if (onLog) onLog(chunk);
+        
+        // Broadcast the chunk in real-time to anyone reading this deployment detail page
+        const globalIo = (global as any).io;
+        if (globalIo) {
+            // (We assign this below once deployment is created)
+        }
+    };
+
+    const log = (msg: string) => { enhancedLog(msg); };
 
     // 1. Fetch Project & Server Config
     const project = await prisma.project.findUnique({
@@ -62,6 +78,17 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             }),
         },
     });
+
+    // Overwrite the real-time globalIo broadcast above now that we have the deployment.id
+    const originalLog = enhancedLog;
+    (enhancedLog as any) = (chunk: string) => {
+        fullLogContent += chunk;
+        if (onLog) onLog(chunk);
+        const globalIo = (global as any).io;
+        if (globalIo && deployment.id) {
+            globalIo.emit(`deployment_log_chunk:${deployment.id}`, chunk);
+        }
+    };
 
     // 3. Prepare Core Config — Decrypt SSH key in-memory
     let privateKey = '';
@@ -135,6 +162,31 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         if (!projectConfig.env!['NEXT_PUBLIC_APP_URL']) projectConfig.env!['NEXT_PUBLIC_APP_URL'] = `https://${project.domains[0].hostname}`;
         if (!projectConfig.env!['ASSET_URL']) projectConfig.env!['ASSET_URL'] = `https://${project.domains[0].hostname}`;
         projectConfig.env!['HTTPS'] = 'on';
+    }
+
+    // Auto-inject DATABASE_URL / REDIS_URL from linked managed databases
+    try {
+        // @ts-ignore
+        const linkedDatabases = await prisma.database.findMany({
+            where: { projectId: project.id, status: 'RUNNING' },
+        });
+        for (const db of linkedDatabases) {
+            const envKey = db.engine === 'REDIS' ? 'REDIS_URL' : 'DATABASE_URL';
+            if (!projectConfig.env![envKey] && db.passwordEncrypted && db.passwordIv) {
+                try {
+                    const password = decrypt(db.passwordEncrypted, db.passwordIv);
+                    const { buildDbConnectionString } = await import('@hylius/core' as any);
+                    projectConfig.env![envKey] = buildDbConnectionString(
+                        db.engine, db.dbUser || '', password, db.port || 0, db.dbName || ''
+                    );
+                    log(`[DB] Auto-injected ${envKey} from database "${db.name}"\n`);
+                } catch (dbErr: any) {
+                    log(`[DB] Warning: Could not inject ${envKey}: ${dbErr.message}\n`);
+                }
+            }
+        }
+    } catch (dbQueryErr: any) {
+        log(`[DB] Warning: Could not query linked databases: ${dbQueryErr.message}\n`);
     }
 
     // Fetch all active deployments to build the full Caddy proxy list (Production + Previews)
@@ -234,7 +286,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             deploymentId: githubDeploymentId,
             state: result.success ? 'success' : 'failure',
             environmentUrl: result.url || undefined,
-            logUrl: baseUrl ? `${baseUrl}` : undefined,
+            logUrl: baseUrl ? `${baseUrl}/deployments/${deployment.id}` : undefined,
             description: result.success ? 'Deployment successful' : 'Deployment failed',
         });
 
@@ -261,6 +313,8 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             commitHash: result.commitHash,
             deployUrl: result.url || null,
             finishedAt: new Date(),
+            // @ts-expect-error - new property from Prisma schema update
+            logContent: fullLogContent,
         },
     });
 

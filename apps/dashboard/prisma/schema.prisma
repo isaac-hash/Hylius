@@ -28,6 +28,7 @@ model Organization {
   subscriptions Subscription[]
   payments      Payment[]
   auditLogs     AuditLog[]
+  databases     Database[]
   githubInstallations GitHubInstallation[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -164,6 +165,7 @@ model Server {
   organizationId      String
   projects            Project[]
   metrics             Metric[]
+  databases           Database[]
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -189,6 +191,7 @@ model Project {
   serverId       String
   deployments    Deployment[]
   domains        Domain[]
+  databases      Database[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -206,6 +209,7 @@ model Deployment {
   triggerSource  String       // "CLI" | "DASHBOARD" | "WEBHOOK"
   durationMs     Int?
   logPath        String?      // Path to log file / object storage key
+  logContent     String?      // Full buffered text output
   deployUrl      String?      // Live URL where the deployed app is accessible
   project        Project      @relation(fields: [projectId], references: [id])
   projectId      String
@@ -256,4 +260,35 @@ model Metric {
   createdAt DateTime @default(now())
 
   @@index([serverId])
+}
+
+// ─── Database Management ─────────────────────────────────────────────────────
+
+model Database {
+  id                String       @id @default(cuid())
+  name              String                          // User-friendly name, e.g. "my-app-db"
+  engine            String                          // "POSTGRES" | "MYSQL" | "REDIS"
+  version           String       @default("latest") // Docker tag, e.g. "16", "8", "7"
+  status            String       @default("PENDING") // "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "ERROR"
+  containerName     String?                         // Docker container name on VPS
+  port              Int?                            // Host port mapped to container (auto-assigned)
+  dbName            String?                         // Database name inside the engine
+  dbUser            String?                         // Username for the database
+  passwordEncrypted String?                         // AES-256-GCM encrypted password
+  passwordIv        String?                         // IV for decryption
+  errorMessage      String?
+
+  server            Server       @relation(fields: [serverId], references: [id])
+  serverId          String
+  project           Project?     @relation(fields: [projectId], references: [id])
+  projectId         String?
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  organizationId    String
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([serverId])
+  @@index([projectId])
+  @@index([organizationId])
 }

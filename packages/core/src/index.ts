@@ -6,3 +6,4 @@ export * from './rollback.js';
 export * from './monitoring.js';
 export * from './setup.js';
 export * from './domain.js';
+export * from './database.js';

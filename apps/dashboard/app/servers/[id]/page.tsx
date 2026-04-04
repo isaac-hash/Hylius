@@ -12,6 +12,8 @@ import EditServerModal from '@/components/EditServerModal';
 import DomainManager from '@/components/DomainManager';
 import GitHubConnect from '@/components/GitHubConnect';
 import ProjectEnvEditor from '@/components/ProjectEnvEditor';
+import ServerMetrics from '@/components/ServerMetricsCharts';
+import DatabaseManager from '@/components/DatabaseManager';
 
 const ProvisionTerminalModal = dynamic(() => import('@/components/ProvisionTerminalModal'), {
     ssr: false,
@@ -55,6 +57,21 @@ interface DetailedServer {
     createdAt: string;
     projects: DetailedProject[];
     metrics: { cpu: number; memory: number; disk: number; uptime: number; createdAt: string }[];
+    databases: {
+        id: string;
+        name: string;
+        engine: string;
+        version: string;
+        status: string;
+        containerName: string | null;
+        port: number | null;
+        dbName: string | null;
+        dbUser: string | null;
+        errorMessage: string | null;
+        projectId: string | null;
+        createdAt: string;
+        project: { id: string; name: string } | null;
+    }[];
 }
 
 export default function ServerDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -75,40 +92,6 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
     const [deletingProject, setDeletingProject] = useState<string | null>(null);
     const [newlyProvisionedProjects, setNewlyProvisionedProjects] = useState<Record<string, { token: string; webhookUrl: string; prUrl?: string | null }>>({});
     const [refreshKey, setRefreshKey] = useState(0);
-
-    // Metrics state
-    const [metrics, setMetrics] = useState<{ cpu: number; memory: number; disk: number; uptime: number; createdAt: string } | null>(null);
-    const [pulseLoading, setPulseLoading] = useState(false);
-    const [pulseError, setPulseError] = useState('');
-
-    const fetchPulse = async () => {
-        if (!token || !id) return;
-        setPulseLoading(true);
-        setPulseError('');
-        try {
-            const res = await fetch(`/api/servers/${id}/pulse`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Pulse check failed');
-            }
-            const data = await res.json();
-            setMetrics(data);
-        } catch (err: any) {
-            setPulseError(err.message || 'Pulse check failed');
-        } finally {
-            setPulseLoading(false);
-        }
-    };
-
-    // Initialize metrics from server data
-    useEffect(() => {
-        if (server && server.metrics && server.metrics.length > 0 && !metrics) {
-            setMetrics(server.metrics[0]);
-        }
-    }, [server]);
 
     const fetchServer = useCallback(() => {
         if (!token || !id) return;
@@ -523,94 +506,20 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                         <GitHubConnect />
                                     </div>
 
+                                    {/* Database Manager */}
+                                    <DatabaseManager
+                                        serverId={id}
+                                        token={token}
+                                        projects={server.projects.map((p: any) => ({ id: p.id, name: p.name }))}
+                                        organizationId={user?.organizationId || ''}
+                                    />
+
                                     {/* Live Server Metrics via SSH Pulse */}
-                                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Live Metrics</h3>
-                                            <button
-                                                onClick={fetchPulse}
-                                                disabled={pulseLoading}
-                                                className="text-xs px-3 py-1.5 rounded-md bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                            >
-                                                {pulseLoading ? (
-                                                    <>
-                                                        <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                                                        Checking...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                                        Refresh Pulse
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
-                                        {pulseError && (
-                                            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-2 mb-3">
-                                                {pulseError}
-                                            </div>
-                                        )}
-                                        <div className="space-y-4">
-                                            <div>
-                                                <div className="flex justify-between text-sm mb-1">
-                                                    <span>CPU Usage</span>
-                                                    <span className="font-mono text-gray-400">{metrics ? `${metrics.cpu.toFixed(1)}%` : '--%'}</span>
-                                                </div>
-                                                <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-500 ${metrics && metrics.cpu > 80 ? 'bg-red-500' : metrics && metrics.cpu > 50 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-                                                        style={{ width: `${metrics ? Math.min(metrics.cpu, 100) : 0}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm mb-1">
-                                                    <span>Memory</span>
-                                                    <span className="font-mono text-gray-400">{metrics ? `${metrics.memory.toFixed(1)}%` : '--%'}</span>
-                                                </div>
-                                                <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-500 ${metrics && metrics.memory > 80 ? 'bg-red-500' : metrics && metrics.memory > 50 ? 'bg-yellow-500' : 'bg-purple-500'}`}
-                                                        style={{ width: `${metrics ? Math.min(metrics.memory, 100) : 0}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="flex justify-between text-sm mb-1">
-                                                    <span>Storage</span>
-                                                    <span className="font-mono text-gray-400">{metrics ? `${metrics.disk.toFixed(1)}%` : '--%'}</span>
-                                                </div>
-                                                <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full transition-all duration-500 ${metrics && metrics.disk > 80 ? 'bg-red-500' : metrics && metrics.disk > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                                                        style={{ width: `${metrics ? Math.min(metrics.disk, 100) : 0}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                            <div className="pt-2 border-t border-gray-800">
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-gray-400">Uptime</span>
-                                                    <span className="font-mono text-gray-300">
-                                                        {metrics ? (() => {
-                                                            const s = metrics.uptime;
-                                                            const d = Math.floor(s / 86400);
-                                                            const h = Math.floor((s % 86400) / 3600);
-                                                            const m = Math.floor((s % 3600) / 60);
-                                                            return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
-                                                        })() : '—'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            {metrics?.createdAt && (
-                                                <p className="text-xs text-gray-600 mt-1">
-                                                    Last checked {new Date(metrics.createdAt).toLocaleString()}
-                                                </p>
-                                            )}
-                                            {!metrics && !pulseLoading && (
-                                                <p className="text-xs text-gray-500 italic mt-2">Click &quot;Refresh Pulse&quot; to fetch live server metrics via SSH.</p>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <ServerMetrics 
+                                        serverId={id as string} 
+                                        token={token || ''} 
+                                        initialMetrics={server.metrics?.[0] || null} 
+                                    />
 
                                     {/* Recent Deployments across all projects on this server */}
                                     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">

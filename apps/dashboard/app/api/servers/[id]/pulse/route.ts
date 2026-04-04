@@ -51,23 +51,44 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         // Execute SSH pulse
         const pulse = await getPulse(serverConfig);
 
-        // Store the metric
-        const metric = await prisma.metric.create({
-            data: {
-                serverId: id,
-                cpu: pulse.cpu,
-                memory: pulse.memory,
-                disk: pulse.disk,
-                uptime: pulse.uptime,
-            },
+        // Check if organization has a paid plan
+        let canSaveMetrics = false;
+        const orgInfo = await prisma.organization.findUnique({
+            where: { id: auth.organizationId }
         });
+        if (orgInfo) {
+            if (orgInfo.plan !== 'FREE') canSaveMetrics = true;
+            
+            const activeSub = await prisma.subscription.findFirst({
+                where: { organizationId: auth.organizationId, status: 'ACTIVE' },
+                include: { plan: true }
+            });
+            if (activeSub && activeSub.plan && activeSub.plan.amount > 0) {
+                canSaveMetrics = true;
+            }
+        }
+
+        // Store the metric ONLY if the user is on a paid plan
+        let metricCreatedAt: Date | null = null;
+        if (canSaveMetrics) {
+            const metric = await prisma.metric.create({
+                data: {
+                    serverId: id,
+                    cpu: pulse.cpu,
+                    memory: pulse.memory,
+                    disk: pulse.disk,
+                    uptime: pulse.uptime,
+                },
+            });
+            metricCreatedAt = metric.createdAt;
+        }
 
         return NextResponse.json({
-            cpu: metric.cpu,
-            memory: metric.memory,
-            disk: metric.disk,
-            uptime: metric.uptime,
-            createdAt: metric.createdAt,
+            cpu: pulse.cpu,
+            memory: pulse.memory,
+            disk: pulse.disk,
+            uptime: pulse.uptime,
+            createdAt: metricCreatedAt || new Date(),
         });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';

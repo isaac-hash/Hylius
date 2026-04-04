@@ -247,6 +247,41 @@ app.prepare().then(() => {
             }
         });
 
+        // ─── provision-database: create a managed DB container on a VPS ──────
+        socket.on('provision-database', async (data: {
+            serverId: string;
+            engine: string;
+            name: string;
+            version?: string;
+            projectId?: string;
+            organizationId: string;
+        }) => {
+            const { serverId, engine, name, version, projectId, organizationId } = data;
+            console.log(`Received provision-database request: ${engine} "${name}" on server ${serverId}`);
+
+            const { createDatabase } = await import('./services/database.service');
+
+            socket.emit(`db_provision_start:${serverId}`, { name, engine });
+
+            const result = await createDatabase({
+                serverId,
+                organizationId,
+                engine: engine as any,
+                name,
+                version,
+                projectId,
+                onLog: (chunk) => {
+                    socket.emit(`db_log:${serverId}`, chunk);
+                },
+            });
+
+            if (result.error) {
+                socket.emit(`db_provision_error:${serverId}`, { error: result.error, id: result.id });
+            } else {
+                socket.emit(`db_provision_success:${serverId}`, { id: result.id });
+            }
+        });
+
         socket.on('disconnect', () => {
             console.log('Client disconnected:', socket.id);
         });

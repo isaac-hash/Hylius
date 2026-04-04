@@ -135,6 +135,9 @@ export default function DeploymentHistory({ projectId, serverId, refreshKey }: D
                                     {d.deployUrl.replace('http://', '')}
                                 </a>
                             )}
+                            <a href={`/deployments/${d.id}`} className="ml-auto text-blue-400 hover:text-blue-300 font-medium">
+                                Details &rarr;
+                            </a>
                         </div>
                     </div>
                 );

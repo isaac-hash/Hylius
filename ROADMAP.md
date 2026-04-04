@@ -60,8 +60,8 @@
 | **Phase 3.5** | 🌐 **Multi-Git-Provider (GitLab + Bitbucket)** | Same offloaded-build flow for GitLab and Bitbucket users | Medium | Pending |
 | **Phase 3.5b** | 🔑 **Environment Variables UI** | Per-project env var editor, .env paste-import, masked secrets | Low | ✅ Done |
 | **Phase 4** | 👁️ **Preview Deployments** | Per-branch URLs (requires Phase 1 + 2) | High | ✅ Done |
-| **Phase 5** | 📊 **Monitoring Dashboard** | Charts from existing `getPulse` data | Medium | Pending |
-| **Phase 6** | 💾 **Build Logs + Commit Statuses** | Vercel-style deploy status on GitHub/GitLab/Bitbucket, real-time log viewer | Medium | Pending |
+| **Phase 5** | 📊 **Monitoring Dashboard** | Charts from existing `getPulse` data | Medium | ✅ Done |
+| **Phase 6** | 💾 **Build Logs + Commit Statuses** | Vercel-style deploy status on GitHub/GitLab/Bitbucket, real-time log viewer | Medium | ✅ Done |
 | **Phase 7** | 🗄️ **Database Management** | Deploy Postgres/MySQL/Redis alongside apps | High | Pending |
 | **Phase 8** | 📦 **One-Click Templates** | WordPress, Ghost, etc. | Low | Pending |
 
