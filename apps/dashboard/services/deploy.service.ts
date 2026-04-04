@@ -128,11 +128,13 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         projectConfig.env!['APP_URL'] = `https://${previewHostname}`;
         projectConfig.env!['NEXT_PUBLIC_APP_URL'] = `https://${previewHostname}`;
         projectConfig.env!['ASSET_URL'] = `https://${previewHostname}`;
+        projectConfig.env!['HTTPS'] = 'on';
     } else if (project.domains.length > 0) {
         // For production, inject the primary domain if one exists and user hasn't hardcoded it
         if (!projectConfig.env!['APP_URL']) projectConfig.env!['APP_URL'] = `https://${project.domains[0].hostname}`;
         if (!projectConfig.env!['NEXT_PUBLIC_APP_URL']) projectConfig.env!['NEXT_PUBLIC_APP_URL'] = `https://${project.domains[0].hostname}`;
         if (!projectConfig.env!['ASSET_URL']) projectConfig.env!['ASSET_URL'] = `https://${project.domains[0].hostname}`;
+        projectConfig.env!['HTTPS'] = 'on';
     }
 
     // Fetch all active deployments to build the full Caddy proxy list (Production + Previews)

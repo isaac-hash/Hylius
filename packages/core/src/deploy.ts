@@ -1,6 +1,7 @@
 import { DeployOptions, DeployResult, ProjectConfig, DomainConfig } from './types.js';
 import { SSHClient } from './ssh/client.js';
 import { configureCaddy, ensureCaddyRunning } from './domain.js';
+import { configureLaravelContainer } from './laravel-helper.js';
 
 async function execOrThrow(client: SSHClient, command: string, context: string): Promise<string> {
     const { stdout, stderr, code } = await client.exec(command);
@@ -137,6 +138,7 @@ function getDockerEnvArgs(env?: Record<string, string>): string {
         .map(([k, v]) => ` -e "${k}=${String(v).replace(/"/g, '\\"')}"`)
         .join('');
 }
+
 
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
     const { server, project, onLog } = options;
@@ -385,6 +387,12 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
+            // Post-start: configure Laravel for reverse-proxy HTTPS (if applicable)
+            const containerPort80 = containerPort === '80';
+            if (containerPort80 || project.env?.APP_URL?.startsWith('https')) {
+                await configureLaravelContainer(client, containerName, project, log);
+            }
+
             const appUrl = `http://${options.server.host}:${port}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
             finalUrl = appUrl;
@@ -450,6 +458,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
+            // Post-start: configure Laravel for reverse-proxy HTTPS
+            if (runtime === 'laravel') {
+                await configureLaravelContainer(client, containerName, project, log);
+            }
+
             const appUrl = `http://${options.server.host}:${port}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
             finalUrl = appUrl;
@@ -490,6 +503,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+
+            // Post-start: configure Laravel for reverse-proxy HTTPS
+            if (runtime === 'laravel') {
+                await configureLaravelContainer(client, containerName, project, log);
+            }
 
             const appUrl = `http://${options.server.host}:${port}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
