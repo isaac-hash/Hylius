@@ -17,6 +17,7 @@ export interface ProjectConfig {
     env?: Record<string, string>;
     deployPath: string; // e.g. /var/www/my-app
     deployStrategy?: 'auto' | 'pm2' | 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'ghcr-pull' | 'compose-registry' | 'compose-server' | 'dagger';
+    releaseCommand?: string;
     dockerComposeFile?: string;
     dockerImage?: string;
     containerName?: string;

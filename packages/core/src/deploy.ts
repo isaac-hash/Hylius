@@ -139,6 +139,57 @@ function getDockerEnvArgs(env?: Record<string, string>): string {
         .join('');
 }
 
+async function executeReleaseCommand(
+    client: SSHClient,
+    project: ProjectConfig,
+    containerOrPath: string,
+    isContainer: boolean,
+    isLaravel: boolean,
+    log: (msg: string) => void
+): Promise<void> {
+    let releaseCmd = project.releaseCommand;
+
+    // Smart default for Laravel if not explicitly provided
+    if (!releaseCmd && isLaravel) {
+        releaseCmd = 'php artisan migrate --force';
+    }
+
+    if (!releaseCmd) {
+        return;
+    }
+
+    log(`Running release command: "${releaseCmd}"`);
+    
+    // Give DB containers and apps a brief moment if they just started
+    await new Promise(r => setTimeout(r, 2000));
+
+    const maxRetries = 10;
+    const retryDelayMs = 3000;
+    
+    for (let i = 1; i <= maxRetries; i++) {
+        try {
+            const cmdToRun = isContainer 
+                ? `docker exec ${containerOrPath} sh -c "${releaseCmd.replace(/"/g, '\\"')}"`
+                : `cd ${containerOrPath} && ${releaseCmd}`;
+            
+            const { stdout, stderr, code } = await client.exec(cmdToRun);
+            
+            if (code === 0) {
+                if (stdout) log(stdout);
+                log('Release command completed successfully.');
+                return;
+            } else {
+                throw new Error(stderr || stdout || 'Unknown error');
+            }
+        } catch (err: any) {
+            log(`Warning: Release command failed (Attempt ${i}/${maxRetries}): ${err.message}`);
+            if (i === maxRetries) {
+                throw new Error(`Release command failed after ${maxRetries} attempts: ${err.message}`);
+            }
+            await new Promise(r => setTimeout(r, retryDelayMs));
+        }
+    }
+}
 
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
     const { server, project, onLog } = options;
@@ -167,6 +218,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         // ─── Pre-deploy: Proactively free up disk space ───
         log('Proactively cleaning up unused Docker resources...');
         await client.exec(`docker system prune -af --volumes > /dev/null 2>&1 || true`);
+
+        // Ensure the shared Hylius Docker network exists (for inter-container communication)
+        await client.exec(`docker network create hylius 2>/dev/null || true`);
 
         let strategy: DeployStrategy | null = project.deployStrategy && project.deployStrategy !== 'auto'
             ? (project.deployStrategy as DeployStrategy)
@@ -216,6 +270,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 onLog,
             );
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+            await executeReleaseCommand(client, project, releasePath, false, false, log);
 
         } else if (strategy === 'compose-registry') {
             log(`Deploying via docker-compose (Pulling from Registry)...`);
@@ -240,6 +295,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+            await executeReleaseCommand(client, project, releasePath, false, false, log);
 
             log(`Detecting exposed port from compose stack...`);
             let composePort = '';
@@ -279,6 +335,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+            await executeReleaseCommand(client, project, releasePath, false, false, log);
 
             log(`Detecting exposed port from compose stack...`);
             let composePort = '';
@@ -380,18 +437,17 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             await execStreamOrThrow(
                 client,
                 `docker rm -f ${containerName} >/dev/null 2>&1 || true && \
-                 docker run -d --name ${containerName}${envArgs}${portEnvArg} --restart unless-stopped -p ${port}:${containerPort} ${image}`,
+                 docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${port}:${containerPort} ${image}`,
                 'Docker run',
                 onLog,
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
-            // Post-start: configure Laravel for reverse-proxy HTTPS (if applicable)
-            const containerPort80 = containerPort === '80';
-            if (containerPort80 || project.env?.APP_URL?.startsWith('https')) {
-                await configureLaravelContainer(client, containerName, project, log);
-            }
+            // Post-start: unconditionally run the Laravel configurator (it safely exits if not a Laravel app)
+            const isHttpsDeploy = !!(options.domains && options.domains.length > 0);
+            const isLaravel = await configureLaravelContainer(client, containerName, project, isHttpsDeploy, log);
+            await executeReleaseCommand(client, project, containerName, true, isLaravel, log);
 
             const appUrl = `http://${options.server.host}:${port}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
@@ -401,7 +457,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const imageName = getImageName(project);
             const containerName = getContainerName(project);
             const envArgs = getDockerEnvArgs(project.env);
-            const runCommand = project.dockerRunCommand || `docker run -d --name ${containerName}${envArgs} --restart unless-stopped ${imageName}`;
+            const runCommand = project.dockerRunCommand || `docker run -d --name ${containerName}${envArgs} --network hylius --restart unless-stopped ${imageName}`;
 
             log(`Building Docker image: ${imageName}`);
             await execStreamOrThrow(
@@ -420,6 +476,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
 
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
+            await executeReleaseCommand(client, project, containerName, true, false, log);
 
         } else if (strategy === 'railpack') {
             const imageName = getImageName(project);
@@ -451,7 +508,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
-                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${port}:${port} ${imageName}`,
                 'Docker run',
                 onLog,
             );
@@ -459,9 +516,12 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
             // Post-start: configure Laravel for reverse-proxy HTTPS
+            let isLaravel = false;
             if (runtime === 'laravel') {
-                await configureLaravelContainer(client, containerName, project, log);
+                const isHttpsDeploy = !!(options.domains && options.domains.length > 0);
+                isLaravel = await configureLaravelContainer(client, containerName, project, isHttpsDeploy, log);
             }
+            await executeReleaseCommand(client, project, containerName, true, isLaravel, log);
 
             const appUrl = `http://${options.server.host}:${port}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
@@ -497,7 +557,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
-                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${port}:${port} ${imageName}`,
                 'Docker run',
                 onLog,
             );
@@ -505,9 +565,12 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
 
             // Post-start: configure Laravel for reverse-proxy HTTPS
+            let isLaravel = false;
             if (runtime === 'laravel') {
-                await configureLaravelContainer(client, containerName, project, log);
+                const isHttpsDeploy = !!(options.domains && options.domains.length > 0);
+                isLaravel = await configureLaravelContainer(client, containerName, project, isHttpsDeploy, log);
             }
+            await executeReleaseCommand(client, project, containerName, true, isLaravel, log);
 
             const appUrl = `http://${options.server.host}:${port}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
@@ -655,6 +718,8 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 appPort = defaultPort;
                 log(`Port not detected, using default: ${defaultPort}`);
             }
+
+            await executeReleaseCommand(client, project, currentPath, false, false, log);
 
             const appUrl = `http://${options.server.host}:${appPort}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);

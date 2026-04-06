@@ -70,18 +70,27 @@ async function getServerConfig(serverId: string): Promise<ServerConfig & { priva
 
 /**
  * Build connection string from a Database record (decrypts password on-the-fly).
+ * If internal is true, returns the URL using the Docker container name and standard internal port
+ * for use within the shared 'hylius' Docker network.
  */
-export function buildConnectionStringFromRecord(db: any): string {
+export function buildConnectionStringFromRecord(db: any, internal = false): string {
     if (!db.passwordEncrypted || !db.passwordIv) return '';
     try {
         const password = decrypt(db.passwordEncrypted, db.passwordIv);
-        return buildDbConnectionString(
+        const url = buildDbConnectionString(
             db.engine as DatabaseEngine,
             db.dbUser || '',
             password,
             db.port || 0,
             db.dbName || '',
         );
+
+        if (internal && db.containerName) {
+            const internalPort = db.engine === 'POSTGRES' ? 5432 : db.engine === 'MYSQL' ? 3306 : 6379;
+            return url.replace(`@localhost:${db.port}`, `@${db.containerName}:${internalPort}`);
+        }
+
+        return url;
     } catch {
         return '';
     }
@@ -94,8 +103,17 @@ export function buildConnectionStringFromRecord(db: any): string {
  * Creates the Prisma record first, then SSHes to the VPS to start the container.
  */
 export async function createDatabase(options: CreateDatabaseOptions): Promise<{ id: string; error?: string }> {
-    const { serverId, organizationId, engine, name, version, projectId, onLog } = options;
+    const { serverId, engine, name, version, projectId, onLog } = options;
     const log = (msg: string) => { if (onLog) onLog(msg); };
+
+    // Derive organizationId from the server record to avoid FK violations
+    // when the client passes an empty/invalid organizationId
+    // @ts-ignore
+    const server = await prisma.server.findUnique({ where: { id: serverId }, select: { organizationId: true } });
+    if (!server) {
+        return { id: '', error: `Server not found: ${serverId}` };
+    }
+    const organizationId = options.organizationId || server.organizationId;
 
     const password = generatePassword();
     const { encrypted, iv } = encrypt(password);
@@ -137,7 +155,7 @@ export async function createDatabase(options: CreateDatabaseOptions): Promise<{ 
         }
 
         // @ts-ignore
-        await prisma.database.update({
+        const linkedDb = await prisma.database.update({
             where: { id: dbRecord.id },
             data: {
                 status: 'RUNNING',
@@ -151,7 +169,8 @@ export async function createDatabase(options: CreateDatabaseOptions): Promise<{ 
 
         // If linked to a project, auto-inject DATABASE_URL / REDIS_URL into project envVars
         if (projectId) {
-            await injectDatabaseUrlIntoProject(dbRecord.id, projectId, result.connectionString, engine);
+            const internalConnectionString = buildConnectionStringFromRecord(linkedDb, true);
+            await injectDatabaseUrlIntoProject(dbRecord.id, projectId, internalConnectionString, engine);
             log(`\x1b[32m✅ DATABASE_URL injected into project environment\x1b[0m\n`);
         }
 
@@ -312,7 +331,7 @@ export async function linkDatabaseToProject(databaseId: string, projectId: strin
     const db = await prisma.database.findUnique({ where: { id: databaseId } });
     if (!db) throw new Error('Database not found');
 
-    const connectionString = buildConnectionStringFromRecord(db);
+    const connectionString = buildConnectionStringFromRecord(db, true);
 
     // @ts-ignore
     await prisma.database.update({

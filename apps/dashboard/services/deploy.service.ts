@@ -27,12 +27,12 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
 
     // We will buffer ALL logs here to save them to the DB later
     let fullLogContent = '';
-    
+
     // Create a wrapper for onLog that also buffers and broadcasts
-    const enhancedLog = (chunk: string) => {
+    let enhancedLog = (chunk: string) => {
         fullLogContent += chunk;
         if (onLog) onLog(chunk);
-        
+
         // Broadcast the chunk in real-time to anyone reading this deployment detail page
         const globalIo = (global as any).io;
         if (globalIo) {
@@ -81,7 +81,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
 
     // Overwrite the real-time globalIo broadcast above now that we have the deployment.id
     const originalLog = enhancedLog;
-    (enhancedLog as any) = (chunk: string) => {
+    enhancedLog = (chunk: string) => {
         fullLogContent += chunk;
         if (onLog) onLog(chunk);
         const globalIo = (global as any).io;
@@ -146,7 +146,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
         previewId: isPreview ? `pr-${prNumber}` : undefined,
     };
-    
+
     // Auto-inject URL environment variables
     const serverIpSlug = project.server.ip.replace(/\./g, '-');
     if (isPreview) {
@@ -175,10 +175,14 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             if (!projectConfig.env![envKey] && db.passwordEncrypted && db.passwordIv) {
                 try {
                     const password = decrypt(db.passwordEncrypted, db.passwordIv);
-                    const { buildDbConnectionString } = await import('@hylius/core' as any);
-                    projectConfig.env![envKey] = buildDbConnectionString(
-                        db.engine, db.dbUser || '', password, db.port || 0, db.dbName || ''
+                    const { buildInternalDbConnectionString } = await import('@hylius/core' as any);
+                    const connectionString = buildInternalDbConnectionString(
+                        db.engine, db.dbUser || '', password, db.dbName || '', db.containerName
                     );
+                    projectConfig.env![envKey] = connectionString;
+                    if (envKey === 'DATABASE_URL' && !projectConfig.env!['DB_URL']) {
+                        projectConfig.env!['DB_URL'] = connectionString;
+                    }
                     log(`[DB] Auto-injected ${envKey} from database "${db.name}"\n`);
                 } catch (dbErr: any) {
                     log(`[DB] Warning: Could not inject ${envKey}: ${dbErr.message}\n`);
@@ -199,14 +203,14 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
     });
 
     const domainConfigs: any[] = [];
-    
+
     // 1. Add Production Domains (if they exist)
     if (project.domains.length > 0) {
         // Find the latest production deployment port
         const latestProd = activeDeployments.find((d: any) => d.environment === 'PRODUCTION');
         let prodPort = '3000';
         if (latestProd?.deployUrl) {
-            try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch {}
+            try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch { }
         }
         // Wait, the orchestrator naturally infers the appPort if we just pass `{ hostname: d.hostname }`
         // BUT if we are currently deploying a PREVIEW, the orchestrator's `appPort` belongs to the PREVIEW!
@@ -218,16 +222,16 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
 
     // 2. Add Active Preview Domains
     const activePreviews = activeDeployments.filter((d: any) => d.environment === 'PREVIEW' && d.pullRequestNumber);
-    
+
     // Add previously built previews
     activePreviews.forEach((d: any) => {
         // Skip the one we are currently building, as it gets added natively below
         if (d.pullRequestNumber === prNumber) return;
-        
+
         const previewHostname = `pr-${d.pullRequestNumber}.${serverIpSlug}.sslip.io`;
         let prePort = '3000';
         if (d.deployUrl) {
-            try { prePort = new URL(d.deployUrl).port || '3000'; } catch {}
+            try { prePort = new URL(d.deployUrl).port || '3000'; } catch { }
         }
         domainConfigs.push({ hostname: previewHostname, upstreamPort: prePort });
     });
@@ -237,7 +241,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         // Pseudo-subdomain for the current preview deployment
         const previewHostname = `pr-${prNumber}.${serverIpSlug}.sslip.io`;
         // Unshift ensures this is the PRIMARY domain orchestrator returns as the finalURL!
-        domainConfigs.unshift({ hostname: previewHostname }); 
+        domainConfigs.unshift({ hostname: previewHostname });
         log(`\\n\\x1b[35m[Preview] Automatically provisioning custom pseudodomain: ${previewHostname}\\x1b[0m\\n`);
     }
 
@@ -349,11 +353,11 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
 
     let privateKey = '';
     if (project.server.privateKeyEncrypted && project.server.keyIv) {
-        try { privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv); } catch {}
+        try { privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv); } catch { }
     }
 
     const { SSHClient, configureCaddy } = require('@hylius/core');
-    
+
     const serverConfig = {
         host: project.server.ip,
         port: project.server.port,
@@ -370,10 +374,10 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
     const client = new SSHClient(serverConfig);
     try {
         await client.connect();
-        
+
         // 1. Kill and remove the container running the preview build
         await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
-        
+
         // 2. Remove the preview directory
         await client.exec(`rm -rf ${environmentPath} > /dev/null 2>&1 || true`);
 
@@ -387,13 +391,13 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
         });
 
         const domainConfigs: any[] = [];
-        
+
         // Add Production Domains
         if (project.domains.length > 0) {
             const latestProd = activeDeployments.find((d: any) => d.environment === 'PRODUCTION');
             let prodPort = '3000';
             if (latestProd?.deployUrl) {
-                try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch {}
+                try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch { }
             }
             project.domains.forEach((d: any) => {
                 domainConfigs.push({ hostname: d.hostname, upstreamPort: prodPort });
@@ -403,12 +407,12 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
         // Add OTHER Active Preview Domains (exluding the one we are destroying)
         const activePreviews = activeDeployments.filter((d: any) => d.environment === 'PREVIEW' && d.pullRequestNumber && d.pullRequestNumber !== prNumber);
         const serverIpSlug = project.server.ip.replace(/\./g, '-');
-        
+
         activePreviews.forEach((d: any) => {
             const previewHostname = `pr-${d.pullRequestNumber}.${serverIpSlug}.sslip.io`;
             let prePort = '3000';
             if (d.deployUrl) {
-                try { prePort = new URL(d.deployUrl).port || '3000'; } catch {}
+                try { prePort = new URL(d.deployUrl).port || '3000'; } catch { }
             }
             domainConfigs.push({ hostname: previewHostname, upstreamPort: prePort });
         });

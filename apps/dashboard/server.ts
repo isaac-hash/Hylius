@@ -259,26 +259,31 @@ app.prepare().then(() => {
             const { serverId, engine, name, version, projectId, organizationId } = data;
             console.log(`Received provision-database request: ${engine} "${name}" on server ${serverId}`);
 
-            const { createDatabase } = await import('./services/database.service');
+            try {
+                const { createDatabase } = await import('./services/database.service');
 
-            socket.emit(`db_provision_start:${serverId}`, { name, engine });
+                socket.emit(`db_provision_start:${serverId}`, { name, engine });
 
-            const result = await createDatabase({
-                serverId,
-                organizationId,
-                engine: engine as any,
-                name,
-                version,
-                projectId,
-                onLog: (chunk) => {
-                    socket.emit(`db_log:${serverId}`, chunk);
-                },
-            });
+                const result = await createDatabase({
+                    serverId,
+                    organizationId,
+                    engine: engine as any,
+                    name,
+                    version,
+                    projectId,
+                    onLog: (chunk) => {
+                        socket.emit(`db_log:${serverId}`, chunk);
+                    },
+                });
 
-            if (result.error) {
-                socket.emit(`db_provision_error:${serverId}`, { error: result.error, id: result.id });
-            } else {
-                socket.emit(`db_provision_success:${serverId}`, { id: result.id });
+                if (result.error) {
+                    socket.emit(`db_provision_error:${serverId}`, { error: result.error, id: result.id });
+                } else {
+                    socket.emit(`db_provision_success:${serverId}`, { id: result.id });
+                }
+            } catch (err: any) {
+                console.error(`[provision-database] Unhandled error for "${name}" on server ${serverId}:`, err);
+                socket.emit(`db_provision_error:${serverId}`, { error: err.message || 'Unknown provisioning error' });
             }
         });
 

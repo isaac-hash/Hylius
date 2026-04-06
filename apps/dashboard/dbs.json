@@ -1,0 +1,21 @@
+[
+  {
+    "id": "cmnm48ybt000dux9en56w1a0e",
+    "name": "rea-lara-db",
+    "engine": "POSTGRES",
+    "version": "16",
+    "status": "RUNNING",
+    "containerName": "hylius-db-rea-lara-db",
+    "port": 5433,
+    "dbName": "rea_lara_db_db",
+    "dbUser": "rea_lara_db_user",
+    "passwordEncrypted": "bS+bsbS3hcjOY93Ju/SKATBZiHMCRS+S9VZc+mjdeNcQLPi6U89t2nfhcL9qpcYk",
+    "passwordIv": "HiVM8jXeD/JDLQk9tNGI8g==",
+    "errorMessage": null,
+    "serverId": "cmnkjadnh0007iuy48hgcihzk",
+    "projectId": "cmnm45e3f0001ux9e3wc17y7q",
+    "organizationId": "cmnkj7k9s0001iuy487dkkinh",
+    "createdAt": "2026-04-05T18:49:55.913Z",
+    "updatedAt": "2026-04-05T18:49:59.775Z"
+  }
+]

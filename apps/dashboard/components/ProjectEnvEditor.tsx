@@ -96,8 +96,8 @@ export default function ProjectEnvEditor({ projectId, projectName, isOpen, onClo
 
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
         const text = e.clipboardData.getData('text');
-        const isBulk = text.includes('\\n') && text.includes('=');
-        const isSingleAssignment = /^[A-Z_][A-Z0-9_]*\\s*=/.test(text.trim());
+        const isBulk = text.includes('\n') && text.includes('=');
+        const isSingleAssignment = /^[A-Z_][A-Z0-9_]*\s*=/.test(text.trim());
         
         if (!isBulk && !isSingleAssignment) return; // Let default browser paste happen!
         e.preventDefault();

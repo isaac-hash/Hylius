@@ -35,7 +35,7 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
     const [loadingPulse, setLoadingPulse] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(true);
     const [pulseError, setPulseError] = useState('');
-    const [isFreePlan, setIsFreePlan] = useState(false);
+    const [isPaidPlan, setIsPaidPlan] = useState(false);
     const [autoRefresh, setAutoRefresh] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('hylius-autopoll') === 'true';
@@ -58,12 +58,11 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
             }
             const data = await res.json();
             setLiveMetrics(data);
-            
-            // If we are not on a free plan, append the live point to the history chart
-            if (!isFreePlan) {
+
+            // Only append to chart history if on a paid plan (metrics are stored server-side)
+            if (isPaidPlan) {
                 setMetricsHistory(prev => {
                     const next = [...prev, data];
-                    // keep last 100 on frontend natively
                     if (next.length > 100) return next.slice(next.length - 100);
                     return next;
                 });
@@ -73,7 +72,7 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
         } finally {
             setLoadingPulse(false);
         }
-    }, [serverId, token, isFreePlan]);
+    }, [serverId, token, isPaidPlan]);
 
     const fetchHistory = useCallback(async () => {
         if (!token || !serverId) return;
@@ -82,7 +81,8 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.status === 403) {
-                setIsFreePlan(true);
+                // Free plan — history not available, but live metrics still work
+                setIsPaidPlan(false);
                 setLoadingHistory(false);
                 return;
             }
@@ -90,9 +90,9 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
                 throw new Error('Failed to load metrics history');
             }
             const data = await res.json();
+            setIsPaidPlan(true);
             if (Array.isArray(data) && data.length > 0) {
                 setMetricsHistory(data);
-                // Also update the live metric to the latest one
                 setLiveMetrics(data[data.length - 1]);
             }
         } catch (err) {
@@ -159,25 +159,23 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                    {isFreePlan ? 'Live Metrics' : 'Server Metrics'}
+                    {isPaidPlan ? 'Server Metrics' : 'Live Metrics'}
                 </h3>
-                
+
                 <div className="flex items-center gap-3">
-                    {!isFreePlan && (
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <div className="relative">
-                                <input 
-                                    type="checkbox" 
-                                    className="sr-only" 
-                                    checked={autoRefresh} 
-                                    onChange={() => setAutoRefresh(!autoRefresh)} 
-                                />
-                                <div className={`block w-10 h-6 rounded-full transition-colors ${autoRefresh ? 'bg-blue-600' : 'bg-gray-700'}`}></div>
-                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${autoRefresh ? 'transform translate-x-4' : ''}`}></div>
-                            </div>
-                            <span className="text-xs text-gray-400 font-medium">Auto-poll (30s)</span>
-                        </label>
-                    )}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <div className="relative">
+                            <input
+                                type="checkbox"
+                                className="sr-only"
+                                checked={autoRefresh}
+                                onChange={() => setAutoRefresh(!autoRefresh)}
+                            />
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${autoRefresh ? 'bg-blue-600' : 'bg-gray-700'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${autoRefresh ? 'transform translate-x-4' : ''}`}></div>
+                        </div>
+                        <span className="text-xs text-gray-400 font-medium">Auto-poll (30s)</span>
+                    </label>
 
                     <button
                         onClick={fetchPulse}
@@ -205,65 +203,49 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
                 </div>
             )}
 
-            {isFreePlan ? (
-                // FREE PLAN: Fallback to old static progress bars
-                <div className="space-y-4 relative">
-                    {/* Upgrade Banner Overlay */}
-                    <div className="absolute -inset-2 bg-gradient-to-t from-gray-900/90 via-gray-900/50 to-transparent z-10 flex items-end justify-center pb-4 backdrop-blur-[1px] pointer-events-none">
-                        <div className="pointer-events-auto bg-gray-900 border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.15)] p-3 rounded-lg flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-amber-400">Unlock Historical Charts</p>
-                                <p className="text-[10px] text-gray-400">Upgrade to Pro to track metrics over time.</p>
-                            </div>
-                            <a href="/billing" className="ml-2 text-xs bg-amber-500 text-amber-950 font-bold px-3 py-1.5 rounded hover:bg-amber-400 transition-colors">
-                                Upgrade
-                            </a>
-                        </div>
+            {/* ── Live Stats (always visible) ── */}
+            <div className="space-y-4">
+                <div>
+                    <div className="flex justify-between text-sm mb-1">
+                        <span>CPU Usage</span>
+                        <span className="font-mono text-gray-400">{liveMetrics ? `${liveMetrics.cpu.toFixed(1)}%` : '--%'}</span>
                     </div>
-
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>CPU Usage</span>
-                            <span className="font-mono text-gray-400">{liveMetrics ? `${liveMetrics.cpu.toFixed(1)}%` : '--%'}</span>
-                        </div>
-                        <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full rounded-full transition-all duration-500 ${liveMetrics && liveMetrics.cpu > 80 ? 'bg-red-500' : liveMetrics && liveMetrics.cpu > 50 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-                                style={{ width: `${liveMetrics ? Math.min(liveMetrics.cpu, 100) : 0}%` }}
-                            ></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>Memory</span>
-                            <span className="font-mono text-gray-400">{liveMetrics ? `${liveMetrics.memory.toFixed(1)}%` : '--%'}</span>
-                        </div>
-                        <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full rounded-full transition-all duration-500 ${liveMetrics && liveMetrics.memory > 80 ? 'bg-red-500' : liveMetrics && liveMetrics.memory > 50 ? 'bg-yellow-500' : 'bg-purple-500'}`}
-                                style={{ width: `${liveMetrics ? Math.min(liveMetrics.memory, 100) : 0}%` }}
-                            ></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>Storage</span>
-                            <span className="font-mono text-gray-400">{liveMetrics ? `${liveMetrics.disk.toFixed(1)}%` : '--%'}</span>
-                        </div>
-                        <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full rounded-full transition-all duration-500 ${liveMetrics && liveMetrics.disk > 80 ? 'bg-red-500' : liveMetrics && liveMetrics.disk > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                                style={{ width: `${liveMetrics ? Math.min(liveMetrics.disk, 100) : 0}%` }}
-                            ></div>
-                        </div>
+                    <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${liveMetrics && liveMetrics.cpu > 80 ? 'bg-red-500' : liveMetrics && liveMetrics.cpu > 50 ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                            style={{ width: `${liveMetrics ? Math.min(liveMetrics.cpu, 100) : 0}%` }}
+                        ></div>
                     </div>
                 </div>
-            ) : (
-                // PRO PLAN: Recharts View
-                <div className="space-y-6">
+                <div>
+                    <div className="flex justify-between text-sm mb-1">
+                        <span>Memory</span>
+                        <span className="font-mono text-gray-400">{liveMetrics ? `${liveMetrics.memory.toFixed(1)}%` : '--%'}</span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${liveMetrics && liveMetrics.memory > 80 ? 'bg-red-500' : liveMetrics && liveMetrics.memory > 50 ? 'bg-yellow-500' : 'bg-purple-500'}`}
+                            style={{ width: `${liveMetrics ? Math.min(liveMetrics.memory, 100) : 0}%` }}
+                        ></div>
+                    </div>
+                </div>
+                <div>
+                    <div className="flex justify-between text-sm mb-1">
+                        <span>Storage</span>
+                        <span className="font-mono text-gray-400">{liveMetrics ? `${liveMetrics.disk.toFixed(1)}%` : '--%'}</span>
+                    </div>
+                    <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-500 ${liveMetrics && liveMetrics.disk > 80 ? 'bg-red-500' : liveMetrics && liveMetrics.disk > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                            style={{ width: `${liveMetrics ? Math.min(liveMetrics.disk, 100) : 0}%` }}
+                        ></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Historical Chart (paid plan only) ── */}
+            {isPaidPlan ? (
+                <div className="space-y-6 mt-6">
                     {loadingHistory ? (
                         <div className="h-64 flex items-center justify-center border-2 border-gray-800 border-dashed rounded-lg">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -350,9 +332,23 @@ export default function ServerMetrics({ serverId, token, initialMetrics }: Serve
                         </div>
                     </div>
                 </div>
+            ) : (
+                // Free plan: show upgrade nudge below the live bars
+                <div className="mt-4 flex items-center gap-3 bg-amber-500/5 border border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.08)] p-3 rounded-lg">
+                    <div className="w-7 h-7 flex-shrink-0 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-amber-400">Unlock Historical Charts</p>
+                        <p className="text-[10px] text-gray-500">Upgrade to Pro to track metrics over time.</p>
+                    </div>
+                    <a href="/billing" className="text-xs bg-amber-500 text-amber-950 font-bold px-3 py-1.5 rounded hover:bg-amber-400 transition-colors whitespace-nowrap">
+                        Upgrade
+                    </a>
+                </div>
             )}
 
-            <div className={`pt-4 mt-4 border-t border-gray-800 ${isFreePlan ? 'opacity-50' : ''}`}>
+            <div className="pt-4 mt-4 border-t border-gray-800">
                 <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Uptime</span>
                     <span className="font-mono text-gray-300">

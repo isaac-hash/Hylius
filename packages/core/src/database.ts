@@ -122,6 +122,9 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
         // Remove any existing container with same name (idempotent)
         await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
 
+        // Ensure the shared Hylius Docker network exists
+        await client.exec(`docker network create hylius 2>/dev/null || true`);
+
         log(`Starting ${engine} container: ${containerName}`);
         let dockerRunCmd: string;
 
@@ -130,6 +133,7 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
                 dockerRunCmd = [
                     `docker run -d`,
                     `--name ${containerName}`,
+                    `--network hylius`,
                     `--restart unless-stopped`,
                     `-e POSTGRES_DB=${dbName}`,
                     `-e POSTGRES_USER=${dbUser}`,
@@ -148,6 +152,7 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
                 dockerRunCmd = [
                     `docker run -d`,
                     `--name ${containerName}`,
+                    `--network hylius`,
                     `--restart unless-stopped`,
                     `-e MYSQL_DATABASE=${dbName}`,
                     `-e MYSQL_USER=${dbUser}`,
@@ -167,6 +172,7 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
                 dockerRunCmd = [
                     `docker run -d`,
                     `--name ${containerName}`,
+                    `--network hylius`,
                     `--restart unless-stopped`,
                     `-p 127.0.0.1:${port}:${containerPort}`,
                     `-v ${volumeName}:/data`,
@@ -397,4 +403,23 @@ export function buildDbConnectionString(
     dbName: string,
 ): string {
     return buildConnectionString(engine, dbUser, password, port, dbName);
+}
+
+export function buildInternalDbConnectionString(
+    engine: DatabaseEngine,
+    dbUser: string,
+    password: string,
+    dbName: string,
+    containerName: string
+): string {
+    const encodedPass = encodeURIComponent(password);
+    const port = PORT_RANGES[engine].container;
+    switch (engine) {
+        case 'POSTGRES':
+            return `postgresql://${dbUser}:${encodedPass}@${containerName}:${port}/${dbName}`;
+        case 'MYSQL':
+            return `mysql://${dbUser}:${encodedPass}@${containerName}:${port}/${dbName}`;
+        case 'REDIS':
+            return `redis://:${encodedPass}@${containerName}:${port}`;
+    }
 }
