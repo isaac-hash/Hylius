@@ -62,8 +62,9 @@
 | **Phase 4** | 👁️ **Preview Deployments** | Per-branch URLs (requires Phase 1 + 2) | High | ✅ Done |
 | **Phase 5** | 📊 **Monitoring Dashboard** | Charts from existing `getPulse` data | Medium | ✅ Done |
 | **Phase 6** | 💾 **Build Logs + Commit Statuses** | Vercel-style deploy status on GitHub/GitLab/Bitbucket, real-time log viewer | Medium | ✅ Done |
-| **Phase 7** | 🗄️ **Database Management** | Deploy Postgres/MySQL/Redis alongside apps | High | Pending |
+| **Phase 7** | 🗄️ **Database Management** | Deploy Postgres/MySQL/Redis alongside apps | High | ✅ Done |
 | **Phase 8** | 📦 **One-Click Templates** | WordPress, Ghost, etc. | Low | Pending |
+| **Phase 9** | 🔥 **Cloud Provider Firewall API** | Auto-open firewall ports on DigitalOcean, Hetzner, Vultr, Linode after deploy | Medium | Pending |
 
 ---
 
@@ -191,6 +192,37 @@ The Dagger architecture makes multi-provider support almost free to add. The `.d
 
 ---
 
+## Phase 9 Summary: Cloud Provider Firewall API Integration
+
+> **Goal**: Automatically open cloud firewall ports on supported VPS providers (DigitalOcean, Hetzner, Vultr, Linode) when Hylius deploys an application to a non-standard port, eliminating the need for users to manually configure provider dashboards.
+
+### Problem
+
+Most VPS providers have two layers of firewall:
+1. **OS-level (UFW/iptables)** — Hylius already configures this automatically
+2. **Cloud-level (provider dashboard)** — Currently requires manual intervention
+
+### Architecture
+
+1. **Schema additions**: `cloudProvider`, `providerApiKeyEnc`, `providerApiKeyIv`, `providerResourceId` on `Server` model
+2. **Provider adapters**: `packages/core/src/cloud-firewall/` — one adapter per provider (DigitalOcean, Hetzner, Vultr, Linode), each ~50-80 lines making REST API calls
+3. **Deploy integration**: After UFW port-open step, if the server has a `cloudProvider` and API key, call the adapter to open the port in the cloud firewall
+4. **Dashboard UI**: "Cloud Provider" dropdown + "API Key" encrypted input on server creation/edit form
+
+### Provider Priority
+
+| Priority | Provider | API Endpoint | Notes |
+|:---|:---|:---|:---|
+| 1st | DigitalOcean | `/v2/firewalls/{id}/rules` | Most popular, simplest API |
+| 2nd | Hetzner | `/v1/firewalls/{id}/actions/set_rules` | Popular in EU |
+| 3rd | Vultr | `/v2/firewalls/{group-id}/rules` | Growing user base |
+| 4th | Linode (Akamai) | `/v4/networking/firewalls/{id}/rules` | Slightly more complex |
+
+### Prerequisite
+
+Phase 1 (smart warning system, already implemented) covers unsupported providers like Fasthosts.
+
+---
 ## Architectural Decisions Log
 
 | Decision | Choice | Rationale |

@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(newToken);
         setUser(newUser);
         setOrganization(newOrg);
-        router.push("/");
+        router.push("/dashboard");
     };
 
     const logout = () => {

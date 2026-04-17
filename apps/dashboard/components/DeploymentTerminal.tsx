@@ -65,6 +65,7 @@ export default function DeploymentTerminal({
 }: DeploymentTerminalProps) {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [status, setStatus] = useState<DeployStatus>('deploying');
+    const [firewallWarning, setFirewallWarning] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const hasTriggered = useRef(false);
     const onDeployFinishedRef = useRef(onDeployFinished);
@@ -85,6 +86,13 @@ export default function DeploymentTerminal({
         const lines = raw.split('\n').filter((l) => l.trim() !== '');
         const entries: LogEntry[] = lines.map((line) => {
             const { text, type } = parseLogLine(line);
+
+            // Detect firewall warning marker from core deploy log
+            const fwMatch = text.match(/\[FIREWALL_WARNING\]\s*port=(\d+)/);
+            if (fwMatch) {
+                setFirewallWarning(fwMatch[1]);
+            }
+
             return {
                 timestamp: formatTimestamp(),
                 text,
@@ -246,6 +254,22 @@ export default function DeploymentTerminal({
                     </div>
                 )}
             </div>
+
+            {/* Firewall Warning Banner */}
+            {firewallWarning && (
+                <div className="px-4 sm:px-6 py-3 bg-amber-500/10 border-t border-amber-500/30 flex items-start gap-3">
+                    <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <div className="min-w-0">
+                        <p className="text-amber-300 text-sm font-semibold">Cloud Firewall Notice</p>
+                        <p className="text-amber-200/70 text-xs mt-1 leading-relaxed">
+                            Your app is running on port <span className="font-mono font-bold text-amber-300">{firewallWarning}</span>, but your VPS provider&apos;s cloud firewall may be blocking external access.
+                            Open your provider&apos;s firewall dashboard and allow <span className="font-mono font-bold text-amber-300">TCP port {firewallWarning}</span>.
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

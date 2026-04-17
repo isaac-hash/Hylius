@@ -132,6 +132,12 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         }
     }
 
+    let dockerComposeYaml: string | undefined = undefined;
+    if (envVars && envVars['_HYLIUS_TEMPLATE_COMPOSE_']) {
+        dockerComposeYaml = envVars['_HYLIUS_TEMPLATE_COMPOSE_'];
+        delete envVars['_HYLIUS_TEMPLATE_COMPOSE_'];
+    }
+
     const projectConfig: ProjectConfig = {
         name: project.name,
         repoUrl,
@@ -145,6 +151,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         env: envVars || {},
         environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
         previewId: isPreview ? `pr-${prNumber}` : undefined,
+        dockerComposeYaml, // Passed to core
     };
 
     // Auto-inject URL environment variables
@@ -172,21 +179,43 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         });
         for (const db of linkedDatabases) {
             const envKey = db.engine === 'REDIS' ? 'REDIS_URL' : 'DATABASE_URL';
-            if (!projectConfig.env![envKey] && db.passwordEncrypted && db.passwordIv) {
-                try {
-                    const password = decrypt(db.passwordEncrypted, db.passwordIv);
+            if (!db.passwordEncrypted || !db.passwordIv) continue;
+            try {
+                const password = decrypt(db.passwordEncrypted, db.passwordIv);
+                // Reconstruct container name if missing (matches @hylius/core getContainerName)
+                const resolvedContainerName = db.containerName || `hylius-db-${db.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+
+                // Inject the URL itself only if not already set from project envVars
+                if (!projectConfig.env![envKey]) {
                     const { buildInternalDbConnectionString } = await import('@hylius/core' as any);
                     const connectionString = buildInternalDbConnectionString(
-                        db.engine, db.dbUser || '', password, db.dbName || '', db.containerName
+                        db.engine, db.dbUser || '', password, db.dbName || '', resolvedContainerName
                     );
                     projectConfig.env![envKey] = connectionString;
                     if (envKey === 'DATABASE_URL' && !projectConfig.env!['DB_URL']) {
                         projectConfig.env!['DB_URL'] = connectionString;
                     }
-                    log(`[DB] Auto-injected ${envKey} from database "${db.name}"\n`);
-                } catch (dbErr: any) {
-                    log(`[DB] Warning: Could not inject ${envKey}: ${dbErr.message}\n`);
                 }
+
+                // ALWAYS inject granular vars — frameworks like Laravel need these
+                // even when DATABASE_URL is already present from project envVars
+                if (envKey === 'DATABASE_URL') {
+                    if (!projectConfig.env!['DB_CONNECTION']) projectConfig.env!['DB_CONNECTION'] = db.engine === 'POSTGRES' ? 'pgsql' : 'mysql';
+                    if (!projectConfig.env!['DB_HOST']) projectConfig.env!['DB_HOST'] = resolvedContainerName;
+                    if (!projectConfig.env!['DB_PORT']) projectConfig.env!['DB_PORT'] = db.engine === 'POSTGRES' ? '5432' : '3306';
+                    if (!projectConfig.env!['DB_DATABASE']) projectConfig.env!['DB_DATABASE'] = db.dbName || '';
+                    if (!projectConfig.env!['DB_USERNAME']) projectConfig.env!['DB_USERNAME'] = db.dbUser || '';
+                    if (!projectConfig.env!['DB_PASSWORD']) projectConfig.env!['DB_PASSWORD'] = password;
+                }
+                if (envKey === 'REDIS_URL') {
+                    if (!projectConfig.env!['REDIS_HOST']) projectConfig.env!['REDIS_HOST'] = resolvedContainerName;
+                    if (!projectConfig.env!['REDIS_PASSWORD']) projectConfig.env!['REDIS_PASSWORD'] = password;
+                    if (!projectConfig.env!['REDIS_PORT']) projectConfig.env!['REDIS_PORT'] = '6379';
+                }
+
+                log(`[DB] Auto-injected env vars for ${db.engine} database "${db.name}" (container: ${resolvedContainerName})\n`);
+            } catch (dbErr: any) {
+                log(`[DB] Warning: Could not inject ${envKey}: ${dbErr.message}\n`);
             }
         }
     } catch (dbQueryErr: any) {
@@ -317,7 +346,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
             commitHash: result.commitHash,
             deployUrl: result.url || null,
             finishedAt: new Date(),
-            // @ts-expect-error - new property from Prisma schema update
+            // @ts-ignore - new property from Prisma schema update
             logContent: fullLogContent,
         },
     });

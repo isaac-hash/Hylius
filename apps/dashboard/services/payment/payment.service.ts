@@ -48,6 +48,20 @@ export class PaymentService {
         // 3. Create external customer
         const customerId = await provider.createCustomer(email, name);
 
+        // Pre-register an incomplete subscription to link customerId -> organizationId.
+        // This guarantees webhooks like Paystack's subscription.create (which lacks metadata)
+        // can still map back to the correct organization via customerId.
+        await prisma.subscription.create({
+            data: {
+                organizationId,
+                provider: providerId,
+                externalCustomerId: customerId,
+                externalSubId: `PENDING_CHECKOUT_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+                status: 'INCOMPLETE',
+                planId: plan.id,
+            }
+        });
+
         // 4. Create Checkout Session
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
@@ -175,19 +189,37 @@ export class PaymentService {
                     }
                 });
             } else {
-                await prisma.subscription.create({
-                    data: {
-                        organizationId: resolvedOrgId,
-                        provider: providerId,
-                        externalCustomerId: customerId || '',
-                        externalSubId: subscriptionId,
-                        status,
-                        currentPeriodEnd: currentPeriodEnd || new Date(),
-                        flutterwaveCustomerId: parsedEvent.flwCustomerId,
-                        flutterwavePaymentMethodId: parsedEvent.flwPaymentMethodId,
-                        planId: parsedEvent.planId
-                    }
+                const existingIncomplete = await prisma.subscription.findFirst({
+                    where: { externalCustomerId: customerId, status: 'INCOMPLETE', organizationId: resolvedOrgId }
                 });
+                
+                if (existingIncomplete) {
+                    await prisma.subscription.update({
+                        where: { id: existingIncomplete.id },
+                        data: {
+                            externalSubId: subscriptionId,
+                            status,
+                            currentPeriodEnd: currentPeriodEnd || new Date(),
+                            flutterwaveCustomerId: parsedEvent.flwCustomerId,
+                            flutterwavePaymentMethodId: parsedEvent.flwPaymentMethodId,
+                            planId: parsedEvent.planId || existingIncomplete.planId
+                        }
+                    });
+                } else {
+                    await prisma.subscription.create({
+                        data: {
+                            organizationId: resolvedOrgId,
+                            provider: providerId,
+                            externalCustomerId: customerId || '',
+                            externalSubId: subscriptionId,
+                            status,
+                            currentPeriodEnd: currentPeriodEnd || new Date(),
+                            flutterwaveCustomerId: parsedEvent.flwCustomerId,
+                            flutterwavePaymentMethodId: parsedEvent.flwPaymentMethodId,
+                            planId: parsedEvent.planId
+                        }
+                    });
+                }
             }
 
             // 5. Upgrade or Downgrade Organization Plans

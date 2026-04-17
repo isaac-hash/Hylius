@@ -13,7 +13,7 @@ export function AuthGuard({ children, requireAdmin = false }: { children: React.
             if (!token) {
                 router.push("/login");
             } else if (requireAdmin && user?.role !== 'PLATFORM_ADMIN') {
-                router.push("/"); // Redirect non-admins to dashboard
+                router.push("/dashboard"); // Redirect non-admins to dashboard
             }
         }
     }, [token, user, isLoading, router, requireAdmin]);

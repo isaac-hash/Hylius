@@ -8,6 +8,16 @@ const CADDY_IMAGE = 'caddy:2-alpine';
 const CADDY_HOST_DIR = '/opt/hylius/caddy';
 const CADDYFILE_PATH = `${CADDY_HOST_DIR}/Caddyfile`;
 
+// Known web server services that commonly ship with VPS control panels
+// and occupy ports 80/443, preventing Caddy from binding.
+const CONFLICTING_SERVICES = [
+    'apache2',       // Ubuntu/Debian Apache
+    'nginx',         // Nginx
+    'httpd',         // CentOS/RHEL Apache
+    'sw-cp-server',  // Plesk control panel
+    'lighttpd',      // Lighttpd
+];
+
 // ─── DNS Verification ───────────────────────────────────────
 
 /**
@@ -46,6 +56,45 @@ export function generateCaddyfile(domains: DomainConfig[], tlsMode: 'production'
     return `# Hylius Managed Caddyfile — DO NOT EDIT MANUALLY\n# Last updated: ${new Date().toISOString()}\n\n${blocks.join('\n\n')}\n`;
 }
 
+// ─── Port Conflict Resolution ───────────────────────────────
+
+/**
+ * Stop and disable known web servers (Apache, Nginx, Plesk, etc.) that may be
+ * occupying ports 80/443, preventing Caddy from binding.
+ * This is idempotent — safe to call even if nothing is blocking.
+ */
+export async function freeWebPorts(
+    client: SSHClient,
+    onLog?: (chunk: string) => void
+): Promise<void> {
+    const log = (msg: string) => { if (onLog) onLog(msg + '\n'); };
+
+    // Quick check: is anything listening on port 80?
+    const { stdout: port80Info } = await client.exec(
+        `ss -tln 2>/dev/null | grep ':80 ' || echo "FREE"`
+    );
+
+    if (port80Info.trim() === 'FREE') {
+        return; // Port 80 is available, nothing to do
+    }
+
+    log('Detected services blocking ports 80/443 — clearing for Caddy...');
+
+    // Stop and disable common web servers so they don't restart after reboot
+    for (const svc of CONFLICTING_SERVICES) {
+        await client.exec(`systemctl stop ${svc} 2>/dev/null || true`);
+        await client.exec(`systemctl disable ${svc} 2>/dev/null || true`);
+    }
+
+    // Force-kill anything still occupying ports 80/443
+    await client.exec('fuser -k 80/tcp 2>/dev/null || true');
+    await client.exec('fuser -k 443/tcp 2>/dev/null || true');
+
+    // Brief pause for port release
+    await new Promise(r => setTimeout(r, 1000));
+    log('Conflicting services stopped — ports 80/443 are now available.');
+}
+
 // ─── Caddy Container Management ─────────────────────────────
 
 /**
@@ -64,8 +113,21 @@ export async function ensureCaddyRunning(
     );
 
     if (status.trim() === 'true') {
-        log(`Caddy container is already running.`);
-        return;
+        // Verify Caddy isn't stuck in a bind-error loop
+        // (happens when another web server like Apache/Nginx/Plesk occupies port 80)
+        const { stdout: bindCheck } = await client.exec(
+            `docker logs --tail 30 ${CADDY_CONTAINER} 2>&1 | grep -ci 'address already in use' || echo "0"`
+        );
+
+        if (parseInt(bindCheck.trim(), 10) === 0) {
+            log(`Caddy container is already running.`);
+            return;
+        }
+
+        // Caddy running but can't bind — remove it so we can fix conflicts and restart
+        log('Caddy is running but cannot bind to ports 80/443 (blocked by another web server).');
+        await client.exec(`docker rm -f ${CADDY_CONTAINER} > /dev/null 2>&1 || true`);
+        // Fall through to the restart flow below
     }
 
     // Ensure host directories exist
@@ -80,9 +142,12 @@ export async function ensureCaddyRunning(
     }
 
     // Remove stopped/dead container if it exists
-    if (status.trim() !== 'not_found') {
+    if (status.trim() !== 'not_found' && status.trim() !== 'true') {
         await client.exec(`docker rm -f ${CADDY_CONTAINER} > /dev/null 2>&1 || true`);
     }
+
+    // Free ports 80/443 from any competing web servers before starting Caddy
+    await freeWebPorts(client, onLog);
 
     // Pull and start Caddy
     log('Pulling Caddy image...');
@@ -109,6 +174,15 @@ export async function ensureCaddyRunning(
     }
 
     log(`Caddy container started: ${containerId.trim().substring(0, 12)}`);
+
+    // Post-start verification: confirm Caddy actually bound to port 80
+    await new Promise(r => setTimeout(r, 2000));
+    const { stdout: postBindCheck } = await client.exec(
+        `docker logs --tail 10 ${CADDY_CONTAINER} 2>&1 | grep -ci 'address already in use' || echo "0"`
+    );
+    if (parseInt(postBindCheck.trim(), 10) > 0) {
+        log('⚠️  Warning: Caddy started but may still have port binding issues. Check for residual web server processes on the VPS.');
+    }
 }
 
 // ─── Configure Domains ──────────────────────────────────────

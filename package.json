@@ -13,5 +13,8 @@
   },
   "devDependencies": {
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@vyft/railpack": "^0.4.5-alpha"
   }
 }
