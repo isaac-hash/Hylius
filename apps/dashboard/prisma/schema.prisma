@@ -185,6 +185,8 @@ model Project {
   ghcrImage      String?      // e.g. 'ghcr.io/isaac-hash/my-app:latest'
   githubRepoFullName    String?   // e.g. "user/repo" — links to GitHub App webhook
   githubInstallationId  Int?      // GitHub App installation ID for this repo
+  isTemplate     Boolean      @default(false)
+  templateId     String?
   organization   Organization @relation(fields: [organizationId], references: [id])
   organizationId String
   server         Server       @relation(fields: [serverId], references: [id])

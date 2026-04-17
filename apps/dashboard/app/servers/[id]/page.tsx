@@ -77,7 +77,7 @@ interface DetailedServer {
 export default function ServerDetailsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
-    const { user, logout, token } = useAuth();
+    const { user, logout, token, organization } = useAuth();
 
     const [server, setServer] = useState<DetailedServer | null>(null);
     const [loading, setLoading] = useState(true);
@@ -511,7 +511,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                         serverId={id}
                                         token={token}
                                         projects={server.projects.map((p: any) => ({ id: p.id, name: p.name }))}
-                                        organizationId={user?.organizationId || ''}
+                                        organizationId={organization?.id || ''}
                                     />
 
                                     {/* Live Server Metrics via SSH Pulse */}

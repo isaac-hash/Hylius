@@ -55,15 +55,23 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
                 // Install Node.js 20 LTS via NodeSource (distro nodejs is v12, too old for Vite/ESM)
                 `curl -fsSL https://deb.nodesource.com/setup_20.x | ${sudoPrefix}bash -`,
                 `${sudoPrefix}apt-get install -y nodejs`,
-                `${sudoPrefix}npm install -g pm2`
+                `${sudoPrefix}npm install -g pm2`,
+                `curl -sSL https://railpack.com/install.sh | ${sudoPrefix}sh`,
+                // Start BuildKit daemon (required by Railpack for building container images)
+                `${sudoPrefix}docker rm -f buildkit > /dev/null 2>&1 || true`,
+                `${sudoPrefix}docker run --privileged -d --name buildkit --restart unless-stopped moby/buildkit`
             ];
         } else if (isAlpine) {
             dockerCommands = [
                 `${sudoPrefix}apk update`,
                 `${sudoPrefix}apk add --no-cache docker docker-cli-compose git nodejs npm`,
                 `${sudoPrefix}npm install -g pm2`,
+                `curl -sSL https://railpack.com/install.sh | ${sudoPrefix}sh`,
                 `${sudoPrefix}rc-update add docker default || true`,
-                `${sudoPrefix}addgroup ${currentUser} docker || true`
+                `${sudoPrefix}addgroup ${currentUser} docker || true`,
+                // Start BuildKit daemon (required by Railpack for building container images)
+                `${sudoPrefix}docker rm -f buildkit > /dev/null 2>&1 || true`,
+                `${sudoPrefix}docker run --privileged -d --name buildkit --restart unless-stopped moby/buildkit`
             ];
         }
 
@@ -75,6 +83,21 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
         // 3. Install & Start Caddy reverse proxy
         log('\x1b[33m[3/4] Setting up Caddy reverse proxy for domain management...\x1b[0m');
+
+        // Stop and disable any pre-installed web servers that occupy ports 80/443
+        // (common on VPS providers shipping Plesk, cPanel, or default Apache/Nginx)
+        log('Stopping pre-installed web servers that may block Caddy...');
+        const conflictingServices = ['apache2', 'nginx', 'httpd', 'sw-cp-server', 'lighttpd'];
+        for (const svc of conflictingServices) {
+            await client.exec(`${sudoPrefix}systemctl stop ${svc} 2>/dev/null || true`);
+            await client.exec(`${sudoPrefix}systemctl disable ${svc} 2>/dev/null || true`);
+        }
+        // Force-kill anything still holding ports 80/443
+        await client.exec(`${sudoPrefix}fuser -k 80/tcp 2>/dev/null || true`);
+        await client.exec(`${sudoPrefix}fuser -k 443/tcp 2>/dev/null || true`);
+        await new Promise(r => setTimeout(r, 1000));
+        log('\x1b[32mConflicting web servers cleared.\x1b[0m\n');
+
         const caddyCommands = [
             // Create host directories for Caddy data
             `${sudoPrefix}mkdir -p /opt/hylius/caddy/data /opt/hylius/caddy/config`,

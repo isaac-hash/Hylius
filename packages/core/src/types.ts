@@ -25,6 +25,7 @@ export interface ProjectConfig {
     ghcrImage?: string;
     environment?: 'PRODUCTION' | 'PREVIEW';
     previewId?: string; // e.g. "pr-12"
+    dockerComposeYaml?: string; // For templates: raw yaml string to write to server
 }
 
 export type TriggerSource = 'cli' | 'dashboard' | 'webhook';

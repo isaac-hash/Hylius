@@ -36,7 +36,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
         startCommand: '',
     });
     const [githubMeta, setGithubMeta] = useState<{ repoFullName: string; installationId: number } | null>(null);
-    const [deployStrategy, setDeployStrategy] = useState<'auto' | 'dagger' | 'ghcr-pull' | 'compose-registry' | 'compose-server'>('auto');
+    const [deployStrategy, setDeployStrategy] = useState<'auto' | 'dagger' | 'ghcr-pull' | 'compose-registry' | 'compose-server'>('dagger');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -91,7 +91,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
             repoFullName: repo.fullName,
             installationId: installationId,
         });
-        setDeployStrategy('auto');
+        setDeployStrategy('dagger');
         // Switch to manual for final review/edit
         setMode('manual');
     }
@@ -154,7 +154,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
 
                 setForm({ name: '', repoUrl: '', branch: 'main', deployPath: '', buildCommand: '', startCommand: '' });
                 setGithubMeta(null);
-                setDeployStrategy('auto');
+                setDeployStrategy('dagger');
                 onAdded?.(projectData.id, successData);
                 onClose();
                 return;
@@ -162,7 +162,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
 
             setForm({ name: '', repoUrl: '', branch: 'main', deployPath: '', buildCommand: '', startCommand: '' });
             setGithubMeta(null);
-            setDeployStrategy('auto');
+            setDeployStrategy('dagger');
             onAdded?.(projectData.id);
             onClose();
         } catch (err: unknown) {
@@ -189,7 +189,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 p-6 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="bg-gray-900 border border-gray-800 p-6 rounded-lg w-full max-w-xl max-h-[90vh] overflow-y-auto">
                 <h2 className="text-xl font-bold text-white mb-1">Add Project</h2>
                 <p className="text-gray-500 text-sm mb-4">
                     Deploying to <span className="text-gray-300">{serverName}</span>
@@ -332,19 +332,19 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                                     onChange={(e) => setDeployStrategy(e.target.value as any)}
                                     className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm focus:border-blue-600 focus:outline-none transition-colors"
                                 >
+                                    <option value="dagger">⚡ Build with Dagger on GitHub Actions (Recommended)</option>
                                     <option value="auto">Build on Server (Auto-detect / PM2 / Native Docker)</option>
                                     <option value="compose-server">Build on Server (Docker Compose)</option>
-                                    <option value="dagger">⚡ Build with Dagger on GitHub Actions (Recommended)</option>
                                     <option value="ghcr-pull">Build on GitHub Actions (Native Docker — Legacy)</option>
                                     <option value="compose-registry">Build on GitHub Actions (Docker Compose)</option>
                                 </select>
                                 {deployStrategy === 'dagger' && (
-                                    <p className="text-xs text-violet-400 mt-2">
+                                    <p className="text-sm text-violet-400 mt-2">
                                         Hylius will open a <strong>Pull Request</strong> in your repo with a Dagger-powered pipeline. Merge it once — every push after that auto-builds on GitHub and deploys to your VPS with zero CPU load.
                                     </p>
                                 )}
                                 {(deployStrategy === 'ghcr-pull' || deployStrategy === 'compose-registry') && (
-                                    <p className="text-xs text-blue-400 mt-2">
+                                    <p className="text-sm text-blue-400 mt-2">
                                         Hylius will automatically commit a CI/CD workflow to your repository to build and push your Docker image using GitHub Actions.
                                     </p>
                                 )}

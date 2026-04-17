@@ -38,7 +38,7 @@ type ProjectRuntime = 'next' | 'vite' | 'node' | 'python' | 'fastapi' | 'go' | '
  * Detect runtime using railpack plan --json (for port mapping only).
  */
 async function detectRuntime(client: SSHClient, releasePath: string): Promise<ProjectRuntime | null> {
-    const { stdout, code } = await client.exec(`cd ${releasePath} && railpack plan --json`);
+    const { stdout, code } = await client.exec(`cd ${releasePath} && BUILDKIT_HOST=docker-container://buildkit railpack plan --json`);
     if (code !== 0 || !stdout.trim()) {
         return null;
     }
@@ -115,12 +115,8 @@ async function resolveDeployStrategy(client: SSHClient, releasePath: string, pro
     if (await hasFile(client, `${releasePath}/nixpacks.toml`)) return 'nixpacks';
     if (await hasFile(client, `${releasePath}/railpack.json`)) return 'railpack';
 
-    // Not containerized — check if railpack is available on the server
-    const { code: railpackCheck } = await client.exec('command -v railpack');
-    if (railpackCheck === 0) return 'railpack';
-
-    // Fallback to PM2 (no containerization)
-    return 'pm2';
+    // Fallback to railpack — installed globally via setup.ts provisioning
+    return 'railpack';
 }
 
 function getContainerName(project: ProjectConfig): string {
@@ -159,21 +155,21 @@ async function executeReleaseCommand(
     }
 
     log(`Running release command: "${releaseCmd}"`);
-    
+
     // Give DB containers and apps a brief moment if they just started
     await new Promise(r => setTimeout(r, 2000));
 
     const maxRetries = 10;
     const retryDelayMs = 3000;
-    
+
     for (let i = 1; i <= maxRetries; i++) {
         try {
-            const cmdToRun = isContainer 
+            const cmdToRun = isContainer
                 ? `docker exec ${containerOrPath} sh -c "${releaseCmd.replace(/"/g, '\\"')}"`
                 : `cd ${containerOrPath} && ${releaseCmd}`;
-            
+
             const { stdout, stderr, code } = await client.exec(cmdToRun);
-            
+
             if (code === 0) {
                 if (stdout) log(stdout);
                 log('Release command completed successfully.');
@@ -237,6 +233,10 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 );
                 // Remove the bundle after extraction
                 await client.exec(`rm ${project.localBundlePath}`);
+            } else if (project.dockerComposeYaml) {
+                log(`Template mode: writing docker-compose.yml directly...`);
+                const base64Yaml = Buffer.from(project.dockerComposeYaml).toString('base64');
+                await execOrThrow(client, `echo "${base64Yaml}" | base64 -d > ${releasePath}/docker-compose.yml`, 'Write template compose file');
             } else {
                 log(`Cloning ${project.repoUrl} (${project.branch || 'main'})...`);
                 await execStreamOrThrow(
@@ -496,10 +496,12 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${port}"`;
 
             // Build with Railpack — it auto-detects everything and sets the start command
+            // Ensure BuildKit is running (required by Railpack)
+            await client.exec(`docker start buildkit 2>/dev/null || docker run --privileged -d --name buildkit --restart unless-stopped moby/buildkit`);
             log(`Building container image with Railpack: ${imageName}`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && railpack build . --name ${imageName}`,
+                `cd ${releasePath} && BUILDKIT_HOST=docker-container://buildkit railpack build . --name ${imageName}`,
                 'Railpack build',
                 onLog,
             );
@@ -737,6 +739,39 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 }
             } catch (err) {
                 // Ignore URL parse errors
+            }
+        }
+
+        // ─── Post-deploy: Check port reachability & emit firewall warning ───
+        if (finalUrl) {
+            try {
+                const urlObj = new URL(finalUrl);
+                const portToCheck = urlObj.port || '80';
+
+                if (portToCheck !== '80' && portToCheck !== '443') {
+                    // Wait briefly for the application to finish binding
+                    await new Promise(r => setTimeout(r, 3000));
+
+                    // Verify the app is actually listening locally on the VPS
+                    const { code: localCheck } = await client.exec(
+                        `curl -sf --connect-timeout 5 --max-time 5 http://localhost:${portToCheck}/ > /dev/null 2>&1 || ` +
+                        `curl -sf --connect-timeout 5 --max-time 5 http://127.0.0.1:${portToCheck}/ > /dev/null 2>&1 || ` +
+                        `ss -tlnp 2>/dev/null | grep -q ":${portToCheck} " && exit 0 || exit 1`
+                    );
+
+                    if (localCheck === 0) {
+                        // App is listening locally — warn about external/cloud firewall
+                        log(`\n\x1b[33m[FIREWALL_WARNING] port=${portToCheck}\x1b[0m`);
+                        log(`\x1b[33m⚠️  Your application is running on port ${portToCheck}, but your VPS provider's\x1b[0m`);
+                        log(`\x1b[33m   cloud/network firewall may be blocking external access to this port.\x1b[0m`);
+                        log(`\x1b[33m   UFW (OS-level firewall) has been configured, but many providers\x1b[0m`);
+                        log(`\x1b[33m   (e.g. Fasthosts, Hetzner, DigitalOcean) have a separate cloud firewall\x1b[0m`);
+                        log(`\x1b[33m   that must be configured from their dashboard/API.\x1b[0m`);
+                        log(`\x1b[33m   → Open your VPS provider's firewall dashboard and allow TCP port ${portToCheck}.\x1b[0m\n`);
+                    }
+                }
+            } catch (err) {
+                // Non-critical — ignore reachability check failures
             }
         }
 
