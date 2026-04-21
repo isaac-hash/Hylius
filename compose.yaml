@@ -1,5 +1,53 @@
 services:
-  web:
-    image: node:20-alpine
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hylius}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-hylius}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hylius} -d ${POSTGRES_DB:-hylius}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dashboard:
+    build:
+      context: .
+      target: production
+    restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hylius}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hylius}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      STRIPE_PUBLIC_KEY: ${STRIPE_PUBLIC_KEY}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
+      FLUTTERWAVE_PUBLIC_KEY: ${FLUTTERWAVE_PUBLIC_KEY}
+      FLUTTERWAVE_SECRET_KEY: ${FLUTTERWAVE_SECRET_KEY}
+      FLUTTERWAVE_ENCRYPTION_KEY: ${FLUTTERWAVE_ENCRYPTION_KEY}
+      FLUTTERWAVE_WEBHOOK_SECRET: ${FLUTTERWAVE_WEBHOOK_SECRET}
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      NEXT_PUBLIC_GITHUB_APP_SLUG: ${NEXT_PUBLIC_GITHUB_APP_SLUG}
+      HYLIUS_TLS_MODE: ${HYLIUS_TLS_MODE:-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Persist the SQLite file if you ever switch back, and any local state
+      - dashboard_data:/app/apps/dashboard/data
+
+volumes:
+  postgres_data:
+  dashboard_data:
