@@ -96,6 +96,37 @@ function getRuntimePort(runtime: ProjectRuntime | null): string {
     }
 }
 
+/**
+ * Find a free host port starting from 3011, skipping already-mapped Docker ports.
+ * Reuses the existing mapped port if the container already exists.
+ */
+async function findFreeHostPort(client: SSHClient, containerName: string, log: (msg: string) => void): Promise<string> {
+    // Try to reuse existing container's host port
+    try {
+        const { stdout: psOut } = await client.exec(
+            `docker ps --filter "name=^/${containerName}$" --format "{{.Ports}}"`
+        );
+        const match = psOut.match(/:(\d+)->/);
+        if (match && match[1]) {
+            log(`Reusing existing host port: ${match[1]}`);
+            return match[1];
+        }
+    } catch { /* no existing container */ }
+
+    // Find a free port starting from 3011
+    log('Finding a free host port...');
+    for (let p = 3011; p <= 3100; p++) {
+        const { stdout } = await client.exec(
+            `docker ps --format '{{.Ports}}' | grep -q ":${p}->" || echo "FREE"`
+        );
+        if (stdout.trim() === 'FREE') {
+            log(`Assigned free host port: ${p}`);
+            return p.toString();
+        }
+    }
+    return '3011'; // fallback
+}
+
 type DeployStrategy = 'docker-compose' | 'dockerfile' | 'railpack' | 'nixpacks' | 'pm2' | 'ghcr-pull' | 'compose-registry' | 'compose-server' | 'dagger';
 
 /**
@@ -558,7 +589,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Detected runtime: ${runtime || 'unknown'} (port ${port})`);
 
             const envArgs = getDockerEnvArgs(project.env);
-            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${port}"`;
+            const containerPort = project.env?.PORT || getRuntimePort(runtime);
+            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${containerPort}"`;
+
+            // Find a free host port (avoids conflicts with port 80/Caddy)
+            const hostPort = await findFreeHostPort(client, containerName, log);
 
             // Build with Railpack — it auto-detects everything and sets the start command
             // Ensure BuildKit is running (required by Railpack)
@@ -575,7 +610,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
-                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                `docker rm -f ${containerName} > /dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${hostPort}:${containerPort} ${imageName}`,
                 'Docker run',
                 onLog,
             );
@@ -590,7 +625,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             }
             await executeReleaseCommand(client, project, containerName, true, isLaravel, log);
 
-            const appUrl = `http://${options.server.host}:${port}`;
+            const appUrl = `http://${options.server.host}:${hostPort}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
             finalUrl = appUrl;
 
@@ -609,7 +644,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Detected runtime: ${runtime || 'unknown'} (port ${port})`);
 
             const envArgs = getDockerEnvArgs(project.env);
-            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${port}"`;
+            const containerPort = project.env?.PORT || getRuntimePort(runtime);
+            const portEnvArg = project.env?.PORT ? '' : ` -e "PORT=${containerPort}"`;
+
+            // Find a free host port (avoids conflicts with port 80/Caddy)
+            const hostPort = await findFreeHostPort(client, containerName, log);
 
             // Build with Nixpacks
             log(`Building container image with Nixpacks: ${imageName}`);
@@ -624,7 +663,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Replacing container: ${containerName}`);
             await execStreamOrThrow(
                 client,
-                `docker rm -f ${containerName} >/dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${port}:${port} ${imageName}`,
+                `docker rm -f ${containerName} > /dev/null 2>&1 || true && docker run -d --name ${containerName}${envArgs}${portEnvArg} --network hylius --restart unless-stopped -p ${hostPort}:${containerPort} ${imageName}`,
                 'Docker run',
                 onLog,
             );
@@ -639,7 +678,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             }
             await executeReleaseCommand(client, project, containerName, true, isLaravel, log);
 
-            const appUrl = `http://${options.server.host}:${port}`;
+            const appUrl = `http://${options.server.host}:${hostPort}`;
             log(`\n\x1b[36m🌐 Application URL: ${appUrl}\x1b[0m`);
             finalUrl = appUrl;
 
