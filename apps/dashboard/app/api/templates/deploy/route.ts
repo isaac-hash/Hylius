@@ -84,6 +84,21 @@ export async function POST(request: Request) {
             }
         }
 
+        // Auto-generate secrets for any template env fields that need it
+        // e.g. APP_KEY for Laravel — same format as `php artisan key:generate`
+        if (!template.generateCompose && template.repository) {
+            const crypto = await import('crypto');
+            for (const field of template.envSchema) {
+                if (!envOverrides[field.key] && !field.defaultValue) {
+                    if (field.key === 'APP_KEY') {
+                        // Laravel APP_KEY: base64: prefix + 32 random bytes
+                        envOverrides['APP_KEY'] = 'base64:' + crypto.randomBytes(32).toString('base64');
+                    }
+                }
+            }
+        }
+
+
         // Add explicit overrides
         Object.assign(ctx, envOverrides);
 

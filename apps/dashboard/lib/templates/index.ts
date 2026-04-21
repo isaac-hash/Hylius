@@ -204,13 +204,6 @@ volumes:
         description: 'Set to true only during development',
       },
       {
-        key: 'APP_KEY',
-        label: 'App Key',
-        type: 'password',
-        description: 'Laravel encryption key. Generate with: php artisan key:generate --show',
-        required: true,
-      },
-      {
         key: 'APP_URL',
         label: 'App URL',
         type: 'text',
