@@ -10,7 +10,8 @@ export class PaystackAdapter implements PaymentProviderAdapter {
         this.secretKey = process.env.PAYSTACK_SECRET_KEY || '';
         this.publicKey = process.env.PAYSTACK_PUBLIC_KEY || '';
         if (!this.secretKey || !this.publicKey) {
-            throw new Error('Paystack secret key and public key are required');
+            console.warn('[PaystackAdapter] Paystack secret key and/or public key are missing. Payment features will not work.');
+            return;
         }
         console.log(`[PaystackAdapter] Initialized with key starting with: ${this.secretKey.substring(0, 8)}`);
     }
