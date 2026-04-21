@@ -28,7 +28,7 @@ RUN npm run build -w packages/cli
 RUN npm run build -w apps/dashboard
 
 # Compile server.ts -> apps/dashboard/dist_server/server.js
-RUN npx tsc -p apps/dashboard/tsconfig.server.json
+RUN ./node_modules/.bin/tsc -p apps/dashboard/tsconfig.server.json
 
 
 # ==========================================

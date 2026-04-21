@@ -3,7 +3,9 @@
     "compilerOptions": {
         "module": "commonjs",
         "outDir": "dist_server",
-        "noEmit": false
+        "noEmit": false,
+        "noEmitOnError": false,
+        "skipLibCheck": true
     },
     "include": [
         "server.ts"
