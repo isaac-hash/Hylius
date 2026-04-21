@@ -15,7 +15,9 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 // when using middleware `hostname` and `port` must be provided below
-const app = next({ dev, hostname, port });
+// In production (Docker), server.js runs from /app but .next is under /app/apps/dashboard
+const dir = dev ? undefined : require('path').resolve(__dirname, '..');
+const app = next({ dev, hostname, port, dir });
 const handler = app.getRequestHandler();
 const prisma = new PrismaClient();
 
