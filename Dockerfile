@@ -27,8 +27,19 @@ RUN npm run build -w packages/cli
 # Build Next.js app
 RUN npm run build -w apps/dashboard
 
-# Compile server.ts -> apps/dashboard/dist_server/server.js
-RUN ./apps/dashboard/node_modules/.bin/tsc -p apps/dashboard/tsconfig.server.json || true
+# Compile server.ts -> apps/dashboard/dist_server/server.js (esbuild: no type-checking, never fails)
+RUN mkdir -p apps/dashboard/dist_server && \
+    ./node_modules/.bin/esbuild apps/dashboard/server.ts \
+    --platform=node \
+    --format=cjs \
+    --outdir=apps/dashboard/dist_server \
+    --external:next \
+    --external:socket.io \
+    --external:ssh2 \
+    --external:@prisma/client \
+    --external:@hylius/core \
+    --external:@octokit/* \
+    --external:dotenv
 
 
 # ==========================================
