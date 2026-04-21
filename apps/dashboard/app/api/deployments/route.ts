@@ -8,6 +8,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const projectId = searchParams.get('projectId');
         const serverId = searchParams.get('serverId');
+        const status = searchParams.get('status');
 
         // Build where clause — always scoped to org via project
         const where: Record<string, unknown> = {
@@ -24,6 +25,10 @@ export async function GET(request: Request) {
                 ...(where.project as Record<string, unknown>),
                 serverId,
             };
+        }
+
+        if (status) {
+            where.status = status;
         }
 
         const deployments = await prisma.deployment.findMany({
