@@ -20,6 +20,8 @@ export default function TemplatesPage() {
             .finally(() => setLoading(false));
     }, []);
 
+    const categories = ["all", ...Array.from(new Set(templates.map((t: any) => t.category))).sort()];
+
     const filteredTemplates = categoryFilter === "all" 
         ? templates 
         : templates.filter(t => t.category === categoryFilter);
@@ -48,7 +50,7 @@ export default function TemplatesPage() {
             </div>
 
             <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-4 hide-scrollbar">
-                {["all", "cms", "analytics", "automation", "backend"].map(cat => (
+                {categories.map(cat => (
                     <button
                         key={cat}
                         onClick={() => setCategoryFilter(cat)}

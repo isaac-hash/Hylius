@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import DeploymentHistory from '@/components/DeploymentHistory';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 const DeploymentTerminal = dynamic(() => import('@/components/DeploymentTerminal'), {
     ssr: false,
@@ -26,8 +27,9 @@ interface Project {
 import { AuthGuard } from '@/components/AuthGuard';
 import { useAuth } from '@/providers/auth.provider';
 
-export default function DeploymentPage() {
+function DeploymentPageInner() {
     const { user, logout, token } = useAuth();
+    const searchParams = useSearchParams();
     const [projects, setProjects] = useState<Project[]>([]);
     const [servers, setServers] = useState<Server[]>([]);
     const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -47,12 +49,20 @@ export default function DeploymentPage() {
             .then((data) => {
                 if (Array.isArray(data)) {
                     setProjects(data);
-                    setSelectedProjectId(prev => (data.length > 0 && !prev) ? data[0].id : prev);
+
+                    // If a projectId was passed via URL (e.g. from template deploy redirect),
+                    // select it; otherwise fall back to the first project.
+                    const urlProjectId = searchParams.get('projectId');
+                    setSelectedProjectId(prev => {
+                        if (prev) return prev;
+                        if (urlProjectId && data.some((p: Project) => p.id === urlProjectId)) return urlProjectId;
+                        return data.length > 0 ? data[0].id : prev;
+                    });
                 }
                 setLoading(false);
             })
             .catch(() => setLoading(false));
-    }, [token]);
+    }, [token, searchParams]);
 
     const fetchServers = useCallback(() => {
         if (!token) return;
@@ -72,6 +82,25 @@ export default function DeploymentPage() {
             fetchServers();
         }
     }, [fetchProjects, fetchServers, token]);
+
+    // Auto-engage live terminal if redirected from a template deploy with an active deployment
+    useEffect(() => {
+        const urlProjectId = searchParams.get('projectId');
+        if (!urlProjectId || !token || isDeploying) return;
+
+        // Poll once for a PENDING/RUNNING deployment on this project
+        fetch(`/api/deployments?projectId=${urlProjectId}&status=PENDING&limit=1`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data) && data.length > 0) {
+                    setSelectedProjectId(urlProjectId);
+                    setIsDeploying(true);
+                }
+            })
+            .catch(() => {});
+    }, [searchParams, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleDeployNow = () => {
         if (!selectedProjectId) return;
@@ -235,5 +264,18 @@ export default function DeploymentPage() {
                 </main>
             </div>
         </AuthGuard>
+    );
+}
+
+// useSearchParams() requires a Suspense boundary in Next.js App Router
+export default function DeploymentPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+            </div>
+        }>
+            <DeploymentPageInner />
+        </Suspense>
     );
 }

@@ -254,7 +254,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         log(`Deploy strategy: ${strategy}`);
 
         if (strategy === 'docker-compose') {
-            const composeFile = project.dockerComposeFile || 'compose.yaml';
+            const configuredCompose = project.dockerComposeFile || 'docker-compose.yml';
+            const fallbackComposeFile = 'compose.yaml';
+            const composeFile = (await hasFile(client, `${releasePath}/${configuredCompose}`)) ? configuredCompose : fallbackComposeFile;
 
             // Patch compose target from development to production for server deployments
             log('Patching compose target to production...');
@@ -271,6 +273,22 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             );
             await execOrThrow(client, `ln -sfn ${releasePath} ${currentPath}`, 'Symlink switch');
             await executeReleaseCommand(client, project, releasePath, false, false, log);
+
+            log(`Detecting exposed port from compose stack...`);
+            let composePort = '';
+            try {
+                const { stdout: psOut } = await client.exec(
+                    `docker ps --filter "name=${project.name}" --format "{{.Ports}}"`
+                );
+                const match = psOut.match(/:(\d+)->/);
+                if (match && match[1]) {
+                    composePort = match[1];
+                    log(`Detected compose mapped port: ${composePort}`);
+                }
+            } catch (e: any) {
+                log(`Failed to detect compose port: ${e.message}`);
+            }
+            finalUrl = `http://${options.server.host}${composePort ? `:${composePort}` : ''}`;
 
         } else if (strategy === 'compose-registry') {
             log(`Deploying via docker-compose (Pulling from Registry)...`);

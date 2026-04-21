@@ -21,7 +21,7 @@ export interface TemplateDefinition {
   name: string; // 'WordPress'
   description: string;
   icon: string; // emoji or svg path
-  category: 'cms' | 'analytics' | 'automation' | 'backend' | 'other' | 'framework';
+  category: 'cms' | 'analytics' | 'automation' | 'backend' | 'other' | 'framework' | 'monitoring';
   tags: string[];
   requiresDatabase: ('POSTGRES' | 'MYSQL' | 'REDIS')[]; // auto-provisioned
   defaultPort: number;
@@ -104,7 +104,7 @@ volumes:
     description: 'A powerful app for new-media creators to publish, share, and grow a business around their content.',
     icon: '👻',
     category: 'cms',
-    tags: ['blog', 'newsletter', 'newsletter'],
+    tags: ['blog', 'newsletter'],
     requiresDatabase: ['MYSQL'],
     defaultPort: 2368,
     envSchema: [],
@@ -138,7 +138,7 @@ volumes:
     description: 'Free and open fair-code licensed node based Workflow Automation Tool.',
     icon: '⚙️',
     category: 'automation',
-    tags: ['workflow', 'automation', 'zapier-alternative'],
+    tags: ['workflow', 'automation'],
     requiresDatabase: ['POSTGRES'],
     defaultPort: 5678,
     envSchema: [],
@@ -173,20 +173,21 @@ volumes:
     },
   },
   {
-    id: 'laravel-inertia-react',
-    name: 'Laravel React Starter',
-    description: 'Laravel 11, React, Inertia, and Tailwind CSS starter kit provided by Laravel.',
-    icon: '🚀',
+    id: 'laravel-blade',
+    name: 'Laravel Starter',
+    description: 'Clean Laravel 11 application with Blade templating. No frontend build step — ready to build your backend.',
+    icon: '🔴',
     category: 'framework',
-    tags: ['laravel', 'react', 'inertia', 'typescript'],
-    requiresDatabase: ['POSTGRES'], // Default to standard Postgres, can also be MySQL
+    tags: ['laravel', 'php', 'blade'],
+    requiresDatabase: ['POSTGRES'],
     defaultPort: 80,
     envSchema: [
       {
         key: 'APP_NAME',
         label: 'App Name',
         type: 'text',
-        defaultValue: 'LaravelReactApp',
+        defaultValue: 'Laravel',
+        required: true,
       },
       {
         key: 'APP_ENV',
@@ -201,11 +202,156 @@ volumes:
         type: 'text',
         defaultValue: 'false',
         description: 'Set to true only during development',
-      }
+      },
     ],
     repository: {
-      url: 'https://github.com/laravel/react-starter-kit.git',
-      branch: 'main'
-    }
-  }
+      url: 'https://github.com/isaac-hash/laravel.git',
+      branch: '13.x',
+    },
+  },
+  {
+    id: 'uptime-kuma',
+    name: 'Uptime Kuma',
+    description: 'A self-hosted monitoring tool for tracking uptime of websites, APIs, and services with beautiful dashboards.',
+    icon: '📡',
+    category: 'monitoring',
+    tags: ['monitoring', 'uptime', 'alerts'],
+    requiresDatabase: [],
+    defaultPort: 3001,
+    envSchema: [],
+    generateCompose: (_ctx) => {
+      return `version: '3.8'
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: always
+    ports:
+      - "\${APP_PORT}:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+
+volumes:
+  uptime_kuma_data:
+`;
+    },
+  },
+  {
+    id: 'directus',
+    name: 'Directus',
+    description: 'An open-source headless CMS and data platform that wraps any SQL database with a real-time API and admin app.',
+    icon: '🗄️',
+    category: 'cms',
+    tags: ['cms', 'headless', 'api'],
+    requiresDatabase: ['POSTGRES'],
+    defaultPort: 8055,
+    envSchema: [
+      {
+        key: 'ADMIN_EMAIL',
+        label: 'Admin Email',
+        type: 'email',
+        required: true,
+        description: 'Email address for the initial admin account',
+      },
+      {
+        key: 'ADMIN_PASSWORD',
+        label: 'Admin Password',
+        type: 'password',
+        required: true,
+        description: 'Password for the initial admin account (min 8 characters)',
+      },
+    ],
+    generateCompose: (ctx) => {
+      // Generate random secrets for Directus security
+      const secret = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      const adminEmail = ctx.extraEnv?.ADMIN_EMAIL || 'admin@example.com';
+      const adminPassword = ctx.extraEnv?.ADMIN_PASSWORD || 'changeme123';
+
+      return `version: '3.8'
+
+services:
+  directus:
+    image: directus/directus:latest
+    restart: always
+    ports:
+      - "\${APP_PORT}:8055"
+    environment:
+      SECRET: "${secret}"
+      DB_CLIENT: "pg"
+      DB_HOST: "${ctx.dbHost}"
+      DB_PORT: "5432"
+      DB_DATABASE: "${ctx.dbName}"
+      DB_USER: "${ctx.dbUser}"
+      DB_PASSWORD: "${ctx.dbPassword}"
+      ADMIN_EMAIL: "${adminEmail}"
+      ADMIN_PASSWORD: "${adminPassword}"
+      PUBLIC_URL: \${APP_URL}
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+
+volumes:
+  directus_uploads:
+  directus_extensions:
+`;
+    },
+  },
+  {
+    id: 'pocketbase',
+    name: 'PocketBase',
+    description: 'Open source backend in a single file. Realtime database, auth, file storage and admin UI — all in one.',
+    icon: '🗃️',
+    category: 'backend',
+    tags: ['backend', 'baas', 'database'],
+    requiresDatabase: [],
+    defaultPort: 8090,
+    envSchema: [],
+    generateCompose: (_ctx) => {
+      return `version: '3.8'
+
+services:
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:latest
+    restart: always
+    ports:
+      - "\${APP_PORT}:8090"
+    volumes:
+      - pb_data:/pb/pb_data
+      - pb_public:/pb/pb_public
+
+volumes:
+  pb_data:
+  pb_public:
+`;
+    },
+  },
+  {
+    id: 'umami',
+    name: 'Umami',
+    description: 'Simple, fast, privacy-focused alternative to Google Analytics. Self-host your website analytics.',
+    icon: '📊',
+    category: 'analytics',
+    tags: ['analytics', 'privacy', 'stats'],
+    requiresDatabase: ['POSTGRES'],
+    defaultPort: 3000,
+    envSchema: [],
+    generateCompose: (ctx) => {
+      const appSecret = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+
+      return `version: '3.8'
+
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    restart: always
+    ports:
+      - "\${APP_PORT}:3000"
+    environment:
+      DATABASE_URL: "postgresql://${ctx.dbUser}:${ctx.dbPassword}@${ctx.dbHost}:5432/${ctx.dbName}"
+      APP_SECRET: "${appSecret}"
+
+volumes: {}
+`;
+    },
+  },
 ];

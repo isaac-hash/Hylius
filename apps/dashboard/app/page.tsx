@@ -101,7 +101,7 @@ export default function LandingPage() {
                                 Deploy Your First App
                             </Link>
                             <a
-                                href="http://localhost:3001"
+                                href="https://hylius-docs.vercel.app/"
                                 target="_blank"
                                 rel="noreferrer"
                                 className="px-8 py-4 rounded-2xl border border-white/10 bg-white/5 font-bold text-lg hover:bg-white/10 transition-all text-center"
