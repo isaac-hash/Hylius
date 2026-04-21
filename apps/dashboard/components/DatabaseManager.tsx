@@ -61,6 +61,7 @@ export default function DatabaseManager({ serverId, token, projects, organizatio
     const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
     const [backupStatus, setBackupStatus] = useState<Record<string, string>>({});
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [deleteModal, setDeleteModal] = useState<{ db: DatabaseRecord; removeVolume: boolean } | null>(null);
 
     // ── Provision Modal State ──
     const [provisionEngine, setProvisionEngine] = useState<'POSTGRES' | 'MYSQL' | 'REDIS'>('POSTGRES');
@@ -175,18 +176,20 @@ export default function DatabaseManager({ serverId, token, projects, organizatio
     };
 
     // ── Delete ──
-    const handleDelete = async (db: DatabaseRecord) => {
-        const removeVolume = confirm(
-            `Delete database "${db.name}"?\n\nClick OK to DELETE ONLY THE CONTAINER (data volume preserved).\n\nTo also delete all data, you would need to confirm "Remove Volume" in the API.`
-        );
-        if (!removeVolume && !confirm(`Confirm: delete container "${db.name}"?`)) return;
+    const handleDelete = (db: DatabaseRecord) => {
+        setDeleteModal({ db, removeVolume: false });
+    };
 
+    const confirmDelete = async () => {
+        if (!deleteModal) return;
+        const { db, removeVolume } = deleteModal;
+        setDeleteModal(null);
         setDeleting(db.id);
         try {
             await fetch(`/api/databases/${db.id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ removeVolume: false }),
+                body: JSON.stringify({ removeVolume }),
             });
             fetchDatabases();
         } catch {}
@@ -544,6 +547,66 @@ export default function DatabaseManager({ serverId, token, projects, organizatio
                                 ) : (
                                     <>🚀 Provision Database</>
                                 )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Delete Confirmation Modal ── */}
+            {deleteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+                    <div className="bg-gray-900 border border-red-500/30 rounded-2xl w-full max-w-sm shadow-2xl">
+                        <div className="p-5 border-b border-gray-800">
+                            <h2 className="text-base font-bold text-white flex items-center gap-2">
+                                <span className="text-red-400">⚠️</span> Delete Database
+                            </h2>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <p className="text-sm text-gray-300">
+                                Are you sure you want to delete{' '}
+                                <span className="font-semibold text-white">{deleteModal.db.name}</span>?
+                                The container will be stopped and removed.
+                            </p>
+
+                            {/* Volume toggle */}
+                            <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer hover:border-red-500/50 transition-colors group">
+                                <input
+                                    type="checkbox"
+                                    checked={deleteModal.removeVolume}
+                                    onChange={e => setDeleteModal(prev => prev ? { ...prev, removeVolume: e.target.checked } : null)}
+                                    className="mt-0.5 accent-red-500"
+                                />
+                                <div>
+                                    <div className="text-sm font-medium text-gray-200 group-hover:text-white">Also delete data volume</div>
+                                    <div className="text-[11px] text-gray-500 mt-0.5">
+                                        ⚠️ This permanently wipes all database data. Cannot be undone.
+                                    </div>
+                                </div>
+                            </label>
+
+                            {!deleteModal.removeVolume && (
+                                <p className="text-[11px] text-gray-500">
+                                    ✅ Data volume will be <span className="text-green-400">preserved</span> on the server. You can reattach it later.
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3 px-5 pb-5">
+                            <button
+                                onClick={() => setDeleteModal(null)}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-700 text-gray-400 hover:bg-gray-800 text-sm transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                className={`flex-1 px-4 py-2.5 rounded-lg text-white text-sm font-medium transition-colors ${
+                                    deleteModal.removeVolume
+                                        ? 'bg-red-600 hover:bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                                        : 'bg-gray-700 hover:bg-gray-600'
+                                }`}
+                            >
+                                {deleteModal.removeVolume ? '🗑️ Delete & Wipe Data' : 'Delete Container'}
                             </button>
                         </div>
                     </div>
