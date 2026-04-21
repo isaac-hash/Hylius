@@ -241,12 +241,17 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         log(`Creating release directory: ${releasePath}`);
         await execOrThrow(client, `mkdir -p ${releasePath}`, 'Create release directory');
 
-        // ─── Pre-deploy: Proactively free up disk space ───
-        log('Proactively cleaning up unused Docker resources...');
-        await client.exec(`docker system prune -af --volumes > /dev/null 2>&1 || true`);
+        // ─── Pre-deploy: Remove dangling images only (not all unused images/volumes) ───
+        await client.exec(`docker image prune -f > /dev/null 2>&1 || true`);
+
+        // Pre-flight: force-remove any stale container with this project's name
+        // This prevents "name already in use" errors on re-deploy after a crash
+        const preflightContainerName = `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-app`;
+        await client.exec(`docker rm -f ${preflightContainerName} > /dev/null 2>&1 || true`);
 
         // Ensure the shared Hylius Docker network exists (for inter-container communication)
         await client.exec(`docker network create hylius 2>/dev/null || true`);
+
 
         let strategy: DeployStrategy | null = project.deployStrategy && project.deployStrategy !== 'auto'
             ? (project.deployStrategy as DeployStrategy)
