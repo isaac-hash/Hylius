@@ -20,3 +20,5 @@ apps/mcp builder skill/
 apps/SKILL.md
 .understand-anything/
 .env.production
+*.db
+*.db-journal

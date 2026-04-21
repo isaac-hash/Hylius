@@ -18,7 +18,7 @@ RUN npm ci
 COPY . .
 
 # Generate Prisma client
-RUN npx prisma generate --schema=apps/dashboard/prisma/schema.prisma
+RUN ./node_modules/.bin/prisma generate --schema=apps/dashboard/prisma/schema.prisma
 
 # Build packages/core and packages/cli first (dashboard depends on them)
 RUN npm run build -w packages/core
@@ -59,4 +59,4 @@ COPY --from=builder /app/packages/cli/dist               ./packages/cli/dist
 EXPOSE 3000
 
 # Run DB migrations then start the custom server
-CMD ["sh", "-c", "npx prisma db push --schema=apps/dashboard/prisma/schema.prisma --accept-data-loss && node apps/dashboard/dist_server/server.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma db push --schema=apps/dashboard/prisma/schema.prisma --accept-data-loss && node apps/dashboard/dist_server/server.js"]
