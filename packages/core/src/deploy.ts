@@ -135,6 +135,31 @@ function getDockerEnvArgs(env?: Record<string, string>): string {
         .join('');
 }
 
+/**
+ * Write a .env file into the release directory so docker compose can pick up
+ * all project environment variables (POSTGRES_PASSWORD, ENCRYPTION_KEY, etc.)
+ */
+async function writeComposeEnvFile(
+    client: SSHClient,
+    releasePath: string,
+    env: Record<string, string> | undefined,
+    log: (msg: string) => void,
+): Promise<void> {
+    if (!env || Object.keys(env).length === 0) {
+        log('No project env vars to write — skipping .env file generation.');
+        return;
+    }
+    log(`Writing ${Object.keys(env).length} env var(s) to ${releasePath}/.env ...`);
+    // Build the .env content, escaping newlines in values
+    const lines = Object.entries(env)
+        .map(([k, v]) => `${k}=${String(v).replace(/\n/g, '\\n')}`)
+        .join('\n');
+    // Write via base64 to handle special characters safely
+    const b64 = Buffer.from(lines).toString('base64');
+    await client.exec(`echo '${b64}' | base64 -d > ${releasePath}/.env`);
+    log('.env file written successfully.');
+}
+
 async function executeReleaseCommand(
     client: SSHClient,
     project: ProjectConfig,
@@ -258,6 +283,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const fallbackComposeFile = 'compose.yaml';
             const composeFile = (await hasFile(client, `${releasePath}/${configuredCompose}`)) ? configuredCompose : fallbackComposeFile;
 
+            // Inject project env vars as a .env file so compose picks them up
+            await writeComposeEnvFile(client, releasePath, project.env, log);
+
             // Patch compose target from development to production for server deployments
             log('Patching compose target to production...');
             await client.exec(
@@ -296,6 +324,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const fallbackComposeFile = 'compose.yaml';
 
             const fileToUse = (await hasFile(client, `${releasePath}/${composeFile}`)) ? composeFile : fallbackComposeFile;
+
+            // Inject project env vars as a .env file so compose picks them up
+            await writeComposeEnvFile(client, releasePath, project.env, log);
 
             await execStreamOrThrow(
                 client,
@@ -337,6 +368,9 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const fallbackComposeFile = 'compose.yaml';
 
             const fileToUse = (await hasFile(client, `${releasePath}/${composeFile}`)) ? composeFile : fallbackComposeFile;
+
+            // Inject project env vars as a .env file so compose picks them up
+            await writeComposeEnvFile(client, releasePath, project.env, log);
 
             // Patch compose target from development to production for server deployments
             log('Patching compose target to production...');
