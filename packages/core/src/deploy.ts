@@ -135,6 +135,11 @@ function getDockerEnvArgs(env?: Record<string, string>): string {
         .join('');
 }
 
+/** Sanitize a project name for use as a docker compose -p argument */
+function getComposeProjectName(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+/, '');
+}
+
 /**
  * Write a .env file into the release directory so docker compose can pick up
  * all project environment variables (POSTGRES_PASSWORD, ENCRYPTION_KEY, etc.)
@@ -292,10 +297,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 `cd ${releasePath} && sed -i 's/target: development/target: production/g' ${composeFile}`
             );
 
-            log(`Running Docker Compose using ${composeFile}...`);
+            const composeProjectName = getComposeProjectName(project.name);
+            log(`Running Docker Compose using ${composeFile} (project: ${composeProjectName})...`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && docker compose -p ${project.name} -f ${composeFile} up -d --build --remove-orphans`,
+                `cd ${releasePath} && docker compose -p ${composeProjectName} -f ${composeFile} up -d --build --remove-orphans`,
                 'Docker Compose deploy',
                 onLog,
             );
@@ -306,7 +312,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             let composePort = '';
             try {
                 const { stdout: psOut } = await client.exec(
-                    `docker ps --filter "name=${project.name}" --format "{{.Ports}}"`
+                    `docker ps --filter "name=${composeProjectName}" --format "{{.Ports}}"`
                 );
                 const match = psOut.match(/:(\d+)->/);
                 if (match && match[1]) {
@@ -335,10 +341,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 onLog
             );
 
-            log(`Running docker-compose up for project ${project.name}...`);
+            const composeProjectNameReg = getComposeProjectName(project.name);
+            log(`Running docker-compose up for project ${composeProjectNameReg}...`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && docker compose -p ${project.name} -f ${fileToUse} up -d --remove-orphans`,
+                `cd ${releasePath} && docker compose -p ${composeProjectNameReg} -f ${fileToUse} up -d --remove-orphans`,
                 'Docker Compose Up',
                 onLog
             );
@@ -347,20 +354,20 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             await executeReleaseCommand(client, project, releasePath, false, false, log);
 
             log(`Detecting exposed port from compose stack...`);
-            let composePort = '';
+            let composePortReg = '';
             try {
                 const { stdout: psOut } = await client.exec(
-                    `docker ps --filter "name=${project.name}" --format "{{.Ports}}"`
+                    `docker ps --filter "name=${composeProjectNameReg}" --format "{{.Ports}}"`
                 );
                 const match = psOut.match(/:(\d+)->/);
                 if (match && match[1]) {
-                    composePort = match[1];
-                    log(`Detected compose mapped port: ${composePort}`);
+                    composePortReg = match[1];
+                    log(`Detected compose mapped port: ${composePortReg}`);
                 }
             } catch (e: any) {
                 log(`Failed to detect compose port: ${e.message}`);
             }
-            finalUrl = `http://${options.server.host}${composePort ? `:${composePort}` : ''}`;
+            finalUrl = `http://${options.server.host}${composePortReg ? `:${composePortReg}` : ''}`;
 
         } else if (strategy === 'compose-server') {
             log(`Deploying via docker-compose (Building on Server)...`);
@@ -378,10 +385,11 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                 `cd ${releasePath} && sed -i 's/target: development/target: production/g' ${fileToUse}`
             );
 
-            log(`Running docker-compose up --build for project ${project.name}...`);
+            const composeProjectNameSrv = getComposeProjectName(project.name);
+            log(`Running docker-compose up --build for project ${composeProjectNameSrv}...`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && docker compose -p ${project.name} -f ${fileToUse} up -d --build --remove-orphans`,
+                `cd ${releasePath} && docker compose -p ${composeProjectNameSrv} -f ${fileToUse} up -d --build --remove-orphans`,
                 'Docker Compose Up (Build)',
                 onLog
             );
@@ -390,20 +398,20 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             await executeReleaseCommand(client, project, releasePath, false, false, log);
 
             log(`Detecting exposed port from compose stack...`);
-            let composePort = '';
+            let composePortSrv = '';
             try {
                 const { stdout: psOut } = await client.exec(
-                    `docker ps --filter "name=${project.name}" --format "{{.Ports}}"`
+                    `docker ps --filter "name=${composeProjectNameSrv}" --format "{{.Ports}}"`
                 );
                 const match = psOut.match(/:(\d+)->/);
                 if (match && match[1]) {
-                    composePort = match[1];
-                    log(`Detected compose mapped port: ${composePort}`);
+                    composePortSrv = match[1];
+                    log(`Detected compose mapped port: ${composePortSrv}`);
                 }
             } catch (e: any) {
                 log(`Failed to detect compose port: ${e.message}`);
             }
-            finalUrl = `http://${options.server.host}${composePort ? `:${composePort}` : ''}`;
+            finalUrl = `http://${options.server.host}${composePortSrv ? `:${composePortSrv}` : ''}`;
 
         } else if (strategy === 'ghcr-pull' || strategy === 'dagger') {
             const image = project.ghcrImage;
