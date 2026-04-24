@@ -46,9 +46,11 @@ export default function LandingPage() {
                     </div>
                     
                     <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
-                        <a href="#features" className="hover:text-white transition-colors">Features</a>
-                        <a href="#developers" className="hover:text-white transition-colors">Developers</a>
+                        <Link href="#features" className="hover:text-white transition-colors">Features</Link>
+                        <Link href="/developers" className="hover:text-white transition-colors">Developers</Link>
                         <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+                        <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
+                        <a href="https://hylius.instatus.com/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Status</a>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -85,13 +87,12 @@ export default function LandingPage() {
                             </span>
                             Now in Public Beta
                         </div>
-                        <h1 className="font-display text-5xl md:text-8xl font-bold leading-[1.1] mb-8">
-                            Deploy at the <br />
-                            <span className="text-gradient">Speed of Thought.</span>
+                        <h1 className="font-display text-5xl md:text-7xl font-bold leading-[1.1] mb-8">
+                            Deploy anywhere in Africa. <br />
+                            <span className="text-gradient">Own everything.</span>
                         </h1>
                         <p className="text-xl text-gray-400 max-w-2xl mb-10 leading-relaxed">
-                            Hylius is the high-performance infrastructure layer for the next generation of web applications. 
-                            Provision, deploy, and scale in seconds, not hours.
+                            Connect your VPS — on any African hosting provider — and deploy full-stack apps, databases, and APIs in seconds. No per-server fees. No project limits. Your infrastructure, our platform.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4">
                             <Link 
@@ -131,19 +132,34 @@ export default function LandingPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {[
                             {
-                                title: "Instant Provisioning",
-                                desc: "Connect any VPS and have it production-ready with Docker, Nginx, and SSL in under 60 seconds.",
+                                title: "No project limits",
+                                desc: "Deploy as many apps, databases, and APIs as you want. Your VPS specs are your only limits.",
                                 icon: "🚀"
                             },
                             {
-                                title: "Git-Powered CI/CD",
-                                desc: "Push to main and let Hylius handle the rest. Zero-downtime deployments with automatic rollbacks.",
-                                icon: "🛠️"
+                                title: "4 Servers on Pro",
+                                desc: "Manage up to 4 servers on our Pro plan with absolutely no per-server charge. It's yours.",
+                                icon: "🌍"
                             },
                             {
                                 title: "Managed Databases",
-                                desc: "One-click Postgres, Redis, and MongoDB clusters with automated backups and monitoring.",
+                                desc: "One-click Postgres, Redis, and MongoDB clusters provisioned on YOUR VPS, not ours.",
                                 icon: "💾"
+                            },
+                            {
+                                title: "Preview URLs",
+                                desc: "Automatic preview environments for every pull request to test changes before production.",
+                                icon: "🔗"
+                            },
+                            {
+                                title: "Starting at ₦5,000",
+                                desc: "Affordable and transparent pricing tailored for African developers.",
+                                icon: "💳"
+                            },
+                            {
+                                title: "African Server Focus",
+                                desc: "Coming soon: We are partnering with African hosting providers to bring servers closer to you.",
+                                icon: "📡"
                             }
                         ].map((f, i) => (
                             <div key={i} className="glass p-8 rounded-3xl group hover:border-blue-500/50 transition-all hover:-translate-y-2">
@@ -186,7 +202,7 @@ export default function LandingPage() {
                                 <span className="text-gray-300">Image build successful (4.2s)</span>
                             </div>
                             <div className="text-gray-500 mb-2">[17:21:10] Pushing to registry...</div>
-                            <div className="text-gray-500 mb-4">[17:21:12] Spinning up containers on <span className="text-purple-400">vps-nyc-01</span></div>
+                            <div className="text-gray-500 mb-4">[17:21:12] Spinning up containers on <span className="text-purple-400">vps-lag-01</span></div>
                             
                             <div className="inline-block px-3 py-1 bg-green-500/10 border border-green-500/20 rounded text-green-500 text-xs animate-pulse">
                                 DEPLOYMENT SUCCESSFUL: https://delta.hylius.app
@@ -286,10 +302,9 @@ export default function LandingPage() {
                         <span className="font-display font-bold text-xl tracking-tight">Hylius</span>
                     </div>
                     <div className="flex gap-8 text-sm text-gray-500">
-                        <a href="#" className="hover:text-white transition-colors">Privacy</a>
-                        <a href="#" className="hover:text-white transition-colors">Terms</a>
-                        <a href="#" className="hover:text-white transition-colors">Twitter</a>
-                        <a href="#" className="hover:text-white transition-colors">GitHub</a>
+                        <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
+                        <Link href="/developers" className="hover:text-white transition-colors">Developers</Link>
+                        <a href="https://hylius.instatus.com/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Status</a>
                     </div>
                     <div className="text-sm text-gray-500">
                         © 2026 Hylius Cloud. All rights reserved.
