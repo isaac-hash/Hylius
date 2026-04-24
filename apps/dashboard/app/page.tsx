@@ -92,7 +92,7 @@ export default function LandingPage() {
                             <span className="text-gradient">Own everything.</span>
                         </h1>
                         <p className="text-xl text-gray-400 max-w-2xl mb-10 leading-relaxed">
-                            Connect your VPS — on any African hosting provider — and deploy full-stack apps, databases, and APIs in seconds. No per-server fees. No project limits. Your infrastructure, our platform.
+                            Connect your VPS, on any African hosting provider, and deploy full-stack apps, databases, and APIs in seconds. No per-server fees. No project limits. Your infrastructure, our platform.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4">
                             <Link 

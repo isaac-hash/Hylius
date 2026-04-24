@@ -20,6 +20,22 @@ export class PlanService {
     }
 
     /**
+     * Get a single plan by ID
+     */
+    async getPlan(id: string) {
+        return prisma.plan.findUnique({ where: { id } });
+    }
+
+    /**
+     * Delete a local plan record
+     */
+    async deletePlan(id: string) {
+        return prisma.plan.delete({
+            where: { id }
+        });
+    }
+
+    /**
      * Create a local plan record
      */
     async createPlan(data: PlanData) {

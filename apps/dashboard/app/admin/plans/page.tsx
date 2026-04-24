@@ -78,6 +78,22 @@ export default function AdminPlansPage() {
         }
     };
 
+    const handleDelete = async (id: string, name: string) => {
+        if (!window.confirm(`Are you sure you want to delete the plan "${name}"? This cannot be undone.`)) return;
+        
+        try {
+            const token = localStorage.getItem('hylius_token');
+            const res = await fetch(`/api/admin/plans/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error('Failed to delete plan');
+            fetchPlans();
+        } catch (err: any) {
+            alert(err.message);
+        }
+    };
+
     return (
         <AuthGuard requireAdmin>
             <div className="min-h-screen bg-black text-white p-8">
@@ -144,6 +160,19 @@ export default function AdminPlansPage() {
                                             </button>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right space-x-3">
+                                            <Link
+                                                href={`/admin/plans/${plan.id}/edit`}
+                                                className="text-gray-400 hover:text-white text-xs font-medium transition-colors"
+                                            >
+                                                Edit
+                                            </Link>
+                                            <button
+                                                onClick={() => handleDelete(plan.id, plan.name)}
+                                                className="text-gray-400 hover:text-red-400 text-xs font-medium transition-colors"
+                                            >
+                                                Delete
+                                            </button>
+                                            <span className="text-gray-800">|</span>
                                             <button
                                                 onClick={() => handleSync(plan.id, 'PAYSTACK')}
                                                 disabled={!!syncingId && syncingId.includes(plan.id)}
