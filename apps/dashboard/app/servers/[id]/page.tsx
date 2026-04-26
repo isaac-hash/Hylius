@@ -55,6 +55,12 @@ interface DetailedServer {
     username: string;
     osType: string | null;
     createdAt: string;
+    // Agent fields
+    connectionMode: string;      // 'SSH' | 'AGENT'
+    status: string;              // 'ONLINE' | 'OFFLINE' | 'UNKNOWN'
+    agentVersion: string | null;
+    agentToken: string | null;
+    lastHeartbeatAt: string | null;
     projects: DetailedProject[];
     metrics: { cpu: number; memory: number; disk: number; uptime: number; createdAt: string }[];
     databases: {
@@ -220,10 +226,25 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                 <div>
                                     <div className="flex items-center gap-3 mb-2">
                                         <h1 className="text-3xl font-bold">{server.name}</h1>
-                                        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                            Connected
-                                        </span>
+                                        {/* Dynamic agent/SSH status badge */}
+                                        {server.connectionMode === 'AGENT' ? (
+                                            server.status === 'ONLINE' ? (
+                                                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                                    Agent Online
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                                    Agent Offline
+                                                </span>
+                                            )
+                                        ) : (
+                                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-500/10 text-gray-400 border border-gray-600/40">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
+                                                SSH Only
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-400 font-mono">
                                         <span className="flex items-center gap-2"><svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{server.username}@{server.ip}:{server.port}</span>
@@ -504,6 +525,76 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                                         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">GitHub</h3>
                                         <GitHubConnect />
+                                    </div>
+
+                                    {/* Agent Status Card */}
+                                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+                                            </svg>
+                                            Hylius Agent
+                                        </h3>
+
+                                        {server.connectionMode === 'AGENT' ? (
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-gray-500">Status</span>
+                                                    {server.status === 'ONLINE' ? (
+                                                        <span className="flex items-center gap-1.5 text-xs text-green-400">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                                            Online
+                                                        </span>
+                                                    ) : (
+                                                        <span className="flex items-center gap-1.5 text-xs text-red-400">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                                            Offline
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-gray-500">Version</span>
+                                                    <span className="text-xs text-gray-300 font-mono">{server.agentVersion || '—'}</span>
+                                                </div>
+                                                {server.lastHeartbeatAt && (
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs text-gray-500">Last Seen</span>
+                                                        <span className="text-xs text-gray-300">
+                                                            {new Date(server.lastHeartbeatAt).toLocaleTimeString()}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="mt-3 pt-3 border-t border-gray-800 text-xs text-gray-500">
+                                                    Deployments and logs are routed through the agent — no SSH required.
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <p className="text-xs text-gray-400">
+                                                    This server uses SSH. Install the Hylius Agent for real-time logs, instant deployments, and live metrics — no SSH connection needed.
+                                                </p>
+                                                <div className="mt-3">
+                                                    <p className="text-xs text-gray-500 mb-1.5 font-mono uppercase tracking-wider">Install command</p>
+                                                    <div className="flex items-start gap-2 bg-black/60 border border-gray-700 rounded-lg p-3">
+                                                        <code className="text-xs text-green-400 font-mono break-all flex-1 leading-relaxed">
+                                                            {`curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token ${server.agentToken || '<token>'} --server-url ${typeof window !== 'undefined' ? window.location.origin : 'https://dashboard.hylius.icu'} --server-id ${server.id}`}
+                                                        </code>
+                                                        <button
+                                                            onClick={() => navigator.clipboard.writeText(
+                                                                `curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token ${server.agentToken || ''} --server-url ${typeof window !== 'undefined' ? window.location.origin : ''} --server-id ${server.id}`
+                                                            )}
+                                                            className="flex-shrink-0 p-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                                                            title="Copy install command"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-xs text-gray-600 mt-1.5">Run as root on your VPS. Agent starts automatically on boot.</p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Database Manager */}

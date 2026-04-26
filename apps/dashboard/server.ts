@@ -5,11 +5,14 @@ dotenv.config();
 import { createServer } from 'node:http';
 import next from 'next';
 import { Server } from 'socket.io';
+import { WebSocketServer } from 'ws';
 import { PrismaClient } from '@prisma/client';
 // @ts-ignore - Local workspace package
 import { setup, ServerConfig, SetupOptions, SSHClient } from '@hylius/core';
 import { decrypt } from './services/crypto.service';
 import { executeDeployment } from './services/deploy.service';
+import { agentGateway } from './services/agent-gateway.service';
+
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -171,7 +174,6 @@ app.prepare().then(() => {
         socket.on('watch-logs', async (data: { projectId: string }) => {
             const { projectId } = data;
 
-            // Prevent duplicate stream for same project
             if (activeLogStreams.has(projectId)) {
                 socket.emit(`logs:connected:${projectId}`);
                 return;
@@ -188,6 +190,46 @@ app.prepare().then(() => {
                     return;
                 }
 
+                // ─── Agent path (preferred) ───────────────────────────────
+                const useAgent = (project.server as any).connectionMode === 'AGENT'
+                    && agentGateway.isConnected(project.server.id);
+
+                if (useAgent) {
+                    socket.emit(`logs:connected:${projectId}`);
+
+                    // Track the stream commandId so we can cancel it on unwatch
+                    let streamCommandId: string | null = null;
+
+                    const streamPromise = agentGateway.streamCommand(
+                        project.server.id,
+                        'stream-logs',
+                        { containerName: `${project.name}-app`, projectName: project.name },
+                        (chunk: string) => socket.emit(`logs:data:${projectId}`, chunk),
+                    );
+
+                    // Store a canceller object (duck-typed to match the SSHClient shape used elsewhere)
+                    activeLogStreams.set(projectId, {
+                        end: () => {
+                            if (streamCommandId) {
+                                agentGateway.cancelStream(project.server.id, streamCommandId);
+                            }
+                        }
+                    } as any);
+
+                    streamPromise
+                        .then(() => {
+                            socket.emit(`logs:closed:${projectId}`);
+                            activeLogStreams.delete(projectId);
+                        })
+                        .catch((err: Error) => {
+                            socket.emit(`logs:error:${projectId}`, err.message);
+                            activeLogStreams.delete(projectId);
+                        });
+
+                    return;
+                }
+
+                // ─── SSH fallback path ────────────────────────────────────
                 let privateKey = '';
                 if (project.server.privateKeyEncrypted && project.server.keyIv) {
                     privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv);
@@ -206,9 +248,7 @@ app.prepare().then(() => {
                 activeLogStreams.set(projectId, sshClient);
                 socket.emit(`logs:connected:${projectId}`);
 
-                const containerName = `${project.name}-app`;  // mirrors deploy.ts getContainerName()
-
-                // Try docker logs --follow first; if it fails (container not found), fall back to PM2
+                const containerName = `${project.name}-app`;
                 const { code: dockerCheck } = await sshClient.exec(
                     `docker inspect ${containerName} --format='{{.State.Running}}' 2>/dev/null`
                 );
@@ -217,7 +257,6 @@ app.prepare().then(() => {
                     ? `docker logs --tail 100 --follow ${containerName} 2>&1`
                     : `pm2 logs ${project.name} --nocolor --lines 100 2>&1`;
 
-                // execStream keeps the SSH connection open and fires callbacks per chunk
                 sshClient.execStream(
                     logCommand,
                     (chunk: string) => socket.emit(`logs:data:${projectId}`, chunk),
@@ -234,7 +273,7 @@ app.prepare().then(() => {
 
             } catch (err: any) {
                 console.error('[watch-logs] error:', err);
-                socket.emit(`logs:error:${projectId}`, err.message || 'SSH connection failed');
+                socket.emit(`logs:error:${projectId}`, err.message || 'Connection failed');
                 activeLogStreams.delete(projectId);
             }
         });
@@ -242,9 +281,9 @@ app.prepare().then(() => {
         // ─── unwatch-logs: client explicitly closes the log stream ───────────
         socket.on('unwatch-logs', (data: { projectId: string }) => {
             const { projectId } = data;
-            const sshClient = activeLogStreams.get(projectId);
-            if (sshClient) {
-                sshClient.end();
+            const client = activeLogStreams.get(projectId);
+            if (client) {
+                client.end();
                 activeLogStreams.delete(projectId);
             }
         });
@@ -294,6 +333,21 @@ app.prepare().then(() => {
         });
     });
 
+    // ─── Agent Gateway: raw WebSocket on /agent-ws ───────────────────────────
+    const agentWss = new WebSocketServer({ noServer: true });
+    agentGateway.attach(agentWss);
+
+    // Route /agent-ws upgrades to the agent WebSocket server
+    // (Socket.io handles its own /socket.io/ upgrades internally)
+    httpServer.on('upgrade', (req, socket, head) => {
+        const url = req.url || '';
+        if (url.startsWith('/agent-ws')) {
+            agentWss.handleUpgrade(req, socket, head, (ws) => {
+                agentWss.emit('connection', ws, req);
+            });
+        }
+    });
+
     httpServer
         .once('error', (err) => {
             console.error(err);
@@ -301,5 +355,6 @@ app.prepare().then(() => {
         })
         .listen(port, () => {
             console.log(`> Ready on http://${hostname}:${port}`);
+            console.log(`> Agent Gateway listening on ws://${hostname}:${port}/agent-ws`);
         });
 });

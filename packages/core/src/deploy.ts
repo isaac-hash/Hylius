@@ -249,6 +249,12 @@ async function executeReleaseCommand(
 }
 
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
+    // ─── Agent mode: delegate entire deploy to the VPS agent ─────────────────
+    if (options.executionMode === 'agent' && options.agent) {
+        return deployViaAgent(options);
+    }
+
+    // ─── SSH mode (default/legacy) ──────────────────────────────────────────
     const { server, project, onLog } = options;
     const client = new SSHClient(server);
     const startTime = Date.now();
@@ -933,5 +939,88 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
         };
     } finally {
         client.end();
+    }
+}
+
+/**
+ * Deploy via connected VPS agent (no SSH).
+ * Sends the full project config to the agent and streams logs back.
+ * The agent executes the entire pipeline locally on the VPS.
+ */
+async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
+    const { project, agent, onLog, domains, tlsMode, trigger } = options;
+    const startTime = Date.now();
+    const releaseId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+
+    const log = (msg: string) => { if (onLog) onLog(msg); };
+
+    log(`\x1b[36m[Agent] Sending deploy command to VPS agent...\x1b[0m\n`);
+
+    try {
+        const { exitCode, resultData } = await agent!.streamCommand(
+            'deploy',
+            {
+                project: {
+                    name: project.name,
+                    repoUrl: project.repoUrl,
+                    branch: project.branch || 'main',
+                    deployPath: project.deployPath,
+                    buildCommand: project.buildCommand,
+                    startCommand: project.startCommand,
+                    deployStrategy: project.deployStrategy || 'auto',
+                    env: project.env || {},
+                    ghcrImage: project.ghcrImage,
+                    dockerComposeYaml: project.dockerComposeYaml,
+                    containerName: project.containerName,
+                    dockerComposeFile: project.dockerComposeFile,
+                },
+                domains: domains || [],
+                tlsMode: tlsMode || 'production',
+                trigger,
+            },
+            log,
+        );
+
+        if (exitCode !== 0) {
+            return {
+                success: false,
+                releaseId,
+                durationMs: Date.now() - startTime,
+                error: 'Agent deploy failed',
+            };
+        }
+
+        // Parse result JSON embedded in the done message
+        let url: string | undefined;
+        if (resultData) {
+            try {
+                const result = JSON.parse(resultData);
+                url = result.url;
+                if (result.releaseId) {
+                    return {
+                        success: true,
+                        releaseId: result.releaseId,
+                        durationMs: Date.now() - startTime,
+                        url,
+                    };
+                }
+            } catch { /* resultData was not JSON, ignore */ }
+        }
+
+        return {
+            success: true,
+            releaseId,
+            durationMs: Date.now() - startTime,
+            url,
+        };
+
+    } catch (err: any) {
+        log(`\x1b[31m[Agent] Deploy command failed: ${err.message}\x1b[0m\n`);
+        return {
+            success: false,
+            releaseId,
+            durationMs: Date.now() - startTime,
+            error: err.message,
+        };
     }
 }

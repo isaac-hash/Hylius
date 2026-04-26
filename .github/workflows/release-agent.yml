@@ -1,0 +1,42 @@
+name: Release Agent
+
+on:
+  push:
+    tags:
+      - 'agent/v*'   # e.g. agent/v0.1.0
+
+jobs:
+  release:
+    name: Build and publish agent binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: packages/agent/go.sum
+
+      - name: Build binaries
+        working-directory: packages/agent
+        run: make all
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#agent/}" >> $GITHUB_OUTPUT
+
+      - name: Push release to Hylius-org/hylius-agent
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_RELEASE_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.VERSION }}"
+
+          # Create the release on the public release repo
+          gh release create "$TAG" \
+            --repo Hylius-org/hylius-agent \
+            --title "hylius-agent $TAG" \
+            --notes "Hylius Agent $TAG — see main repo for changelog." \
+            packages/agent/dist/hylius-agent-linux-amd64 \
+            packages/agent/dist/hylius-agent-linux-arm64 \
+            packages/agent/scripts/install.sh

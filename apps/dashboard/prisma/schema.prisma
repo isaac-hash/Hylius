@@ -5,9 +5,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
 
 // ─── Enums & Types ─────────────────────────────────────────
 // Note: SQLite does not support native enums. 
@@ -161,6 +162,13 @@ model Server {
   privateKeyEncrypted String?      // AES-256-GCM encrypted SSH key (managed)
   keyIv               String?      // Initialization vector for decryption
   osType              String?      // e.g. "Ubuntu", "Alpine"
+  // ─── Agent fields ──────────────────────────────────────────────────────────
+  agentToken          String?      @unique   // Per-server token for agent auth
+  agentVersion        String?               // e.g. "0.1.0"
+  connectionMode      String       @default("SSH")      // "SSH" | "AGENT"
+  status              String       @default("UNKNOWN")  // "ONLINE" | "OFFLINE" | "UNKNOWN"
+  lastHeartbeatAt     DateTime?             // Last successful heartbeat from agent
+  // ───────────────────────────────────────────────────────────────────────────
   organization        Organization @relation(fields: [organizationId], references: [id])
   organizationId      String
   projects            Project[]
@@ -170,7 +178,9 @@ model Server {
   updatedAt           DateTime     @updatedAt
 
   @@index([organizationId])
+  @@index([agentToken])
 }
+
 
 model Project {
   id             String       @id @default(cuid())

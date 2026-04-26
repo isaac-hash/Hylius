@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../services/prisma';
 import { requireAuth } from '../../../services/auth.service';
 import { encrypt } from '../../../services/crypto.service';
+import { randomBytes } from 'crypto';
 
 export async function GET(request: Request) {
     try {
@@ -47,6 +48,9 @@ export async function POST(request: Request) {
             keyIv = encrypted.iv;
         }
 
+        // Generate per-server agent token (shown once to user for install script)
+        const agentToken = `hyl_${randomBytes(32).toString('hex')}`;
+
         // Clean the IP address (remove http:// or https:// if user accidentally included it)
         const cleanIp = ip.replace(/^https?:\/\//, '').split('/')[0];
 
@@ -59,6 +63,8 @@ export async function POST(request: Request) {
                 privateKeyEncrypted,
                 keyIv,
                 osType,
+                agentToken,
+                connectionMode: 'SSH', // Will upgrade to AGENT once agent connects
                 organizationId: auth.organizationId,
             },
         });
@@ -72,9 +78,9 @@ export async function POST(request: Request) {
             }
         });
 
-        // Never return encrypted key data to the client
+        // Return safe server data + agentToken (shown once for install command)
         const { privateKeyEncrypted: _, keyIv: __, ...safeServer } = server;
-        return NextResponse.json(safeServer);
+        return NextResponse.json({ ...safeServer, agentToken });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         if (message === 'Unauthorized') {
@@ -83,3 +89,4 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }
+
