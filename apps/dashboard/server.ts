@@ -132,18 +132,33 @@ app.prepare().then(() => {
                     password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
                 };
 
-                // 3. Execute Setup
+                // 3. Execute Setup (includes auto-install of Hylius Agent as final step)
                 socket.emit('log', `\x1b[36mStarting provisioning for ${serverRecord.name}...\x1b[0m\n`);
+
+                // Determine the public URL of this dashboard (for agent to connect back)
+                const dashboardUrl = process.env.NEXT_PUBLIC_APP_URL
+                    || `http://${process.env.HOSTNAME || 'localhost'}:${port}`;
 
                 const result = await setup({
                     server: serverConfig,
                     onLog: (chunk) => {
                         socket.emit('log', chunk);
-                    }
-                });
+                    },
+                    // Agent auto-install params — setup.ts Step 5 uses these
+                    agentToken: (serverRecord as any).agentToken,
+                    agentServerUrl: dashboardUrl,
+                    agentServerId: serverRecord.id,
+                } as any);
 
                 if (result.success) {
                     socket.emit('setup_success', result);
+
+                    // Auto-upgrade server to agent mode — the agent will connect
+                    // via WebSocket within seconds and the gateway will mark it ONLINE
+                    await prisma.server.update({
+                        where: { id: serverRecord.id },
+                        data: { connectionMode: 'AGENT', status: 'UNKNOWN' } as any,
+                    }).catch(() => {});
                 } else {
                     socket.emit('setup_error', result.error);
                 }
@@ -160,6 +175,7 @@ app.prepare().then(() => {
                         })
                     }
                 });
+
 
             } catch (error: any) {
                 console.error('Setup error:', error);

@@ -570,30 +570,40 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                <p className="text-xs text-gray-400">
-                                                    This server uses SSH. Install the Hylius Agent for real-time logs, instant deployments, and live metrics — no SSH connection needed.
-                                                </p>
-                                                <div className="mt-3">
-                                                    <p className="text-xs text-gray-500 mb-1.5 font-mono uppercase tracking-wider">Install command</p>
-                                                    <div className="flex items-start gap-2 bg-black/60 border border-gray-700 rounded-lg p-3">
-                                                        <code className="text-xs text-green-400 font-mono break-all flex-1 leading-relaxed">
-                                                            {`curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token ${server.agentToken || '<token>'} --server-url ${typeof window !== 'undefined' ? window.location.origin : 'https://dashboard.hylius.icu'} --server-id ${server.id}`}
-                                                        </code>
-                                                        <button
-                                                            onClick={() => navigator.clipboard.writeText(
-                                                                `curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token ${server.agentToken || ''} --server-url ${typeof window !== 'undefined' ? window.location.origin : ''} --server-id ${server.id}`
-                                                            )}
-                                                            className="flex-shrink-0 p-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-                                                            title="Copy install command"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                    <p className="text-xs text-gray-600 mt-1.5">Run as root on your VPS. Agent starts automatically on boot.</p>
+                                                <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                                                    <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <p className="text-xs text-blue-300">
+                                                        Click <strong>&quot;Provision Server&quot;</strong> to automatically install Docker, Caddy, and the Hylius Agent. Once provisioned, all deployments run through the agent — no SSH needed.
+                                                    </p>
                                                 </div>
+                                                <details className="group">
+                                                    <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300 transition-colors select-none">
+                                                        Manual install (advanced)
+                                                    </summary>
+                                                    <div className="mt-2">
+                                                        <div className="flex items-start gap-2 bg-black/60 border border-gray-700 rounded-lg p-3">
+                                                            <code className="text-xs text-green-400 font-mono break-all flex-1 leading-relaxed">
+                                                                {`curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token ${server.agentToken || '<token>'} --server-url ${typeof window !== 'undefined' ? window.location.origin : 'https://dashboard.hylius.icu'} --server-id ${server.id}`}
+                                                            </code>
+                                                            <button
+                                                                onClick={() => navigator.clipboard.writeText(
+                                                                    `curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token ${server.agentToken || ''} --server-url ${typeof window !== 'undefined' ? window.location.origin : ''} --server-id ${server.id}`
+                                                                )}
+                                                                className="flex-shrink-0 p-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                                                                title="Copy install command"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-gray-600 mt-1.5">Run as root on your VPS if provisioning was done outside Hylius.</p>
+                                                    </div>
+                                                </details>
                                             </div>
+
                                         )}
                                     </div>
 
@@ -605,12 +615,14 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                         organizationId={organization?.id || ''}
                                     />
 
-                                    {/* Live Server Metrics via SSH Pulse */}
-                                    <ServerMetrics 
-                                        serverId={id as string} 
-                                        token={token || ''} 
-                                        initialMetrics={server.metrics?.[0] || null} 
+                                    {/* Live Server Metrics — agent push or SSH poll depending on mode */}
+                                    <ServerMetrics
+                                        serverId={id as string}
+                                        token={token || ''}
+                                        initialMetrics={server.metrics?.[0] || null}
+                                        connectionMode={server.connectionMode}
                                     />
+
 
                                     {/* Recent Deployments across all projects on this server */}
                                     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">

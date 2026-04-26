@@ -16,7 +16,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[32mConnected successfully.\x1b[0m\n');
 
         // 1. Detect OS and User
-        log('\x1b[33m[1/3] Detecting Operating System and User...\x1b[0m');
+        log('\x1b[33m[1/5] Detecting Operating System and User...\x1b[0m');
         const osResult = await client.exec('cat /etc/os-release');
         const userResult = await client.exec('whoami');
 
@@ -40,7 +40,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         const sudoPrefix = isRoot ? '' : 'sudo ';
 
         // 2. Install Docker
-        log('\x1b[33m[2/3] Installing Docker and dependencies...\x1b[0m');
+        log('\x1b[33m[2/5] Installing Docker and dependencies...\x1b[0m');
         let dockerCommands: string[] = [];
 
         if (isUbuntu || isDebian) {
@@ -82,7 +82,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[32mDocker and Git installed successfully.\x1b[0m\n');
 
         // 3. Install & Start Caddy reverse proxy
-        log('\x1b[33m[3/4] Setting up Caddy reverse proxy for domain management...\x1b[0m');
+        log('\x1b[33m[3/5] Setting up Caddy reverse proxy for domain management...\x1b[0m');
 
         // Stop and disable any pre-installed web servers that occupy ports 80/443
         // (common on VPS providers shipping Plesk, cPanel, or default Apache/Nginx)
@@ -118,7 +118,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[32mCaddy reverse proxy installed and running.\x1b[0m\n');
 
         // 4. Setup UFW / Firewall
-        log('\x1b[33m[4/4] Configuring basic firewall (UFW)...\x1b[0m');
+        log('\x1b[33m[4/5] Configuring basic firewall (UFW)...\x1b[0m');
         // We attempt UFW setup, but ignore failures (e.g., if running inside a Docker mock container without ufw)
         const ufwCommands = [
             `${sudoPrefix}apt-get install -y ufw > /dev/null 2>&1 || ${sudoPrefix}apk add --no-cache ufw > /dev/null 2>&1 || true`,

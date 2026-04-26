@@ -26,10 +26,10 @@ type Message struct {
 	// Auth / heartbeat fields
 	ServerID string  `json:"serverId,omitempty"`
 	Token    string  `json:"token,omitempty"`
-	CPU      float64 `json:"cpu,omitempty"`
-	Memory   float64 `json:"memory,omitempty"`
-	Disk     float64 `json:"disk,omitempty"`
-	Uptime   int64   `json:"uptime,omitempty"`
+	CPU      float64 `json:"cpu"`
+	Memory   float64 `json:"memory"`
+	Disk     float64 `json:"disk"`
+	Uptime   int64   `json:"uptime"`
 	Version  string  `json:"version,omitempty"`
 }
 
