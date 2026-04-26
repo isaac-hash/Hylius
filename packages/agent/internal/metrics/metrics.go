@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,8 +18,13 @@ type Snapshot struct {
 	Uptime int64   `json:"uptime"` // seconds
 }
 
+var (
+	lastCPUStat []uint64
+	cpuMu       sync.Mutex
+)
+
 // Collect gathers current system metrics.
-// CPU is sampled over 200ms for accuracy.
+// CPU is measured continuously between Collect() calls for an accurate average.
 func Collect() (*Snapshot, error) {
 	return &Snapshot{
 		CPU:    getCPU(),
@@ -29,12 +35,24 @@ func Collect() (*Snapshot, error) {
 }
 
 func getCPU() float64 {
-	s1 := readCPUStat()
-	time.Sleep(200 * time.Millisecond)
-	s2 := readCPUStat()
-	if s1 == nil || s2 == nil || len(s1) < 4 || len(s2) < 4 {
+	cpuMu.Lock()
+	defer cpuMu.Unlock()
+
+	current := readCPUStat()
+	if current == nil || len(current) < 4 {
 		return 0
 	}
+
+	// First time setup or if state was lost
+	if lastCPUStat == nil {
+		lastCPUStat = current
+		time.Sleep(500 * time.Millisecond)
+		current = readCPUStat()
+		if current == nil {
+			return 0
+		}
+	}
+
 	sum := func(s []uint64) uint64 {
 		var t uint64
 		for _, v := range s {
@@ -42,13 +60,23 @@ func getCPU() float64 {
 		}
 		return t
 	}
-	total1, total2 := sum(s1), sum(s2)
-	idle1, idle2 := s1[3], s2[3]
+	
+	total1, total2 := sum(lastCPUStat), sum(current)
+	idle1, idle2 := lastCPUStat[3], current[3]
+	
+	// Store current as last for the next heartbeat
+	lastCPUStat = current
+
 	totalDiff := float64(total2 - total1)
-	if totalDiff == 0 {
+	if totalDiff <= 0 {
 		return 0
 	}
-	return (1 - float64(idle2-idle1)/totalDiff) * 100
+	
+	usage := (1 - float64(idle2-idle1)/totalDiff) * 100
+	if usage < 0 {
+		return 0
+	}
+	return usage
 }
 
 func readCPUStat() []uint64 {
