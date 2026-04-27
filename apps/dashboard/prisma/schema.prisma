@@ -30,6 +30,7 @@ model Organization {
   payments      Payment[]
   auditLogs     AuditLog[]
   databases     Database[]
+  alerts        Alert[]
   githubInstallations GitHubInstallation[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -43,14 +44,39 @@ model User {
   password       String        // bcrypt hashed
   role           String        @default("OWNER") // OWNER | ADMIN | MEMBER | PLATFORM_ADMIN
   isActive       Boolean       @default(true)
+  isEmailVerified Boolean      @default(false)
   organization   Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?       // Optional for PLATFORM_ADMIN
   sessions       Session[]
+  otpTokens      OtpToken[]
+  resetTokens    PasswordResetToken[]
   lastLoginAt    DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   
   @@index([organizationId])
+}
+
+model OtpToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Session {
@@ -74,6 +100,26 @@ model ApiToken {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId])
+}
+
+// ─── Alerts & Monitoring ──────────────────────────────────────
+
+model Alert {
+  id             String   @id @default(cuid())
+  organizationId String
+  type           String   // "SERVER_OFFLINE" | "DEPLOYMENT_FAILED" | "HIGH_CPU" | "HIGH_DISK"
+  message        String   // Human-readable message
+  isRead         Boolean  @default(false)
+  serverId       String?
+  projectId      String?
+  
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([serverId])
+  @@index([projectId])
+  @@index([createdAt])
 }
 
 // ─── Audit & Billing ────────────────────────────────────────

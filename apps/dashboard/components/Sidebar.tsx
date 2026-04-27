@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/providers/auth.provider";
 
+import NotificationPanel from "@/components/NotificationPanel";
+
 // Lined SVG icon components
 const DashboardIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -99,14 +101,18 @@ export default function Sidebar({
                         </span>
                     </Link>
                     
-                    {/* Desktop Collapse Button */}
-                    <button 
-                        onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="hidden md:block p-1.5 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
-                        title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                    >
-                        {isCollapsed ? "→" : "←"}
-                    </button>
+                    {/* Desktop Actions */}
+                    <div className="hidden md:flex items-center gap-2 flex-col md:flex-row">
+                        {!isCollapsed && <NotificationPanel />}
+                        {/* Desktop Collapse Button */}
+                        <button 
+                            onClick={() => setIsCollapsed(!isCollapsed)}
+                            className="p-1.5 rounded-lg hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
+                            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                        >
+                            {isCollapsed ? "→" : "←"}
+                        </button>
+                    </div>
 
                     {/* Mobile Close Button */}
                     <button 

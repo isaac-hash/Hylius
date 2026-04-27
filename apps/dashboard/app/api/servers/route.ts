@@ -34,8 +34,8 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { name, ip, username, port, privateKey, osType } = body;
 
-        if (!name || !ip || !username) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        if (!name) {
+            return NextResponse.json({ error: 'Server name is required' }, { status: 400 });
         }
 
         // Encrypt SSH private key if provided
@@ -52,19 +52,19 @@ export async function POST(request: Request) {
         const agentToken = `hyl_${randomBytes(32).toString('hex')}`;
 
         // Clean the IP address (remove http:// or https:// if user accidentally included it)
-        const cleanIp = ip.replace(/^https?:\/\//, '').split('/')[0];
+        const cleanIp = ip ? ip.replace(/^https?:\/\//, '').split('/')[0] : 'pending...';
 
         const server = await prisma.server.create({
             data: {
                 name,
                 ip: cleanIp,
-                username,
+                username: username || 'root',
                 port: port || 22,
                 privateKeyEncrypted,
                 keyIv,
-                osType,
+                osType: osType || 'Linux',
                 agentToken,
-                connectionMode: 'SSH', // Will upgrade to AGENT once agent connects
+                connectionMode: 'AGENT', // Start as AGENT
                 organizationId: auth.organizationId,
             },
         });

@@ -24,7 +24,10 @@ export async function POST(request: Request) {
             );
         }
 
-        // Create organization + user in a transaction
+        // Generate 6-digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        // Create organization, user, and otp token in a transaction
         const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -46,7 +49,23 @@ export async function POST(request: Request) {
                 },
             });
 
+            await tx.otpToken.create({
+                data: {
+                    userId: user.id,
+                    code: otpCode,
+                    expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+                }
+            });
+
             return { user, organization };
+        });
+
+        // Send OTP email
+        const { sendEmail, getOtpEmailTemplate } = await import('../../../../services/mail.service');
+        await sendEmail({
+            to: email,
+            subject: 'Verify your Hylius account',
+            htmlContent: getOtpEmailTemplate(otpCode)
         });
 
         // Create session
@@ -59,6 +78,7 @@ export async function POST(request: Request) {
                 id: result.user.id,
                 email: result.user.email,
                 role: result.user.role,
+                isEmailVerified: false,
             },
             organization: {
                 id: result.organization.id,
