@@ -43,13 +43,20 @@ The **Connect New Server** modal will ask for:
 | **IP Address** | The public IP of your server | `203.0.113.42` |
 | **Port** | SSH port (usually 22) | `22` |
 | **Username** | SSH user | `root` |
-| **Private Key** | Paste the full contents of your SSH private key | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| **Private Key / Password** | SSH credentials used once to provision the server and install the agent | `-----BEGIN OPENSSH...` |
 
 Click **Connect Server** and Hylius will verify the connection.
 
 ### Step 3 — Provision the server
 
-Once connected, click the **Provision** button on the server card. This opens a live terminal that runs `hylius setup` on your VPS — installing Docker, Railpack, and configuring the firewall, all in real-time.
+Once connected, click the **Provision** button on the server card. The dashboard will connect via SSH to install Docker, Railpack, and start the **Hylius Agent** background service (`hylius-agent`). All future deployments and metric monitoring will securely route through this WebSocket agent rather than SSH.
+
+**Alternative: Manual Agent Installation**
+If you prefer not to provide SSH credentials to the Dashboard, you can manually run the agent installation command provided in the server details page on your VPS:
+
+```bash
+curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh | bash -s -- --token <YOUR_TOKEN> --server-url <DASHBOARD_URL> --server-id <ID>
+```
 
 You only need to provision once per server.
 

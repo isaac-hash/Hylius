@@ -1,6 +1,8 @@
-# Deploying Your App (`hylius deploy`)
+# Deploying Your App
 
-The `hylius deploy` command pushes your application to your VPS using an **atomic symlink-swap** strategy — ensuring zero-downtime for every deployment.
+Whether you use the Dashboard or the `hylius deploy` CLI command, Hylius pushes your application to your VPS using an **atomic symlink-swap** strategy — ensuring zero-downtime for every deployment.
+
+When triggered from the Dashboard, the deployment is routed instantly over WebSockets to the connected **Hylius Agent**, eliminating the need to establish new SSH connections.
 
 ---
 

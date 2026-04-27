@@ -8,10 +8,10 @@ Hylius is a self-hosted deployment platform that lets you deploy any application
 
 Hylius gives you two ways to deploy:
 
-- **Hylius Dashboard** — a web UI where you connect servers, import GitHub repos, trigger deploys, and manage env vars visually
-- **Hylius CLI** — a command-line tool for provisioning, deploying, and generating CI/CD pipelines
+- **Hylius Dashboard** — a web UI where you connect servers, import GitHub repos, trigger deploys, and manage env vars visually. The dashboard installs a lightweight **Hylius Agent** on your VPS to securely orchestrate deployments over WebSockets without requiring ongoing SSH access.
+- **Hylius CLI** — a command-line tool for provisioning, deploying, and generating CI/CD pipelines. The CLI connects to your VPS directly over **SSH**.
 
-Both methods connect to your VPS over SSH, clone your repo, build a Docker image (or use Railpack if you have no Dockerfile), and run it — with zero-downtime atomic deploys. Every deployment is versioned and symlink-swapped, so rollbacks are instant.
+Regardless of the method, Hylius clones your repo, builds a Docker image (or uses Railpack if you have no Dockerfile), and runs it — with zero-downtime atomic deploys. Every deployment is versioned and symlink-swapped, so rollbacks are instant.
 
 ---
 
@@ -19,9 +19,9 @@ Both methods connect to your VPS over SSH, clone your repo, build a Docker image
 
 Before you begin, you'll need:
 
-- A Linux VPS (Ubuntu 22.04+, Debian, or Alpine recommended) with SSH access
+- A Linux VPS (Ubuntu 22.04+, Debian, or Alpine recommended)
 - [Node.js 18+](https://nodejs.org/) installed **on your local machine**
-- Your VPS's **IP address**, **SSH username**, and either a **password** or an **SSH private key**
+- Your VPS's **IP address** and **SSH credentials** (only required for the initial Dashboard setup or CLI usage)
 - A Git repository containing your project (GitHub, GitLab, Codeberg, etc.)
 
 ---

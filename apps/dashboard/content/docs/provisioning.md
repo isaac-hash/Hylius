@@ -1,19 +1,30 @@
-# Server Provisioning (`hylius setup`)
+# Server Provisioning
 
-Before you can deploy any application, your VPS must have Docker installed and its firewall configured. The `hylius setup` command automates all of this in a single step.
+Before you can deploy any application, your VPS must be provisioned with Docker, its firewall configured, and the Hylius Agent installed.
+
+You can provision a server directly from the **Dashboard** or by using the `hylius setup` command in the CLI.
 
 ---
 
-## What `hylius setup` Does
+## Provisioning from the Dashboard
 
-When you run `hylius setup`, Hylius connects to your VPS over SSH and:
+When you click **Provision** on a server card in the Dashboard:
+1. The dashboard connects via SSH to your VPS.
+2. It installs Docker, Railpack, and sets up UFW.
+3. It installs and starts the **Hylius Agent** (`hylius-agent`) systemd service.
+4. From then on, deployments are routed securely over WebSockets via the agent.
+
+## Provisioning via CLI (`hylius setup`)
+
+When you run `hylius setup` locally, the CLI connects to your VPS over SSH and:
 
 1. **Detects the OS** — Ubuntu, Debian, or Alpine Linux
 2. **Installs Docker Engine** — including `docker-compose-plugin` (the modern `docker compose` v2 CLI)
-3. **Installs Railpack** — a zero-config container builder so apps without a `Dockerfile` can still be built
+3. **Installs Railpack** — a zero-config container builder
 4. **Configures UFW Firewall** — opens ports `22` (SSH), `80` (HTTP), and `443` (HTTPS)
 
-You only need to run this **once per server**.
+> [!NOTE]
+> The CLI setup tool uses SSH for all operations and **does not** install the Hylius Agent. The agent is strictly used by the web dashboard.
 
 ---
 

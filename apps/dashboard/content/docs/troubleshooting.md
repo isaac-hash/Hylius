@@ -104,9 +104,28 @@ If not available, install [Git for Windows](https://git-scm.com/) which includes
 
 ---
 
-## SSH & Connection Issues
+## Agent & Connection Issues
 
-### `ECONNREFUSED` or `ssh: connect to host ... port 22: Connection refused`
+### Dashboard says "Agent Offline" or deployments hang
+
+If the Dashboard cannot connect to your VPS, the Hylius Agent may have crashed or lost its WebSocket connection.
+
+1. **Check Agent Status:**
+   SSH into your VPS and verify the service is running:
+   ```bash
+   systemctl status hylius-agent
+   ```
+2. **View Agent Logs:**
+   If the agent is failing to connect or crashing, view the real-time logs:
+   ```bash
+   journalctl -u hylius-agent -f
+   ```
+3. **Restart the Agent:**
+   ```bash
+   systemctl restart hylius-agent
+   ```
+
+### SSH `ECONNREFUSED` during initial Provisioning or CLI deploy
 
 - Confirm your VPS IP is correct
 - Confirm the SSH port (default is 22; some providers use a custom port)
