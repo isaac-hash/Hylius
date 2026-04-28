@@ -125,8 +125,10 @@ export default function DeploymentHistory({ projectId, serverId, refreshKey }: D
                             {d.project?.server?.name && (
                                 <span className="text-gray-600">on {d.project.server.name}</span>
                             )}
-                            {d.commitHash && (
+                            {d.commitHash ? (
                                 <span className="font-mono">{d.commitHash.slice(0, 7)}</span>
+                            ) : (
+                                <span className="font-mono text-gray-600" title="Commit hash unavailable (deployment failed before git clone)">—</span>
                             )}
                             <span>{formatDuration(d.durationMs)}</span>
                             <span className="uppercase">{d.triggerSource}</span>

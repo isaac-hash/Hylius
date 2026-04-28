@@ -86,7 +86,11 @@ export default function ProjectEnvEditor({ projectId, projectName, isOpen, onClo
             });
             if (!res.ok) throw new Error((await res.json()).error || 'Failed to save');
             setSaved(true);
-            setTimeout(() => setSaved(false), 3000);
+            // BUG-012/013: Show success flash briefly then auto-close the modal
+            setTimeout(() => {
+                setSaved(false);
+                onClose();
+            }, 1500);
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -196,7 +200,7 @@ export default function ProjectEnvEditor({ projectId, projectName, isOpen, onClo
                                     </div>
                                     <button
                                         onClick={() => removeRow(i)}
-                                        className="text-gray-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                        className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0"
                                         title="Remove"
                                     >
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

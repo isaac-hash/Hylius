@@ -19,6 +19,7 @@ interface Server {
     id: string;
     name: string;
     ip: string;
+    status: string;
     projects?: Project[];
 }
 
@@ -129,10 +130,17 @@ export default function ServerList() {
                                     </Link>
                                     <p className="text-xs font-mono text-gray-400 group-hover:text-gray-300 tracking-wider uppercase transition-colors">{server.ip}</p>
                                 </div>
-                                <div className="relative flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
-                                </div>
+                                {/* Status dot — reflects actual server connectivity */}
+                                {server.status === 'ONLINE' ? (
+                                    <div className="relative flex h-3 w-3" title="Online">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
+                                    </div>
+                                ) : (
+                                    <div className="relative flex h-3 w-3" title={server.status === 'OFFLINE' ? 'Offline' : 'Waiting for agent'}>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600"></span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Project Count */}

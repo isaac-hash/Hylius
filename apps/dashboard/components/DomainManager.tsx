@@ -238,10 +238,23 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
                                 ) : (
                                     <span className="text-sm text-gray-300 font-mono">{domain.hostname}</span>
                                 )}
+                                {/* SSL status badge — visible for all domain states */}
                                 {domain.status === 'ACTIVE' && domain.sslStatus === 'ACTIVE' && (
-                                    <span className="text-xs text-green-500 flex items-center gap-0.5">
+                                    <span className="text-xs text-green-500 flex items-center gap-0.5" title="SSL certificate active">
                                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                        SSL
+                                        SSL Active
+                                    </span>
+                                )}
+                                {domain.status === 'ACTIVE' && domain.sslStatus !== 'ACTIVE' && (
+                                    <span className="text-xs text-yellow-500 flex items-center gap-0.5" title="Caddy is provisioning the SSL certificate">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                        SSL Provisioning…
+                                    </span>
+                                )}
+                                {(domain.status === 'PENDING' || domain.status === 'DNS_VERIFIED') && (
+                                    <span className="text-xs text-gray-500 flex items-center gap-0.5" title="SSL will be provisioned automatically via Caddy once DNS is verified">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                        Auto-SSL via Caddy
                                     </span>
                                 )}
                             </div>
@@ -275,6 +288,14 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
                 <p className="text-xs text-gray-600 mt-2">
                     Tip: Use <span className="font-mono">app.{serverIp.replace(/\./g, '-')}.sslip.io</span> for free testing
                 </p>
+            )}
+            {domains.length > 0 && (
+                <div className="mt-3 p-2.5 bg-green-500/5 border border-green-500/10 rounded-md flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    <p className="text-xs text-green-400/70">
+                        <strong>Auto-HTTPS:</strong> SSL certificates are automatically provisioned via Caddy for all verified domains. No manual configuration needed.
+                    </p>
+                </div>
             )}
         </div>
     );

@@ -45,9 +45,11 @@ export default function ServerMetrics({ serverId, token, initialMetrics, connect
     const [isPaidPlan, setIsPaidPlan] = useState(false);
     const [autoRefresh, setAutoRefresh] = useState(() => {
         if (typeof window !== 'undefined') {
-            return localStorage.getItem('hylius-autopoll') === 'true';
+            const stored = localStorage.getItem('hylius-autopoll');
+            // Default ON — show metrics immediately on first visit
+            return stored !== null ? stored === 'true' : true;
         }
-        return false;
+        return true;
     });
 
     const socketRef = useRef<Socket | null>(null);
@@ -130,6 +132,14 @@ export default function ServerMetrics({ serverId, token, initialMetrics, connect
     }, [serverId, token]);
 
     useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+    // Initial pulse on mount for SSH mode when no metrics exist yet (BUG-006)
+    useEffect(() => {
+        if (!isAgentMode && !initialMetrics) {
+            fetchPulse();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Auto-refresh (SSH mode only)
     useEffect(() => {

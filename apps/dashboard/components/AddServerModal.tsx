@@ -12,6 +12,7 @@ interface AddServerModalProps {
 export default function AddServerModal({ isOpen, onClose, onAdded }: AddServerModalProps) {
     const { token } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [ipError, setIpError] = useState('');
     const [formData, setFormData] = useState({
         name: '',
         ip: '',
@@ -69,7 +70,10 @@ export default function AddServerModal({ isOpen, onClose, onAdded }: AddServerMo
                 body: JSON.stringify(formData),
             });
 
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || 'Failed to add server');
+            }
             
             const newServer = await res.json();
             setCreatedServer({
@@ -118,11 +122,20 @@ export default function AddServerModal({ isOpen, onClose, onAdded }: AddServerMo
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">IP Address <span className="text-gray-500 text-xs font-normal">(Optional, for labeling)</span></label>
                                 <input
-                                    className="w-full bg-black border border-gray-800 rounded-lg p-2.5 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                                    className={`w-full bg-black border rounded-lg p-2.5 text-white focus:ring-1 outline-none transition-all ${ipError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-800 focus:border-blue-500 focus:ring-blue-500'}`}
                                     placeholder="203.0.113.1"
                                     value={formData.ip}
-                                    onChange={(e) => setFormData({ ...formData, ip: e.target.value })}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFormData({ ...formData, ip: val });
+                                        if (val && !/^(\d{1,3}\.){0,3}\d{0,3}$/.test(val)) {
+                                            setIpError('Enter a valid IPv4 address (e.g. 203.0.113.1)');
+                                        } else {
+                                            setIpError('');
+                                        }
+                                    }}
                                 />
+                                {ipError && <p className="text-xs text-red-400 mt-1">{ipError}</p>}
                             </div>
 
                             <div className="flex justify-end gap-3 mt-8">

@@ -22,3 +22,4 @@ apps/SKILL.md
 .env.production
 *.db
 *.db-journal
+Hylius-QA-Bug-Report.pdf

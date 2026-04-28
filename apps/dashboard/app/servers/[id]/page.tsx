@@ -247,7 +247,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                         )}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-400 font-mono">
-                                        <span className="flex items-center gap-2"><svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{server.username}@{server.ip}:{server.port}</span>
+                                        <span className="flex items-center gap-2"><svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{server.username}@{server.ip}</span>
                                         <span className="flex items-center gap-2"><svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>{server.osType || 'Linux (Auto-detected)'}</span>
                                         <span className="flex items-center gap-2"><svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>Added {new Date(server.createdAt).toLocaleDateString()}</span>
                                     </div>
@@ -342,7 +342,9 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                             ) : (
                                                                                 <span className="text-[10px] text-amber-500/80 cursor-help flex items-center gap-1 w-fit" title="If your site uses Vite/React/Vue and Railpack returns a 403 Forbidden, you may need to configure your web server root according to Railpack documentation (https://railpack.com/)">
                                                                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-                                                                                    Not deployed yet
+                                                                                    {(project.deployments[0]?.status === 'FAILED')
+                                                                                        ? 'Last deployment failed'
+                                                                                        : 'Not deployed yet'}
                                                                                 </span>
                                                                             )}
                                                                             {activePreviews.length > 0 && (
@@ -403,7 +405,11 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                     className={`bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-[0_0_10px_rgba(22,163,74,0.3)] flex items-center gap-2 ${activeDeployProjectId !== null || deletingProject !== null ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
                                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                                    {activeDeployProjectId === project.id ? 'Deploying...' : 'Deploy Now'}
+                                                                    {activeDeployProjectId === project.id
+                                                                        ? 'Deploying...'
+                                                                        : project.deployments.some((d: any) => d.status === 'SUCCESS')
+                                                                            ? 'Redeploy'
+                                                                            : 'Deploy Now'}
                                                                 </button>
                                                             </div>
                                                         </div>

@@ -26,12 +26,19 @@ export async function GET(request: Request, { params }: Params) {
             try { env = JSON.parse(project.envVars as string); } catch { /* ignore */ }
         }
 
-        // Return entries — mask values that look sensitive (contain "secret", "key", "password", "token")
-        const SENSITIVE = /secret|key|password|token|pwd|pass|private/i;
+        // Return entries — mask values that look sensitive (by key name or value pattern)
+        // Keys: secret, key, password, token, etc.
+        // Values: connection strings with embedded credentials (e.g. DATABASE_URL)
+        const SENSITIVE_KEY = /secret|key|password|token|pwd|pass|private|database_url|db_url|redis_url|connection_string|dsn/i;
+        const CONNECTION_STRING_VALUE = /^(postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp|amqps):(\/\/)[^:]+:[^@]+@/i;
+
+        const isSensitive = (k: string, v: string): boolean =>
+            SENSITIVE_KEY.test(k) || CONNECTION_STRING_VALUE.test(v);
+
         const entries = Object.entries(env).map(([k, v]) => ({
             key: k,
-            value: SENSITIVE.test(k) ? '•'.repeat(Math.min(v.length, 24)) : v,
-            masked: SENSITIVE.test(k),
+            value: isSensitive(k, v) ? '•'.repeat(Math.min(v.length, 24)) : v,
+            masked: isSensitive(k, v),
         }));
 
         return NextResponse.json({ entries });
