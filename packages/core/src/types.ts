@@ -1,3 +1,13 @@
+export type ExecutionMode = 'ssh' | 'agent';
+
+export interface AgentConfig {
+    serverId: string;
+    /** Send a command and wait for a single JSON result. */
+    sendCommand: (action: string, payload: any) => Promise<any>;
+    /** Send a command and stream chunks via callback. Returns when done. */
+    streamCommand: (action: string, payload: any, onChunk: (data: string) => void) => Promise<{ exitCode: number; resultData?: string }>;
+}
+
 export interface ServerConfig {
     host: string;
     username: string;
@@ -48,6 +58,10 @@ export interface DeployOptions {
      * TLS mode for Caddy: 'production' (Let's Encrypt) or 'internal' (self-signed).
      */
     tlsMode?: 'production' | 'internal';
+    /** Execution mode: 'ssh' (default/legacy) or 'agent' */
+    executionMode?: ExecutionMode;
+    /** Agent config — required when executionMode is 'agent' */
+    agent?: AgentConfig;
 }
 
 export interface DeployResult {
@@ -78,6 +92,10 @@ export interface SetupOptions {
      * Optional callback for real-time log streaming of the setup process.
      */
     onLog?: (chunk: string) => void;
+    /** Execution mode: 'ssh' (default/legacy) or 'agent' */
+    executionMode?: ExecutionMode;
+    /** Agent config — required when executionMode is 'agent' */
+    agent?: AgentConfig;
 }
 
 export interface SetupResult {

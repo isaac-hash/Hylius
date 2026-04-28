@@ -37,14 +37,12 @@ export default function DevelopersPage() {
                 Connect your VPS, run a single command, and let our orchestration engine handle the rest. Native support for Docker, Railpack, and Nixpacks.
             </p>
             <div className="flex justify-center gap-4">
-                <a
-                    href="https://hylius-docs.vercel.app/"
-                    target="_blank"
-                    rel="noreferrer"
+                <Link
+                    href="/docs"
                     className="px-8 py-4 rounded-2xl bg-blue-600 text-center font-bold text-lg hover:bg-blue-500 shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-all hover:-translate-y-1"
                 >
                     Read the Documentation
-                </a>
+                </Link>
                 <a
                     href="https://github.com/Hylius-org"
                     target="_blank"

@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { deploy, DeployOptions, ServerConfig, ProjectConfig, DeployResult } from '@hylius/core';
 import { decrypt } from './crypto.service';
 import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus, createPullRequestComment } from './github.service';
+import { agentGateway } from './agent-gateway.service';
 
 import { prisma } from './prisma';
 
@@ -302,12 +303,22 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
     // 4. Execute Deployment
     log(`\x1b[36mStarting deployment for ${project.name}...  (trigger: ${trigger})\x1b[0m\n`);
 
+    // Route through agent if connected, otherwise fall back to SSH
+    const useAgent = (project.server as any).connectionMode === 'AGENT'
+        && agentGateway.isConnected(project.server.id);
+
+    if (useAgent) {
+        log(`\x1b[35m[Agent] Routing deploy through VPS agent (no SSH)\x1b[0m\n`);
+    }
+
     const result = await deploy({
         server: serverConfig,
         project: projectConfig,
         trigger,
         domains: domainConfigs,
         onLog: (chunk) => log(chunk),
+        executionMode: useAgent ? 'agent' : 'ssh',
+        agent: useAgent ? agentGateway.getAgentConfig(project.server.id) : undefined,
     });
 
     // Update GitHub Deployment Status

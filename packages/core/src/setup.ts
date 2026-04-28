@@ -16,7 +16,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[32mConnected successfully.\x1b[0m\n');
 
         // 1. Detect OS and User
-        log('\x1b[33m[1/3] Detecting Operating System and User...\x1b[0m');
+        log('\x1b[33m[1/5] Detecting Operating System and User...\x1b[0m');
         const osResult = await client.exec('cat /etc/os-release');
         const userResult = await client.exec('whoami');
 
@@ -40,7 +40,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         const sudoPrefix = isRoot ? '' : 'sudo ';
 
         // 2. Install Docker
-        log('\x1b[33m[2/3] Installing Docker and dependencies...\x1b[0m');
+        log('\x1b[33m[2/5] Installing Docker and dependencies...\x1b[0m');
         let dockerCommands: string[] = [];
 
         if (isUbuntu || isDebian) {
@@ -82,7 +82,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[32mDocker and Git installed successfully.\x1b[0m\n');
 
         // 3. Install & Start Caddy reverse proxy
-        log('\x1b[33m[3/4] Setting up Caddy reverse proxy for domain management...\x1b[0m');
+        log('\x1b[33m[3/5] Setting up Caddy reverse proxy for domain management...\x1b[0m');
 
         // Stop and disable any pre-installed web servers that occupy ports 80/443
         // (common on VPS providers shipping Plesk, cPanel, or default Apache/Nginx)
@@ -118,7 +118,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('\x1b[32mCaddy reverse proxy installed and running.\x1b[0m\n');
 
         // 4. Setup UFW / Firewall
-        log('\x1b[33m[4/4] Configuring basic firewall (UFW)...\x1b[0m');
+        log('\x1b[33m[4/5] Configuring basic firewall (UFW)...\x1b[0m');
         // We attempt UFW setup, but ignore failures (e.g., if running inside a Docker mock container without ufw)
         const ufwCommands = [
             `${sudoPrefix}apt-get install -y ufw > /dev/null 2>&1 || ${sudoPrefix}apk add --no-cache ufw > /dev/null 2>&1 || true`,
@@ -133,6 +133,31 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
             await client.execStream(cmd, onLog, onLog);
         }
         log('\x1b[32mFirewall configured (if supported by OS).\x1b[0m\n');
+
+        // ─── Step 5: Install Hylius Agent ─────────────────────────────────
+        const agentToken = (options as any).agentToken;
+        const agentServerUrl = (options as any).agentServerUrl;
+        const agentServerId = (options as any).agentServerId;
+
+        if (agentToken && agentServerUrl && agentServerId) {
+            log('\x1b[33m[5/5] Installing Hylius Agent...\x1b[0m');
+            const installCmd = [
+                `curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh`,
+                `| bash -s --`,
+                `--token ${agentToken}`,
+                `--server-url ${agentServerUrl}`,
+                `--server-id ${agentServerId}`,
+            ].join(' ');
+
+            try {
+                await client.execStream(installCmd, onLog, onLog);
+                log('\x1b[32mHylius Agent installed and running.\x1b[0m\n');
+            } catch (agentErr: any) {
+                // Non-fatal: server is still provisioned, user can install agent manually
+                log(`\x1b[33mWarning: Agent install failed (${agentErr.message}).\x1b[0m`);
+                log(`\x1b[33mYou can install it manually from the server details page.\x1b[0m\n`);
+            }
+        }
 
         const durationMs = Date.now() - startTime;
         log(`\x1b[32m\x1b[1m✅ Server provisioning complete in ${durationMs}ms!\x1b[0m\x1b[0m\n`);
