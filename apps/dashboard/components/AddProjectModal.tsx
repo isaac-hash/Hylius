@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/auth.provider';
+import toast from 'react-hot-toast';
 
 interface AddProjectModalProps {
     isOpen: boolean;
@@ -83,7 +84,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
             name: repo.name,
             repoUrl: repo.cloneUrl,
             branch: repo.defaultBranch,
-            deployPath: `/var/www/${repo.name}`,
+            deployPath: `/var/www/${repo.name.replace(/\s+/g, '-').toLowerCase()}`,
             buildCommand: '',
             startCommand: '',
         });
@@ -97,7 +98,13 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
+        const updated = { ...form, [e.target.name]: e.target.value };
+        // BUG-005: Auto-sanitize deploy path when name changes
+        if (e.target.name === 'name') {
+            const sanitized = e.target.value.trim().replace(/\s+/g, '-').toLowerCase();
+            if (sanitized) updated.deployPath = `/var/www/${sanitized}`;
+        }
+        setForm(updated);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -156,6 +163,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
                 setGithubMeta(null);
                 setDeployStrategy('dagger');
                 onAdded?.(projectData.id, successData);
+                toast.success(`Project "${form.name}" created successfully!`);
                 onClose();
                 return;
             }
@@ -164,6 +172,7 @@ export default function AddProjectModal({ isOpen, onClose, serverId, serverName,
             setGithubMeta(null);
             setDeployStrategy('dagger');
             onAdded?.(projectData.id);
+            toast.success(`Project "${form.name}" created successfully!`);
             onClose();
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Something went wrong');

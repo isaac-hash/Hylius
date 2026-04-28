@@ -43,6 +43,33 @@ function parseLogLine(raw: string): { text: string; type: LogEntry['type'] } {
     return { text, type };
 }
 
+/** Map of cryptic error substrings to human-readable hints */
+const ERROR_HINTS: Array<{ pattern: RegExp; hint: string }> = [
+    {
+        pattern: /unrecognized image format/i,
+        hint: '💡 Tip: The Docker image reference or base image is invalid. Check your FROM directive in the Dockerfile.',
+    },
+    {
+        pattern: /failed to solve/i,
+        hint: '💡 Tip: Docker could not resolve a build dependency. Check your Dockerfile syntax and base image availability.',
+    },
+    {
+        pattern: /no such file or directory.*dockerfile/i,
+        hint: '💡 Tip: No Dockerfile found. The platform will attempt Railpack auto-detection — ensure your project has a package.json, Procfile, or other detectable entrypoint.',
+    },
+    {
+        pattern: /permission denied/i,
+        hint: '💡 Tip: A permission error occurred on the server. Check file ownership and sudo access for the deployment user.',
+    },
+];
+
+function getErrorHint(text: string): string | null {
+    for (const { pattern, hint } of ERROR_HINTS) {
+        if (pattern.test(text)) return hint;
+    }
+    return null;
+}
+
 function formatTimestamp(): string {
     const now = new Date();
     return now.toLocaleTimeString('en-GB', {
@@ -84,8 +111,15 @@ export default function DeploymentTerminal({
     const addLog = useCallback((raw: string, forceType?: LogEntry['type']) => {
         // Split multi-line data into individual log entries
         const lines = raw.split('\n').filter((l) => l.trim() !== '');
-        const entries: LogEntry[] = lines.map((line) => {
+
+        const entries: LogEntry[] = [];
+        let lastText = '';
+        for (const line of lines) {
             const { text, type } = parseLogLine(line);
+
+            // BUG-007: Skip consecutive duplicate lines
+            if (text === lastText) continue;
+            lastText = text;
 
             // Detect firewall warning marker from core deploy log
             const fwMatch = text.match(/\[FIREWALL_WARNING\]\s*port=(\d+)/);
@@ -93,12 +127,21 @@ export default function DeploymentTerminal({
                 setFirewallWarning(fwMatch[1]);
             }
 
-            return {
+            entries.push({
                 timestamp: formatTimestamp(),
                 text,
                 type: forceType ?? type,
-            };
-        });
+            });
+
+            // BUG-008: Append a human-readable hint after cryptic error lines
+            if ((forceType ?? type) === 'error' || type === 'warn') {
+                const hint = getErrorHint(text);
+                if (hint) {
+                    entries.push({ timestamp: formatTimestamp(), text: hint, type: 'warn' });
+                }
+            }
+        }
+
         if (entries.length > 0) {
             setLogs((prev) => [...prev, ...entries]);
         }

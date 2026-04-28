@@ -52,12 +52,27 @@ export async function POST(request: Request) {
         const agentToken = `hyl_${randomBytes(32).toString('hex')}`;
 
         // Clean the IP address (remove http:// or https:// if user accidentally included it)
-        const cleanIp = ip ? ip.replace(/^https?:\/\//, '').split('/')[0] : 'pending...';
+        const cleanIp = ip ? ip.replace(/^https?:\/\//, '').split('/')[0].trim() : '';
+
+        // Validate IPv4 format if an IP was provided
+        if (cleanIp) {
+            const IPV4_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!IPV4_REGEX.test(cleanIp)) {
+                return NextResponse.json({ error: 'Invalid IP address format. Please enter a valid IPv4 address (e.g. 203.0.113.1)' }, { status: 400 });
+            }
+            const octets = cleanIp.split('.').map(Number);
+            if (octets.some((o: number) => o < 0 || o > 255)) {
+
+                return NextResponse.json({ error: 'Invalid IP address: each octet must be between 0 and 255' }, { status: 400 });
+            }
+        }
+
+        const resolvedIp = cleanIp || 'pending...';
 
         const server = await prisma.server.create({
             data: {
                 name,
-                ip: cleanIp,
+                ip: resolvedIp,
                 username: username || 'root',
                 port: port || 22,
                 privateKeyEncrypted,
