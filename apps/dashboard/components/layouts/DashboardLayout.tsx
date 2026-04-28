@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import NotificationPanel from "@/components/NotificationPanel";
 
 export default function DashboardLayout({
     children,
@@ -22,12 +23,15 @@ export default function DashboardLayout({
                     </div>
                     <span className="font-display font-bold text-xl">Hylius</span>
                 </div>
-                <button 
-                    onClick={() => setIsSidebarOpen(true)}
-                    className="p-2 rounded-lg hover:bg-white/5 text-gray-400"
-                >
-                    ☰
-                </button>
+                <div className="flex items-center gap-2">
+                    <NotificationPanel />
+                    <button 
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-2 rounded-lg hover:bg-white/5 text-gray-400"
+                    >
+                        ☰
+                    </button>
+                </div>
             </div>
 
             {/* Sidebar */}

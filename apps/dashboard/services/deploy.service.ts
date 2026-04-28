@@ -5,6 +5,7 @@ import { deploy, DeployOptions, ServerConfig, ProjectConfig, DeployResult } from
 import { decrypt } from './crypto.service';
 import { getAuthenticatedCloneUrl, createGitHubDeployment, updateGitHubDeploymentStatus, createPullRequestComment } from './github.service';
 import { agentGateway } from './agent-gateway.service';
+import { AlertService } from './alert.service';
 
 import { prisma } from './prisma';
 
@@ -377,6 +378,16 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         },
     });
 
+    if (!result.success) {
+        await AlertService.triggerAlert({
+            organizationId: project.organizationId,
+            type: 'DEPLOYMENT_FAILED',
+            message: `Deployment failed for project **${project.name}** on server **${project.server.name}**.\n\nError: ${result.error}`,
+            serverId: project.serverId,
+            projectId: project.id,
+        });
+    }
+
     return { ...result, deploymentId: deployment.id };
 }
 
@@ -391,77 +402,94 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
 
     if (!project) throw new Error('Project not found');
 
-    let privateKey = '';
-    if (project.server.privateKeyEncrypted && project.server.keyIv) {
-        try { privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv); } catch { }
-    }
-
-    const { SSHClient, configureCaddy } = require('@hylius/core');
-
-    const serverConfig = {
-        host: project.server.ip,
-        port: project.server.port,
-        username: project.server.username,
-        privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
-        password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
-    };
-
     const previewId = `pr-${prNumber}`;
     const baseContainerName = `${project.name}-app`;
     const containerName = `${baseContainerName}-${previewId}`;
     const environmentPath = `${project.deployPath}/previews/${previewId}`;
 
-    const client = new SSHClient(serverConfig);
-    try {
-        await client.connect();
+    // Calculate domain configs for Caddy (excluding this preview)
+    const activeDeployments = await prisma.deployment.findMany({
+        where: {
+            projectId: project.id,
+            status: 'SUCCESS',
+        },
+        orderBy: { startedAt: 'desc' }
+    });
 
-        // 1. Kill and remove the container running the preview build
-        await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+    const domainConfigs: any[] = [];
 
-        // 2. Remove the preview directory
-        await client.exec(`rm -rf ${environmentPath} > /dev/null 2>&1 || true`);
-
-        // 3. Update Caddy to remove this preview domain but keep production + other active previews
-        const activeDeployments = await prisma.deployment.findMany({
-            where: {
-                projectId: project.id,
-                status: 'SUCCESS',
-            },
-            orderBy: { startedAt: 'desc' }
-        });
-
-        const domainConfigs: any[] = [];
-
-        // Add Production Domains
-        if (project.domains.length > 0) {
-            const latestProd = activeDeployments.find((d: any) => d.environment === 'PRODUCTION');
-            let prodPort = '3000';
-            if (latestProd?.deployUrl) {
-                try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch { }
-            }
-            project.domains.forEach((d: any) => {
-                domainConfigs.push({ hostname: d.hostname, upstreamPort: prodPort });
-            });
+    // Add Production Domains
+    if (project.domains.length > 0) {
+        const latestProd = activeDeployments.find((d: any) => d.environment === 'PRODUCTION');
+        let prodPort = '3000';
+        if (latestProd?.deployUrl) {
+            try { prodPort = new URL(latestProd.deployUrl).port || '3000'; } catch { }
         }
-
-        // Add OTHER Active Preview Domains (exluding the one we are destroying)
-        const activePreviews = activeDeployments.filter((d: any) => d.environment === 'PREVIEW' && d.pullRequestNumber && d.pullRequestNumber !== prNumber);
-        const serverIpSlug = project.server.ip.replace(/\./g, '-');
-
-        activePreviews.forEach((d: any) => {
-            const previewHostname = `pr-${d.pullRequestNumber}.${serverIpSlug}.sslip.io`;
-            let prePort = '3000';
-            if (d.deployUrl) {
-                try { prePort = new URL(d.deployUrl).port || '3000'; } catch { }
-            }
-            domainConfigs.push({ hostname: previewHostname, upstreamPort: prePort });
+        project.domains.forEach((d: any) => {
+            domainConfigs.push({ hostname: d.hostname, upstreamPort: prodPort });
         });
+    }
 
-        if (domainConfigs.length > 0) {
-            await configureCaddy(client, { domains: domainConfigs, tlsMode: 'production' });
+    // Add OTHER Active Preview Domains (exluding the one we are destroying)
+    const activePreviews = activeDeployments.filter((d: any) => d.environment === 'PREVIEW' && d.pullRequestNumber && d.pullRequestNumber !== prNumber);
+    const serverIpSlug = project.server.ip.replace(/\./g, '-');
+
+    activePreviews.forEach((d: any) => {
+        const previewHostname = `pr-${d.pullRequestNumber}.${serverIpSlug}.sslip.io`;
+        let prePort = '3000';
+        if (d.deployUrl) {
+            try { prePort = new URL(d.deployUrl).port || '3000'; } catch { }
+        }
+        domainConfigs.push({ hostname: previewHostname, upstreamPort: prePort });
+    });
+
+    // Check if we should use the connected Agent
+    const useAgent = (project.server as any).connectionMode === 'AGENT'
+        && agentGateway.isConnected(project.server.id);
+
+    try {
+        if (useAgent) {
+            console.log(`[Agent] Destroying preview deployment via VPS agent...`);
+            const agent = agentGateway.getAgentConfig(project.server.id);
+            
+            // 1 & 2. Kill container and remove directory
+            await agent.streamCommand('exec', { cmd: `docker rm -f ${containerName} > /dev/null 2>&1 || true && rm -rf ${environmentPath} > /dev/null 2>&1 || true` }, () => {});
+            
+            // 3. Update Caddy
+            await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => {});
+            
         } else {
-            // If no domains left, just pass empty array to clear the file
-            await configureCaddy(client, { domains: [], tlsMode: 'production' });
+            console.log(`[SSH] Destroying preview deployment via SSH...`);
+            let privateKey = '';
+            if (project.server.privateKeyEncrypted && project.server.keyIv) {
+                try { privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv); } catch { }
+            }
+
+            const { SSHClient, configureCaddy } = require('@hylius/core');
+
+            const serverConfig = {
+                host: project.server.ip,
+                port: project.server.port,
+                username: project.server.username,
+                privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
+            };
+
+            const client = new SSHClient(serverConfig);
+            try {
+                await client.connect();
+
+                // 1. Kill and remove the container
+                await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+
+                // 2. Remove the preview directory
+                await client.exec(`rm -rf ${environmentPath} > /dev/null 2>&1 || true`);
+
+                // 3. Update Caddy
+                await configureCaddy(client, { domains: domainConfigs, tlsMode: 'production' });
+            } finally {
+                client.end();
+            }
         }
 
         // 4. Mark DB deployments as destroyed
@@ -478,7 +506,5 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
     } catch (err: any) {
         console.error(`Error destroying preview deployment ${previewId}:`, err);
         throw err;
-    } finally {
-        client.end();
     }
 }

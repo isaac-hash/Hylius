@@ -2,6 +2,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { PrismaClient } from '@prisma/client';
+import { AlertService } from './alert.service';
 
 const prisma = new PrismaClient();
 
@@ -34,6 +35,7 @@ interface PendingCommand {
 interface ConnectedAgent {
     ws: WebSocket;
     serverId: string;
+    organizationId: string;
     version?: string;
     pendingCommands: Map<string, PendingCommand>;
 }
@@ -71,6 +73,7 @@ class AgentGatewayService {
                     agent = {
                         ws,
                         serverId: server.id,
+                        organizationId: server.organizationId,
                         version: msg.version,
                         pendingCommands: new Map(),
                     };
@@ -110,6 +113,26 @@ class AgentGatewayService {
                             uptime: msg.uptime,
                         });
                     }
+
+                    // Trigger alerts if metrics are critically high
+                    if (msg.cpu !== undefined && msg.cpu > 90) {
+                        AlertService.triggerAlert({
+                            organizationId: agent.organizationId,
+                            type: 'HIGH_CPU',
+                            message: `Server **${agent.serverId}** is experiencing high CPU usage (${msg.cpu.toFixed(1)}%).`,
+                            serverId: agent.serverId,
+                        });
+                    }
+
+                    if (msg.disk !== undefined && msg.disk > 90) {
+                        AlertService.triggerAlert({
+                            organizationId: agent.organizationId,
+                            type: 'HIGH_DISK',
+                            message: `Server **${agent.serverId}** is running out of disk space (${msg.disk.toFixed(1)}% full).`,
+                            serverId: agent.serverId,
+                        });
+                    }
+
                     return;
                 }
 

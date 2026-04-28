@@ -141,7 +141,7 @@ app.prepare().then(() => {
 
                 const result = await setup({
                     server: serverConfig,
-                    onLog: (chunk) => {
+                    onLog: (chunk: string) => {
                         socket.emit('log', chunk);
                     },
                     // Agent auto-install params — setup.ts Step 5 uses these
@@ -341,6 +341,38 @@ app.prepare().then(() => {
             } catch (err: any) {
                 console.error(`[provision-database] Unhandled error for "${name}" on server ${serverId}:`, err);
                 socket.emit(`db_provision_error:${serverId}`, { error: err.message || 'Unknown provisioning error' });
+            }
+        });
+
+        // ─── deploy-stack: orchestrate deploying all services in a stack ─────
+        socket.on('deploy-stack', async (data: { stackId: string; organizationId: string }) => {
+            const { stackId, organizationId } = data;
+            console.log(`Received deploy-stack request for stack: ${stackId}`);
+
+            try {
+                const { deployStack } = await import('./services/stack-deploy.service');
+
+                socket.emit(`stack_deploy_start:${stackId}`, { stackId });
+
+                const result = await deployStack({
+                    stackId,
+                    organizationId,
+                    onServiceProgress: (event) => {
+                        socket.emit(`stack_service_progress:${stackId}`, event);
+                    },
+                    onLog: (chunk) => {
+                        socket.emit(`stack_log:${stackId}`, chunk);
+                    },
+                });
+
+                if (result.success) {
+                    socket.emit(`stack_deploy_success:${stackId}`, result);
+                } else {
+                    socket.emit(`stack_deploy_error:${stackId}`, result);
+                }
+            } catch (err: any) {
+                console.error('[deploy-stack] error:', err);
+                socket.emit(`stack_deploy_error:${stackId}`, { error: err.message || 'Stack deployment failed' });
             }
         });
 

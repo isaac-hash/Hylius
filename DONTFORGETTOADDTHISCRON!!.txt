@@ -1,0 +1,16 @@
+That is a fantastic question.
+
+Yes, **it would absolutely be different if it were a FastAPI or Express backend.** If we were using FastAPI, we could simply spawn a background thread (using `APScheduler` or `BackgroundTasks`) that loops continuously in memory. Because Next.js API routes are designed to be stateless and triggered per-request (to support edge networks), they don't natively keep a background loop running cleanly.
+
+And yes, **since you are hosting this on your own VPS**, you have full root access to standard Linux `cron`! 
+
+Because of this, we can stick to creating the `/api/cron/check-servers` endpoint. Then, on your VPS, you can simply add a 1-line cronjob that runs every minute to trigger it:
+```bash
+* * * * * curl -X POST http://localhost:3000/api/cron/check-servers
+```
+
+This is the best of both worlds:
+1. All the complex logic stays cleanly inside your Next.js codebase.
+2. Your VPS provides the "heartbeat" using its native, hyper-reliable `cron` daemon.
+
+Does this approach sound good to you? If so, I will begin executing the plan right now!
