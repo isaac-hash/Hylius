@@ -11,7 +11,7 @@ interface Alert {
     createdAt: string;
 }
 
-export default function NotificationPanel() {
+export default function NotificationPanel({ align = 'right' }: { align?: 'left' | 'right' }) {
     const { user, organization } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -87,7 +87,7 @@ export default function NotificationPanel() {
 
             {/* Dropdown Panel */}
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 glass rounded-xl shadow-2xl border z-50 overflow-hidden flex flex-col max-h-[80vh]">
+                <div className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} mt-2 w-80 sm:w-96 glass rounded-xl shadow-2xl border z-50 overflow-hidden flex flex-col max-h-[80vh]`}>
                     <div className="p-4 border-b flex justify-between items-center bg-white/5">
                         <h3 className="font-bold text-lg">Notifications</h3>
                         {unreadCount > 0 && (

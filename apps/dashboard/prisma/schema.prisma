@@ -25,6 +25,7 @@ model Organization {
   users         User[]
   servers       Server[]
   projects      Project[]
+  stacks        Stack[]
   apiTokens     ApiToken[]
   subscriptions Subscription[]
   payments      Payment[]
@@ -218,6 +219,7 @@ model Server {
   organization        Organization @relation(fields: [organizationId], references: [id])
   organizationId      String
   projects            Project[]
+  stacks              Stack[]
   metrics             Metric[]
   databases           Database[]
   createdAt           DateTime     @default(now())
@@ -247,6 +249,8 @@ model Project {
   organizationId String
   server         Server       @relation(fields: [serverId], references: [id])
   serverId       String
+  stack          Stack?       @relation(fields: [stackId], references: [id])
+  stackId        String?
   deployments    Deployment[]
   domains        Domain[]
   databases      Database[]
@@ -255,6 +259,7 @@ model Project {
 
   @@index([organizationId])
   @@index([serverId])
+  @@index([stackId])
 }
 
 model Deployment {
@@ -340,6 +345,8 @@ model Database {
   serverId          String
   project           Project?     @relation(fields: [projectId], references: [id])
   projectId         String?
+  stack             Stack?       @relation(fields: [stackId], references: [id])
+  stackId           String?
   organization      Organization @relation(fields: [organizationId], references: [id])
   organizationId    String
 
@@ -348,5 +355,31 @@ model Database {
 
   @@index([serverId])
   @@index([projectId])
+  @@index([stackId])
   @@index([organizationId])
+}
+
+// ─── Stacks (Multi-Service Groups) ────────────────────────────────────────────
+
+model Stack {
+  id             String       @id @default(cuid())
+  name           String       // e.g., "My SaaS App"
+  description    String?      // Optional user description
+  status         String       @default("ACTIVE") // ACTIVE | DEPLOYING | ERROR
+
+  // All services in a stack must be on the same server
+  server         Server       @relation(fields: [serverId], references: [id])
+  serverId       String
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+
+  projects       Project[]    // Services in this stack
+  databases      Database[]   // Managed databases in this stack
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([serverId])
 }
