@@ -42,8 +42,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         const auth = await requireAuth(request);
         if (!auth.organizationId) return NextResponse.json({ error: 'Organization required' }, { status: 400 });
 
+        const { searchParams } = new URL(request.url);
+        const wipe = searchParams.get('wipe') === 'true';
+
         const { id } = await params;
-        await deleteStack(id, auth.organizationId);
+        await deleteStack(id, auth.organizationId, wipe);
         return NextResponse.json({ success: true });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';

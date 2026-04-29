@@ -122,10 +122,14 @@ export async function updateStack(stackId: string, organizationId: string, data:
     });
 }
 
+import { deleteProject } from './project.service';
+import { deleteDatabase } from './database.service';
+
 /**
- * Delete a stack. Unlinks all projects and databases — does NOT destroy them.
+ * Delete a stack. Unlinks all projects and databases.
+ * If wipe = true, it destroys the underlying projects and databases entirely.
  */
-export async function deleteStack(stackId: string, organizationId: string) {
+export async function deleteStack(stackId: string, organizationId: string, wipe = false) {
     // @ts-ignore
     const stack = await prisma.stack.findFirst({
         where: { id: stackId, organizationId },
@@ -133,23 +137,42 @@ export async function deleteStack(stackId: string, organizationId: string) {
     });
     if (!stack) throw new Error('Stack not found');
 
-    // Unlink all projects from the stack
-    // @ts-ignore
-    await prisma.project.updateMany({
+    if (wipe) {
+        // Destroy all projects
+        for (const project of stack.projects) {
+            try {
+                await deleteProject(project.id, organizationId);
+            } catch (err: any) {
+                console.warn(`[stack-wipe] Failed to delete project ${project.id}:`, err.message);
+            }
+        }
+        // Destroy all databases (with removeVolume = true for complete wipe)
+        for (const db of stack.databases) {
+            try {
+                await deleteDatabase(db.id, true);
+            } catch (err: any) {
+                console.warn(`[stack-wipe] Failed to delete database ${db.id}:`, err.message);
+            }
+        }
+    } else {
+        // Unlink all projects from the stack
         // @ts-ignore
-        where: { stackId },
-        // @ts-ignore
-        data: { stackId: null },
-    });
+        await prisma.project.updateMany({
+            // @ts-ignore
+            where: { stackId },
+            // @ts-ignore
+            data: { stackId: null },
+        });
 
-    // Unlink all databases from the stack
-    // @ts-ignore
-    await prisma.database.updateMany({
+        // Unlink all databases from the stack
         // @ts-ignore
-        where: { stackId },
-        // @ts-ignore
-        data: { stackId: null },
-    });
+        await prisma.database.updateMany({
+            // @ts-ignore
+            where: { stackId },
+            // @ts-ignore
+            data: { stackId: null },
+        });
+    }
 
     // Delete the stack record
     // @ts-ignore
@@ -157,9 +180,9 @@ export async function deleteStack(stackId: string, organizationId: string) {
 
     await prisma.auditLog.create({
         data: {
-            action: 'STACK_DELETED',
+            action: wipe ? 'STACK_WIPED' : 'STACK_DELETED',
             organizationId,
-            metadata: JSON.stringify({ stackId, name: stack.name }),
+            metadata: JSON.stringify({ stackId, name: stack.name, wipe }),
         },
     });
 }

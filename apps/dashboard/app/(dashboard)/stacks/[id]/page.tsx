@@ -19,6 +19,7 @@ interface StackDetail {
         name: string;
         deployStrategy: string | null;
         repoUrl: string;
+        role: string | null;
         deployments: Array<{
             id: string;
             status: string;
@@ -101,6 +102,10 @@ export default function StackDetailPage() {
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState('');
     const [editDesc, setEditDesc] = useState('');
+
+    // Delete state
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteWipe, setDeleteWipe] = useState(false);
 
     const fetchStack = useCallback(async () => {
         try {
@@ -214,10 +219,9 @@ export default function StackDetailPage() {
         }
     }
 
-    async function handleDeleteStack() {
-        if (!confirm(`Delete stack "${stack?.name}"? Services and databases will be unlinked but not destroyed.`)) return;
+    async function confirmDeleteStack() {
         try {
-            await fetch(`/api/stacks/${id}`, {
+            await fetch(`/api/stacks/${id}?wipe=${deleteWipe}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -298,16 +302,34 @@ export default function StackDetailPage() {
                                 )}
 
                                 {/* Health summary */}
-                                <div className="flex items-center gap-4 mt-3">
-                                    <span className={`text-sm font-medium ${healthyCount === totalServices && totalServices > 0 ? 'text-green-400' : healthyCount > 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                                        {totalServices > 0 ? `${healthyCount}/${totalServices} services healthy` : 'No services added'}
-                                    </span>
-                                    <span className="text-xs text-gray-600 bg-gray-800/50 px-2 py-1 rounded-lg flex items-center gap-1.5">
+                                <div className="mt-5 space-y-3">
+                                    <h3 className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Stack Health</h3>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        {stack.projects.map(p => {
+                                            const { label, color, dot } = getServiceStatus(p);
+                                            return (
+                                                <div key={p.id} className="bg-gray-800/40 border border-gray-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2">
+                                                    <span className="text-xs text-gray-300 font-medium capitalize">{p.role || 'Service'}</span>
+                                                    <div className={`w-2 h-2 rounded-full ${dot}`} />
+                                                    <span className={`text-xs ${color}`}>{label}</span>
+                                                </div>
+                                            );
+                                        })}
+                                        {stack.databases.map(db => (
+                                            <div key={db.id} className="bg-gray-800/40 border border-gray-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2">
+                                                <span className="text-xs text-gray-300 font-medium">Database</span>
+                                                <div className={`w-2 h-2 rounded-full ${db.status === 'RUNNING' ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]' : 'bg-gray-500'}`} />
+                                                <span className={`text-xs ${db.status === 'RUNNING' ? 'text-green-400' : 'text-gray-400'}`}>{db.status === 'RUNNING' ? 'Connected' : db.status}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <span className="inline-flex text-xs text-gray-500 bg-gray-800/30 px-2 py-1 rounded-md items-center gap-1.5 mt-2 border border-gray-800/50">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
                                             <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
                                         </svg>
-                                        {stack.server.name} ({stack.server.ip})
+                                        Deployed on {stack.server.name} ({stack.server.ip})
                                     </span>
                                 </div>
                             </div>
@@ -328,7 +350,7 @@ export default function StackDetailPage() {
                                     )}
                                 </button>
                                 <button
-                                    onClick={handleDeleteStack}
+                                    onClick={() => setShowDeleteModal(true)}
                                     className="text-sm text-gray-500 hover:text-red-400 px-3 py-2.5 rounded-xl hover:bg-red-500/10 transition-colors border border-transparent hover:border-red-500/20"
                                 >
                                     Delete
@@ -537,6 +559,47 @@ export default function StackDetailPage() {
                     )}
                 </main>
             </div>
+
+            {/* Delete Stack Modal */}
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                        <h2 className="text-xl font-bold text-white mb-2">Delete Stack</h2>
+                        <p className="text-sm text-gray-400 mb-6">How do you want to handle the resources inside this stack?</p>
+
+                        <div className="space-y-3 mb-6">
+                            <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${!deleteWipe ? 'border-blue-500 bg-blue-500/10' : 'border-gray-800 bg-black/50 hover:border-gray-600'}`}>
+                                <div className="flex items-center gap-3">
+                                    <input type="radio" checked={!deleteWipe} onChange={() => setDeleteWipe(false)} className="text-blue-500 focus:ring-blue-500 bg-black border-gray-700" />
+                                    <div>
+                                        <div className="text-sm font-medium text-white">Unlink Only (Safe)</div>
+                                        <div className="text-xs text-gray-400 mt-0.5">Stack is deleted, but services and databases keep running normally.</div>
+                                    </div>
+                                </div>
+                            </label>
+
+                            <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${deleteWipe ? 'border-red-500 bg-red-500/10' : 'border-gray-800 bg-black/50 hover:border-gray-600'}`}>
+                                <div className="flex items-center gap-3">
+                                    <input type="radio" checked={deleteWipe} onChange={() => setDeleteWipe(true)} className="text-red-500 focus:ring-red-500 bg-black border-gray-700" />
+                                    <div>
+                                        <div className="text-sm font-medium text-red-400">Complete Wipe (Destructive)</div>
+                                        <div className="text-xs text-red-400/70 mt-0.5">Stack, all projects, and all databases are permanently destroyed and pruned from the server.</div>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
+                            <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+                                Cancel
+                            </button>
+                            <button onClick={confirmDeleteStack} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all text-white ${deleteWipe ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-500/20' : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20'}`}>
+                                {deleteWipe ? 'Wipe Everything' : 'Delete Stack'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthGuard>
     );
 }

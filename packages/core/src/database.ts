@@ -10,8 +10,30 @@ import {
     DatabaseLogsOptions,
     DatabaseLogsResult,
     DatabaseEngine,
+    AgentConfig,
 } from './types.js';
 import { SSHClient } from './ssh/client.js';
+
+// ─── Agent exec helpers (mirrors setup.ts) ────────────────────────────────────
+
+async function agentExec(agent: AgentConfig, cmd: string): Promise<{ stdout: string; stderr: string; code: number }> {
+    let stdout = '';
+    try {
+        const result = await agent.streamCommand('exec', { cmd }, (chunk) => { stdout += chunk; });
+        return { stdout, stderr: '', code: result.exitCode ?? 0 };
+    } catch {
+        return { stdout, stderr: '', code: 1 };
+    }
+}
+
+async function agentStream(agent: AgentConfig, cmd: string, onLog?: (chunk: string) => void): Promise<number> {
+    try {
+        const result = await agent.streamCommand('exec', { cmd }, (chunk) => { if (onLog) onLog(chunk); });
+        return result.exitCode ?? 0;
+    } catch {
+        return 1;
+    }
+}
 
 // ─── Port Ranges per Engine ───────────────────────────────────────────────────
 
@@ -68,9 +90,11 @@ function getContainerName(name: string): string {
 
 // ─── Port Finder ──────────────────────────────────────────────────────────────
 
-async function findFreePort(client: SSHClient, engine: DatabaseEngine): Promise<number> {
+async function findFreePort(client: SSHClient | null, engine: DatabaseEngine, agent?: AgentConfig): Promise<number> {
     const range = PORT_RANGES[engine];
-    const { stdout } = await client.exec(`docker ps --format '{{.Ports}}'`);
+    const stdout = agent
+        ? (await agentExec(agent, `docker ps --format '{{.Ports}}'`)).stdout
+        : (await client!.exec(`docker ps --format '{{.Ports}}'`)).stdout;
     const usedPorts = new Set<number>();
 
     for (const match of stdout.matchAll(/:(\d+)->/g)) {
@@ -93,8 +117,10 @@ async function findFreePort(client: SSHClient, engine: DatabaseEngine): Promise<
  */
 export async function provisionDatabase(options: DatabaseProvisionOptions): Promise<DatabaseProvisionResult> {
     const { server, name, engine, password, onLog } = options;
+    const agent = (options as any).agent as AgentConfig | undefined;
+    const useAgent = !!agent;
     const startTime = Date.now();
-    const client = new SSHClient(server);
+    const client = useAgent ? null : new SSHClient(server);
 
     const version = options.version || DEFAULT_VERSIONS[engine];
     const containerName = getContainerName(name);
@@ -107,23 +133,32 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
     const log = (msg: string) => { if (onLog) onLog(msg + '\n'); };
 
     try {
-        log(`\x1b[36mConnecting to ${server.host}...\x1b[0m`);
-        await client.connect();
+        if (useAgent) {
+            log(`\x1b[35m[Agent] Provisioning database via VPS agent (no SSH)\x1b[0m`);
+        } else {
+            log(`\x1b[36mConnecting to ${server.host}...\x1b[0m`);
+            await client!.connect();
+        }
 
         log(`Finding free port for ${engine}...`);
-        const port = await findFreePort(client, engine);
+        const port = await findFreePort(client, engine, agent);
         log(`\x1b[32mAssigned port: ${port}\x1b[0m`);
 
         log(`Pulling image: ${image}`);
-        let pullCode = 0;
-        pullCode = await client.execStream(`docker pull ${image}`, onLog, onLog);
+        const pullCode = useAgent
+            ? await agentStream(agent!, `docker pull ${image}`, onLog)
+            : await client!.execStream(`docker pull ${image}`, onLog, onLog);
         if (pullCode !== 0) throw new Error(`Failed to pull image: ${image}`);
 
         // Remove any existing container with same name (idempotent)
-        await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
-
         // Ensure the shared Hylius Docker network exists
-        await client.exec(`docker network create hylius 2>/dev/null || true`);
+        if (useAgent) {
+            await agentExec(agent!, `docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+            await agentExec(agent!, `docker network create hylius 2>/dev/null || true`);
+        } else {
+            await client!.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+            await client!.exec(`docker network create hylius 2>/dev/null || true`);
+        }
 
         log(`Starting ${engine} container: ${containerName}`);
         let dockerRunCmd: string;
@@ -186,7 +221,9 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
                 break;
         }
 
-        const { code: runCode, stderr } = await client.exec(dockerRunCmd);
+        const { code: runCode, stderr } = useAgent
+            ? await agentExec(agent!, dockerRunCmd)
+            : await client!.exec(dockerRunCmd);
         if (runCode !== 0) throw new Error(`Failed to start container: ${stderr}`);
 
         log(`\x1b[32m✅ ${engine} container started successfully on port ${port}\x1b[0m`);
@@ -216,7 +253,7 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
             durationMs: Date.now() - startTime,
         };
     } finally {
-        client.end();
+        if (!useAgent && client) client.end();
     }
 }
 
@@ -228,21 +265,31 @@ export async function provisionDatabase(options: DatabaseProvisionOptions): Prom
  */
 export async function destroyDatabase(options: DatabaseDestroyOptions): Promise<DatabaseDestroyResult> {
     const { server, containerName, removeVolume = false, onLog } = options;
+    const agent = (options as any).agent as AgentConfig | undefined;
+    const useAgent = !!agent;
     const startTime = Date.now();
-    const client = new SSHClient(server);
+    const client = useAgent ? null : new SSHClient(server);
 
     const log = (msg: string) => { if (onLog) onLog(msg + '\n'); };
 
     try {
-        await client.connect();
+        if (!useAgent) await client!.connect();
 
         log(`Stopping and removing container: ${containerName}`);
-        await client.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+        if (useAgent) {
+            await agentExec(agent!, `docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+        } else {
+            await client!.exec(`docker rm -f ${containerName} > /dev/null 2>&1 || true`);
+        }
 
         if (removeVolume) {
             const volumeName = `${containerName}-data`;
             log(`Removing volume: ${volumeName}`);
-            await client.exec(`docker volume rm ${volumeName} > /dev/null 2>&1 || true`);
+            if (useAgent) {
+                await agentExec(agent!, `docker volume rm ${volumeName} > /dev/null 2>&1 || true`);
+            } else {
+                await client!.exec(`docker volume rm ${volumeName} > /dev/null 2>&1 || true`);
+            }
             log('\x1b[33mWarning: Database volume removed. Data is permanently deleted.\x1b[0m');
         } else {
             log(`Volume retained (data preserved). Use removeVolume=true to delete data.`);
@@ -254,7 +301,7 @@ export async function destroyDatabase(options: DatabaseDestroyOptions): Promise<
         log(`\x1b[31mFailed to destroy database: ${err.message}\x1b[0m`);
         return { success: false, error: err.message, durationMs: Date.now() - startTime };
     } finally {
-        client.end();
+        if (!useAgent && client) client.end();
     }
 }
 

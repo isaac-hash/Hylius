@@ -139,6 +139,13 @@ app.prepare().then(() => {
                 const dashboardUrl = process.env.NEXT_PUBLIC_APP_URL
                     || `http://${process.env.HOSTNAME || 'localhost'}:${port}`;
 
+                // ── Prefer agent path when the server is already connected ────
+                // (new "add server" flow installs the agent manually before provisioning)
+                const agentAlreadyConnected = agentGateway.isConnected(serverId);
+                if (agentAlreadyConnected) {
+                    socket.emit('log', `\x1b[35m[Agent] Server agent is connected — running setup via agent (no SSH).\x1b[0m\n`);
+                }
+
                 const result = await setup({
                     server: serverConfig,
                     onLog: (chunk: string) => {
@@ -148,6 +155,11 @@ app.prepare().then(() => {
                     agentToken: (serverRecord as any).agentToken,
                     agentServerUrl: dashboardUrl,
                     agentServerId: serverRecord.id,
+                    // Route through connected agent instead of SSH when available
+                    ...(agentAlreadyConnected && {
+                        executionMode: 'agent',
+                        agent: agentGateway.getAgentConfig(serverId),
+                    }),
                 } as any);
 
                 if (result.success) {
@@ -328,7 +340,7 @@ app.prepare().then(() => {
                     name,
                     version,
                     projectId,
-                    onLog: (chunk) => {
+                    onLog: (chunk: string) => {
                         socket.emit(`db_log:${serverId}`, chunk);
                     },
                 });

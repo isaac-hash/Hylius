@@ -13,6 +13,7 @@ import {
 } from '@hylius/core';
 import { decrypt, encrypt } from './crypto.service';
 import { prisma } from './prisma';
+import { agentGateway } from './agent-gateway.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export interface DatabaseRecord {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 function generatePassword(): string {
     return crypto.randomBytes(24).toString('base64url');
 }
@@ -66,6 +68,11 @@ async function getServerConfig(serverId: string): Promise<ServerConfig & { priva
         privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
         password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
     };
+}
+
+/** Returns the agent config if the server has an active agent connection, otherwise undefined. */
+function getAgentForServer(serverId: string) {
+    return agentGateway.isConnected(serverId) ? agentGateway.getAgentConfig(serverId) : undefined;
 }
 
 /**
@@ -136,6 +143,8 @@ export async function createDatabase(options: CreateDatabaseOptions): Promise<{ 
 
     try {
         const serverConfig = await getServerConfig(serverId);
+        const agent = getAgentForServer(serverId);
+
         const result = await provisionDatabase({
             server: serverConfig,
             name,
@@ -143,7 +152,8 @@ export async function createDatabase(options: CreateDatabaseOptions): Promise<{ 
             version,
             password,
             onLog,
-        });
+            ...(agent && { agent }),
+        } as any);
 
         if (!result.success) {
             // @ts-ignore
@@ -216,13 +226,15 @@ export async function deleteDatabase(databaseId: string, removeVolume = false): 
     if (db.containerName) {
         try {
             const serverConfig = await getServerConfig(db.serverId);
+            const agent = getAgentForServer(db.serverId);
             await destroyDatabase({
                 server: serverConfig,
                 containerName: db.containerName,
                 removeVolume,
-            });
+                ...(agent && { agent }),
+            } as any);
         } catch (err: any) {
-            console.error(`[db-service] destroyDatabase SSH failed: ${err.message}. Removing DB record anyway.`);
+            console.error(`[db-service] destroyDatabase failed: ${err.message}. Removing DB record anyway.`);
         }
     }
 

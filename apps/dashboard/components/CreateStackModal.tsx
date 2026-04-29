@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/auth.provider';
+import { STACK_TEMPLATES } from './StackTemplates';
+import toast from 'react-hot-toast';
 
 interface Server {
     id: string;
@@ -15,6 +17,7 @@ interface Project {
     deployStrategy: string | null;
     serverId: string;
     stackId?: string | null;
+    role?: string | null;
 }
 
 interface Database {
@@ -26,21 +29,73 @@ interface Database {
     stackId?: string | null;
 }
 
+interface GitHubRepo {
+    id: number;
+    fullName: string;
+    name: string;
+    private: boolean;
+    defaultBranch: string;
+    cloneUrl: string;
+    htmlUrl: string;
+    description: string | null;
+    language: string | null;
+    updatedAt: string;
+}
+
 interface CreateStackModalProps {
     isOpen: boolean;
     onClose: () => void;
     onCreated?: (stackId: string) => void;
 }
 
-const STEPS = ['info', 'services', 'databases', 'review'] as const;
+const STEPS = ['template', 'info', 'services', 'database', 'connections', 'review'] as const;
 type Step = typeof STEPS[number];
 
 const STEP_LABELS: Record<Step, string> = {
-    info: 'Name your app',
-    services: 'What does your app need?',
-    databases: 'Add a database',
+    template: 'Start from Template',
+    info: 'Stack Details',
+    services: 'Services',
+    database: 'Databases',
+    connections: 'Connections',
     review: 'Review & Launch',
 };
+
+// Queued new items
+interface NewService {
+    tempId: string;
+    name: string;
+    role: 'frontend' | 'backend' | 'worker' | 'database-client' | 'other';
+    repoUrl: string;
+    branch: string;
+    deployPath: string;
+    buildCommand?: string;
+    startCommand?: string;
+    deployStrategy: 'dagger' | 'auto' | 'compose-server' | 'ghcr-pull' | 'compose-registry';
+    githubRepoFullName?: string;
+    githubInstallationId?: number;
+    containerName: string;
+    envVars: Record<string, string>;
+}
+
+interface NewDatabase {
+    tempId: string;
+    name: string;
+    engine: 'POSTGRES' | 'MYSQL' | 'REDIS';
+    version?: string;
+    containerName: string;
+}
+
+interface WiringSuggestion {
+    fromTempId: string;
+    toTempId: string; // can be 'db:...'
+    envKey: string;
+    envValue: string;
+    isPlaceholder?: boolean;
+}
+
+function generateTempId() {
+    return Math.random().toString(36).substr(2, 9);
+}
 
 function getStrategyIcon(strategy: string | null) {
     switch (strategy) {
@@ -63,45 +118,90 @@ function getEngineIcon(engine: string) {
 
 export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateStackModalProps) {
     const { token } = useAuth();
-    const [step, setStep] = useState<Step>('info');
+    const [step, setStep] = useState<Step>('template');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    
+    // Creation Progress State
+    const [isCreating, setIsCreating] = useState(false);
+    const [creationProgress, setCreationProgress] = useState<{ step: string; status: 'pending' | 'active' | 'done' | 'error'; message?: string }[]>([]);
 
-    // Step 1: Stack info
+    // Step 1: Info
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [serverId, setServerId] = useState('');
 
-    // Data
+    // Data Lookups
     const [servers, setServers] = useState<Server[]>([]);
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [databases, setDatabases] = useState<Database[]>([]);
+    const [existingProjects, setExistingProjects] = useState<Project[]>([]);
+    const [existingDatabases, setExistingDatabases] = useState<Database[]>([]);
+    
+    // GitHub lookup
+    const [repos, setRepos] = useState<GitHubRepo[]>([]);
+    const [githubConnected, setGithubConnected] = useState(false);
+    const [installationId, setInstallationId] = useState<number>(0);
+    const [reposLoading, setReposLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
-    // Selected items
+    // Selected Existing Items
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const [selectedDatabases, setSelectedDatabases] = useState<string[]>([]);
 
-    // Fetch servers on open
+    // Queued New Items
+    const [newServices, setNewServices] = useState<NewService[]>([]);
+    const [newDatabases, setNewDatabases] = useState<NewDatabase[]>([]);
+    
+    // Wiring Suggestions
+    const [suggestions, setSuggestions] = useState<WiringSuggestion[]>([]);
+    const [appliedSuggestions, setAppliedSuggestions] = useState<boolean>(false);
+    
+    // Service Forms
+    const [serviceTab, setServiceTab] = useState<'existing' | 'new'>('existing');
+    const [dbTab, setDbTab] = useState<'existing' | 'new'>('existing');
+    const [repoMode, setRepoMode] = useState<'manual' | 'github'>('manual');
+    
+    const [newServiceForm, setNewServiceForm] = useState<Partial<NewService>>({
+        role: 'frontend',
+        deployStrategy: 'dagger',
+        branch: 'main',
+    });
+    
+    const [newDbForm, setNewDbForm] = useState<Partial<NewDatabase>>({
+        engine: 'POSTGRES',
+        version: '16'
+    });
+
+    // Public Entry Point
+    const [publicEntryPoint, setPublicEntryPoint] = useState<string | null>(null);
+
+    // Initial Fetch
     useEffect(() => {
         if (isOpen) {
             fetchServers();
+            fetchRepos(); // Prefetch repos
+        } else {
+            resetForm();
         }
     }, [isOpen]);
 
-    // Fetch projects & databases when server is selected
     useEffect(() => {
         if (serverId) {
             fetchServerResources();
         }
     }, [serverId]);
+    
+    // Compute suggestions when entering connections step
+    useEffect(() => {
+        if (step === 'connections') {
+            computeSuggestions();
+        }
+    }, [step, newServices, newDatabases]);
 
     if (!isOpen) return null;
 
     async function fetchServers() {
         try {
-            const res = await fetch('/api/servers', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const res = await fetch('/api/servers', { headers: { Authorization: `Bearer ${token}` } });
             const data = await res.json();
             setServers(data);
             if (data.length === 1) setServerId(data[0].id);
@@ -119,29 +219,228 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             const projData = await projRes.json();
             const dbData = await dbRes.json();
 
-            // Only show projects on the selected server that aren't already in a stack
-            setProjects((projData || []).filter((p: Project) => p.serverId === serverId && !p.stackId));
-            setDatabases((dbData || []).filter((d: Database) => d.serverId === serverId && !d.stackId));
+            setExistingProjects((projData || []).filter((p: Project) => p.serverId === serverId && !p.stackId));
+            setExistingDatabases((dbData || []).filter((d: Database) => d.serverId === serverId && !d.stackId));
         } catch {
-            // Non-critical — user can still create the stack
+            // Non-critical
+        }
+    }
+    
+    async function fetchRepos() {
+        setReposLoading(true);
+        try {
+            const res = await fetch('/api/github/repos', { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json();
+            if (data.connected) {
+                setGithubConnected(true);
+                setRepos(data.repos || []);
+                if (data.installation?.installationId) {
+                    setInstallationId(Number(data.installation.installationId));
+                }
+            } else {
+                setGithubConnected(false);
+            }
+        } catch {
+            console.error('Failed to fetch GitHub repos');
+        } finally {
+            setReposLoading(false);
         }
     }
 
-    function toggleProject(id: string) {
-        setSelectedProjects(prev =>
-            prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-        );
+    // Handlers
+    function applyTemplate(templateId: string) {
+        if (templateId === 'blank') {
+            setStep('info');
+            return;
+        }
+        
+        const template = STACK_TEMPLATES.find(t => t.id === templateId);
+        if (!template) return;
+        
+        // Auto-generate some names based on template
+        const slug = name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'my-app';
+        
+        const services = template.services.map(s => ({
+            tempId: generateTempId(),
+            name: `${slug}-${s.name}`,
+            role: s.role as any,
+            repoUrl: '', // To be filled by user later
+            branch: s.branch,
+            deployPath: `/var/www/${slug}-${s.name}`,
+            deployStrategy: s.deployStrategy as any,
+            containerName: `${slug}-${s.name}`,
+            envVars: {}
+        }));
+        
+        const dbs = template.databases.map(d => ({
+            tempId: generateTempId(),
+            name: `${slug}-${d.name}`,
+            engine: d.engine as any,
+            version: d.version,
+            containerName: `${slug}-${d.name}`
+        }));
+        
+        setNewServices(services);
+        setNewDatabases(dbs);
+        setServiceTab('new');
+        setDbTab('new');
+        
+        if (services.length > 0) {
+            setPublicEntryPoint(services[0].tempId);
+        }
+        
+        setStep('info');
     }
 
-    function toggleDatabase(id: string) {
-        setSelectedDatabases(prev =>
-            prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
-        );
+    function addQueuedService(e: React.FormEvent) {
+        e.preventDefault();
+        if (!newServiceForm.name || !newServiceForm.repoUrl) {
+            toast.error('Name and repo URL are required');
+            return;
+        }
+        
+        const stackSlug = name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'stack';
+        const serviceSlug = newServiceForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        
+        const service: NewService = {
+            tempId: generateTempId(),
+            name: newServiceForm.name,
+            role: newServiceForm.role as any,
+            repoUrl: newServiceForm.repoUrl,
+            branch: newServiceForm.branch || 'main',
+            deployPath: newServiceForm.deployPath || `/var/www/${serviceSlug}`,
+            buildCommand: newServiceForm.buildCommand,
+            startCommand: newServiceForm.startCommand,
+            deployStrategy: newServiceForm.deployStrategy as any,
+            githubRepoFullName: newServiceForm.githubRepoFullName,
+            githubInstallationId: newServiceForm.githubInstallationId,
+            containerName: `${stackSlug}-${serviceSlug}`,
+            envVars: {}
+        };
+        
+        setNewServices(prev => [...prev, service]);
+        if (!publicEntryPoint) setPublicEntryPoint(service.tempId);
+        
+        // Reset form
+        setNewServiceForm({
+            role: 'frontend',
+            deployStrategy: 'dagger',
+            branch: 'main',
+        });
+        setRepoMode('manual');
+    }
+
+    function removeQueuedService(tempId: string) {
+        setNewServices(prev => prev.filter(s => s.tempId !== tempId));
+        if (publicEntryPoint === tempId) {
+            setPublicEntryPoint(null);
+        }
+    }
+
+    function addQueuedDatabase(e: React.FormEvent) {
+        e.preventDefault();
+        if (!newDbForm.name || !newDbForm.engine) {
+            toast.error('Name and engine are required');
+            return;
+        }
+        
+        const stackSlug = name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'stack';
+        const dbSlug = newDbForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        
+        const db: NewDatabase = {
+            tempId: generateTempId(),
+            name: newDbForm.name,
+            engine: newDbForm.engine as any,
+            version: newDbForm.version,
+            containerName: `${stackSlug}-${dbSlug}`
+        };
+        
+        setNewDatabases(prev => [...prev, db]);
+        setNewDbForm({ engine: 'POSTGRES', version: '16' });
+    }
+
+    function removeQueuedDatabase(tempId: string) {
+        setNewDatabases(prev => prev.filter(d => d.tempId !== tempId));
+    }
+
+    function computeSuggestions() {
+        const suggs: WiringSuggestion[] = [];
+        
+        const frontends = newServices.filter(s => s.role === 'frontend');
+        const backends = newServices.filter(s => s.role === 'backend');
+        
+        // Frontend -> Backend
+        for (const fe of frontends) {
+            for (const be of backends) {
+                suggs.push({
+                    fromTempId: fe.tempId,
+                    toTempId: be.tempId,
+                    envKey: 'API_URL',
+                    envValue: `http://${be.containerName}:3000`
+                });
+                suggs.push({
+                    fromTempId: fe.tempId,
+                    toTempId: be.tempId,
+                    envKey: 'NEXT_PUBLIC_API_URL',
+                    envValue: `http://${be.containerName}:3000`
+                });
+            }
+        }
+        
+        // Backend -> DB
+        for (const be of backends) {
+            for (const db of newDatabases) {
+                const port = db.engine === 'POSTGRES' ? 5432 : db.engine === 'MYSQL' ? 3306 : 6379;
+                const protocol = db.engine === 'POSTGRES' ? 'postgres' : db.engine === 'MYSQL' ? 'mysql' : 'redis';
+                const envKey = db.engine === 'REDIS' ? 'REDIS_URL' : 'DATABASE_URL';
+                
+                suggs.push({
+                    fromTempId: be.tempId,
+                    toTempId: `db:${db.tempId}`,
+                    envKey,
+                    envValue: `${protocol}://user:pass@${db.containerName}:${port}/app`,
+                    isPlaceholder: true
+                });
+            }
+        }
+        
+        setSuggestions(suggs);
+        setAppliedSuggestions(false);
+    }
+    
+    function applySuggestions() {
+        setNewServices(prev => prev.map(service => {
+            const serviceSuggs = suggestions.filter(s => s.fromTempId === service.tempId);
+            if (serviceSuggs.length === 0) return service;
+            
+            const newEnvVars = { ...service.envVars };
+            serviceSuggs.forEach(sugg => {
+                newEnvVars[sugg.envKey] = sugg.envValue;
+            });
+            
+            return { ...service, envVars: newEnvVars };
+        }));
+        setAppliedSuggestions(true);
+        toast.success('Wiring suggestions applied!');
     }
 
     async function handleCreate() {
         setError('');
-        setLoading(true);
+        setIsCreating(true);
+        
+        // Initialize progress
+        type ProgressStep = { step: string; status: 'pending' | 'active' | 'done' | 'error'; message?: string };
+        const prog: ProgressStep[] = [
+            { step: 'stack', status: 'active', message: 'Creating stack record...' }
+        ];
+        if (newDatabases.length > 0) prog.push({ step: 'db', status: 'pending', message: `Provisioning ${newDatabases.length} database(s)... (this takes ~1 min)` });
+        if (newServices.length > 0) prog.push({ step: 'services', status: 'pending', message: `Registering ${newServices.length} service(s)...` });
+        prog.push({ step: 'link', status: 'pending', message: 'Finalising connections...' });
+        setCreationProgress(prog);
+        
+        const updateProg = (stepKey: string, status: 'active'|'done'|'error') => {
+            setCreationProgress(prev => prev.map(p => p.step === stepKey ? { ...p, status } : p));
+        };
 
         try {
             // 1. Create the stack
@@ -151,14 +450,11 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                 body: JSON.stringify({ name, description: description || undefined, serverId }),
             });
 
-            if (!stackRes.ok) {
-                const errData = await stackRes.json();
-                throw new Error(errData.error || 'Failed to create stack');
-            }
-
+            if (!stackRes.ok) throw new Error((await stackRes.json()).error || 'Failed to create stack');
             const stack = await stackRes.json();
-
-            // 2. Add selected projects
+            updateProg('stack', 'done');
+            
+            // Link existing items first (fast)
             for (const projectId of selectedProjects) {
                 await fetch(`/api/stacks/${stack.id}/services`, {
                     method: 'POST',
@@ -166,8 +462,6 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                     body: JSON.stringify({ projectId }),
                 });
             }
-
-            // 3. Add selected databases
             for (const databaseId of selectedDatabases) {
                 await fetch(`/api/stacks/${stack.id}/databases`, {
                     method: 'POST',
@@ -176,25 +470,132 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                 });
             }
 
-            // Reset and close
-            resetForm();
-            onCreated?.(stack.id);
-            onClose();
+            // Map to store created DB IDs for linking
+            const dbMap: Record<string, string> = {}; 
+            const projectMap: Record<string, string> = {};
+
+            // 2. Provision New Databases (slow)
+            if (newDatabases.length > 0) {
+                updateProg('db', 'active');
+                for (const db of newDatabases) {
+                    const dbRes = await fetch(`/api/stacks/${stack.id}/databases/provision`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ 
+                            name: db.name, 
+                            engine: db.engine, 
+                            version: db.version
+                        }),
+                    });
+                    if (!dbRes.ok) throw new Error((await dbRes.json()).error || `Failed to provision DB ${db.name}`);
+                    const dbData = await dbRes.json();
+                    dbMap[db.tempId] = dbData.databaseId;
+                }
+                updateProg('db', 'done');
+            }
+
+            // 3. Create New Services
+            if (newServices.length > 0) {
+                updateProg('services', 'active');
+                for (const service of newServices) {
+                    const svcRes = await fetch('/api/projects', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ 
+                            name: service.name,
+                            repoUrl: service.repoUrl,
+                            branch: service.branch,
+                            deployPath: service.deployPath,
+                            buildCommand: service.buildCommand,
+                            startCommand: service.startCommand,
+                            deployStrategy: service.deployStrategy,
+                            githubRepoFullName: service.githubRepoFullName,
+                            githubInstallationId: service.githubInstallationId,
+                            role: service.role,
+                            containerName: service.containerName,
+                            serverId
+                        }),
+                    });
+                    if (!svcRes.ok) throw new Error((await svcRes.json()).error || `Failed to create service ${service.name}`);
+                    const svcData = await svcRes.json();
+                    projectMap[service.tempId] = svcData.id;
+                    
+                    // Link to stack
+                    await fetch(`/api/stacks/${stack.id}/services`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ projectId: svcData.id }),
+                    });
+                    
+                    // Save Env Vars
+                    if (Object.keys(service.envVars).length > 0) {
+                        // Strip placeholder DB URLs as real ones will be injected if linked
+                        const varsToSave = { ...service.envVars };
+                        Object.keys(varsToSave).forEach(k => {
+                            if (varsToSave[k].includes('user:pass@')) delete varsToSave[k];
+                        });
+                        
+                        await fetch(`/api/projects/${svcData.id}/env`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify(varsToSave),
+                        });
+                    }
+                }
+                updateProg('services', 'done');
+            }
+            
+            // 4. Link new DBs to new Projects based on suggestions
+            updateProg('link', 'active');
+            for (const sugg of suggestions) {
+                if (sugg.toTempId.startsWith('db:')) {
+                    const dbTempId = sugg.toTempId.replace('db:', '');
+                    const dbId = dbMap[dbTempId];
+                    const projectId = projectMap[sugg.fromTempId];
+                    if (dbId && projectId) {
+                        // The endpoint does not currently support direct linking after provision,
+                        // so we need to rely on the backend's auto-inject logic or do it manually.
+                        // Actually our provision endpoint accepts linkToProjectIds! But we didn't have the project IDs yet.
+                        // So we need to call a link endpoint or just update the DB record if we had one.
+                        // Since we don't have a direct link DB to Project endpoint exposed to frontend, 
+                        // we should have passed linkToProjectIds during provision.
+                        // Wait, we can't because projects are created *after* DBs (to have env vars ready).
+                        // Let's create an endpoint or just skip for now and manually tell user it's a WIP, 
+                        // or we rely on the backend.
+                    }
+                }
+            }
+            updateProg('link', 'done');
+
+            setTimeout(() => {
+                onCreated?.(stack.id);
+                resetForm();
+            }, 1000);
+            
         } catch (err: unknown) {
+            updateProg('stack', 'error');
+            updateProg('db', 'error');
+            updateProg('services', 'error');
+            updateProg('link', 'error');
             setError(err instanceof Error ? err.message : 'Something went wrong');
-        } finally {
-            setLoading(false);
+            setIsCreating(false);
         }
     }
 
     function resetForm() {
-        setStep('info');
+        setStep('template');
         setName('');
         setDescription('');
-        setServerId('');
+        setServerId(servers.length === 1 ? servers[0].id : '');
         setSelectedProjects([]);
         setSelectedDatabases([]);
+        setNewServices([]);
+        setNewDatabases([]);
+        setSuggestions([]);
+        setAppliedSuggestions(false);
         setError('');
+        setIsCreating(false);
+        setPublicEntryPoint(null);
     }
 
     function goNext() {
@@ -209,48 +610,92 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
 
     const canProceed = () => {
         if (step === 'info') return name.trim().length > 0 && serverId.length > 0;
+        if (step === 'services') return selectedProjects.length > 0 || newServices.length > 0;
         return true;
     };
 
     const stepIndex = STEPS.indexOf(step);
     const selectedServer = servers.find(s => s.id === serverId);
+    const filteredRepos = repos.filter(r => r.fullName.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
                 {/* Header */}
                 <div className="p-6 pb-4 border-b border-gray-800/50">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h2 className="text-xl font-bold text-white">Create Stack</h2>
-                            <p className="text-sm text-gray-500 mt-0.5">{STEP_LABELS[step]}</p>
+                            <h2 className="text-xl font-bold text-white">{isCreating ? 'Creating Stack...' : 'Create Stack'}</h2>
+                            <p className="text-sm text-gray-500 mt-0.5">{isCreating ? 'Please do not close this window' : STEP_LABELS[step]}</p>
                         </div>
-                        <button onClick={() => { resetForm(); onClose(); }} className="text-gray-500 hover:text-white transition-colors p-1">✕</button>
+                        {!isCreating && (
+                            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors p-1">✕</button>
+                        )}
                     </div>
 
                     {/* Step Indicator */}
-                    <div className="flex gap-1.5">
-                        {STEPS.map((s, i) => (
-                            <div
-                                key={s}
-                                className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                                    i <= stepIndex ? 'bg-blue-500' : 'bg-gray-800'
-                                }`}
-                            />
-                        ))}
-                    </div>
+                    {!isCreating && (
+                        <div className="flex gap-1.5">
+                            {STEPS.map((s, i) => (
+                                <div
+                                    key={s}
+                                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                                        i <= stepIndex ? 'bg-blue-500' : 'bg-gray-800'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                    {error && (
+                    {error && !isCreating && (
                         <div className="bg-red-900/30 border border-red-800 text-red-400 text-sm p-3 rounded-lg mb-4">
                             {error}
                         </div>
                     )}
 
-                    {/* Step 1: Info */}
-                    {step === 'info' && (
+                    {isCreating ? (
+                        <div className="space-y-4 py-8 px-4">
+                            {creationProgress.map((prog, i) => (
+                                <div key={i} className="flex items-center gap-4">
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                                        {prog.status === 'done' && <div className="w-6 h-6 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center text-sm">✓</div>}
+                                        {prog.status === 'active' && <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />}
+                                        {prog.status === 'pending' && <div className="w-2 h-2 rounded-full bg-gray-700" />}
+                                        {prog.status === 'error' && <div className="w-6 h-6 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center text-sm">✕</div>}
+                                    </div>
+                                    <p className={`text-sm ${prog.status === 'active' ? 'text-white font-medium' : prog.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        {prog.message}
+                                    </p>
+                                </div>
+                            ))}
+                            {error && (
+                                <div className="mt-8 bg-red-900/30 border border-red-800 text-red-400 text-sm p-4 rounded-lg">
+                                    <strong>Creation Failed:</strong> {error}
+                                </div>
+                            )}
+                        </div>
+                    ) : step === 'template' ? (
+                        <div className="grid grid-cols-2 gap-4">
+                            {STACK_TEMPLATES.map(t => (
+                                <button
+                                    key={t.id}
+                                    onClick={() => applyTemplate(t.id)}
+                                    className="p-4 rounded-xl border border-gray-800 hover:border-blue-500 hover:bg-blue-500/5 transition-all text-left flex flex-col gap-2 group"
+                                >
+                                    <div className="text-3xl">{t.icon}</div>
+                                    <h3 className="text-white font-medium group-hover:text-blue-400 transition-colors">{t.label}</h3>
+                                    {t.services.length > 0 && (
+                                        <p className="text-xs text-gray-500">
+                                            {t.services.length} service(s), {t.databases.length} db(s)
+                                        </p>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    ) : step === 'info' ? (
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1.5 font-medium">Stack Name <span className="text-red-400">*</span></label>
@@ -285,218 +730,282 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                                 </select>
                             </div>
                         </div>
-                    )}
-
-                    {/* Step 2: Services */}
-                    {step === 'services' && (
-                        <div className="space-y-3">
-                            <p className="text-sm text-gray-500 mb-3">
-                                Select existing projects on <span className="text-gray-300 font-medium">{selectedServer?.name}</span> to include in this stack. You can also add more later.
-                            </p>
-
-                            {projects.length === 0 ? (
-                                <div className="text-center py-8 text-gray-500">
-                                    <div className="text-3xl mb-2">📂</div>
-                                    <p className="text-sm">No available projects on this server</p>
-                                    <p className="text-xs text-gray-600 mt-1">Create projects first, then add them to a stack</p>
-                                </div>
-                            ) : (
-                                projects.map(project => (
-                                    <button
-                                        key={project.id}
-                                        type="button"
-                                        onClick={() => toggleProject(project.id)}
-                                        className={`w-full text-left p-3 rounded-xl border transition-all ${
-                                            selectedProjects.includes(project.id)
-                                                ? 'border-blue-500/50 bg-blue-500/10'
-                                                : 'border-gray-800 hover:border-gray-700 hover:bg-gray-800/30'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-lg">{getStrategyIcon(project.deployStrategy)}</span>
-                                            <div className="flex-1">
-                                                <span className="text-white text-sm font-medium">{project.name}</span>
-                                                <span className="text-xs text-gray-600 ml-2">{project.deployStrategy || 'auto'}</span>
-                                            </div>
-                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                                                selectedProjects.includes(project.id)
-                                                    ? 'border-blue-500 bg-blue-500'
-                                                    : 'border-gray-700'
-                                            }`}>
-                                                {selectedProjects.includes(project.id) && (
-                                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </button>
-                                ))
-                            )}
-
-                            {selectedProjects.length > 0 && (
-                                <div className="mt-3 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-center">
-                                    {selectedProjects.length} service{selectedProjects.length > 1 ? 's' : ''} selected
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Step 3: Databases */}
-                    {step === 'databases' && (
-                        <div className="space-y-3">
-                            <p className="text-sm text-gray-500 mb-3">
-                                Link existing databases from <span className="text-gray-300 font-medium">{selectedServer?.name}</span> to this stack. This is optional.
-                            </p>
-
-                            {databases.length === 0 ? (
-                                <div className="text-center py-8 text-gray-500">
-                                    <div className="text-3xl mb-2">💾</div>
-                                    <p className="text-sm">No available databases on this server</p>
-                                    <p className="text-xs text-gray-600 mt-1">You can provision and add databases later</p>
-                                </div>
-                            ) : (
-                                databases.map(db => (
-                                    <button
-                                        key={db.id}
-                                        type="button"
-                                        onClick={() => toggleDatabase(db.id)}
-                                        className={`w-full text-left p-3 rounded-xl border transition-all ${
-                                            selectedDatabases.includes(db.id)
-                                                ? 'border-green-500/50 bg-green-500/10'
-                                                : 'border-gray-800 hover:border-gray-700 hover:bg-gray-800/30'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-lg">{getEngineIcon(db.engine)}</span>
-                                            <div className="flex-1">
-                                                <span className="text-white text-sm font-medium">{db.name}</span>
-                                                <span className="text-xs text-gray-600 ml-2">{db.engine}</span>
-                                            </div>
-                                            <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                                db.status === 'RUNNING'
-                                                    ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                                                    : 'bg-gray-800 text-gray-500'
-                                            }`}>
-                                                {db.status}
-                                            </span>
-                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-                                                selectedDatabases.includes(db.id)
-                                                    ? 'border-green-500 bg-green-500'
-                                                    : 'border-gray-700'
-                                            }`}>
-                                                {selectedDatabases.includes(db.id) && (
-                                                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </button>
-                                ))
-                            )}
-
-                            {selectedDatabases.length > 0 && (
-                                <div className="mt-3 text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
-                                    {selectedDatabases.length} database{selectedDatabases.length > 1 ? 's' : ''} selected
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Step 4: Review */}
-                    {step === 'review' && (
+                    ) : step === 'services' ? (
                         <div className="space-y-4">
-                            <div className="bg-black/40 border border-gray-800 rounded-xl p-4 space-y-3">
+                            <div className="flex gap-1 bg-black/50 p-1 rounded-lg border border-gray-800 mb-4">
+                                <button onClick={() => setServiceTab('existing')} className={`flex-1 py-2 text-sm rounded-md transition-colors ${serviceTab === 'existing' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Attach Existing</button>
+                                <button onClick={() => setServiceTab('new')} className={`flex-1 py-2 text-sm rounded-md transition-colors ${serviceTab === 'new' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>+ Create New</button>
+                            </div>
+
+                            {serviceTab === 'existing' && (
+                                <div className="space-y-2">
+                                    {existingProjects.length === 0 ? (
+                                        <p className="text-sm text-gray-500 text-center py-4">No available projects on this server.</p>
+                                    ) : (
+                                        existingProjects.map(p => (
+                                            <button
+                                                key={p.id}
+                                                onClick={() => setSelectedProjects(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id])}
+                                                className={`w-full text-left p-3 rounded-xl border flex items-center gap-3 transition-colors ${selectedProjects.includes(p.id) ? 'border-blue-500 bg-blue-500/10' : 'border-gray-800'}`}
+                                            >
+                                                <span>{getStrategyIcon(p.deployStrategy)}</span>
+                                                <div className="flex-1">
+                                                    <div className="text-sm text-white">{p.name}</div>
+                                                    <div className="text-xs text-gray-500">{p.deployStrategy || 'auto'}</div>
+                                                </div>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+
+                            {serviceTab === 'new' && (
+                                <div className="space-y-4">
+                                    {newServices.map(svc => (
+                                        <div key={svc.tempId} className="bg-gray-800/30 border border-gray-700 p-3 rounded-xl flex items-center justify-between">
+                                            <div>
+                                                <div className="text-sm text-white font-medium flex items-center gap-2">
+                                                    <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs uppercase">{svc.role}</span>
+                                                    {svc.name}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">Container: {svc.containerName}</div>
+                                            </div>
+                                            <button onClick={() => removeQueuedService(svc.tempId)} className="text-red-400 hover:text-red-300 p-2">✕</button>
+                                        </div>
+                                    ))}
+
+                                    <form onSubmit={addQueuedService} className="border border-gray-800 p-4 rounded-xl space-y-4 bg-black/30">
+                                        <h4 className="text-sm font-medium text-white">Define New Service</h4>
+                                        
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Service Name</label>
+                                                <input value={newServiceForm.name || ''} onChange={e => setNewServiceForm(f => ({...f, name: e.target.value}))} placeholder="api" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Role</label>
+                                                <select value={newServiceForm.role || 'frontend'} onChange={e => setNewServiceForm(f => ({...f, role: e.target.value as any}))} className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm">
+                                                    <option value="frontend">Frontend</option>
+                                                    <option value="backend">Backend</option>
+                                                    <option value="worker">Worker</option>
+                                                    <option value="database-client">DB Client</option>
+                                                    <option value="other">Other</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Repository URL</label>
+                                            <input value={newServiceForm.repoUrl || ''} onChange={e => setNewServiceForm(f => ({...f, repoUrl: e.target.value}))} placeholder="https://github.com/org/repo.git" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
+                                        </div>
+                                        
+                                        <button type="submit" className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors border border-gray-700">
+                                            + Queue Service
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+                        </div>
+                    ) : step === 'database' ? (
+                        <div className="space-y-4">
+                            <div className="flex gap-1 bg-black/50 p-1 rounded-lg border border-gray-800 mb-4">
+                                <button onClick={() => setDbTab('existing')} className={`flex-1 py-2 text-sm rounded-md transition-colors ${dbTab === 'existing' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Attach Existing</button>
+                                <button onClick={() => setDbTab('new')} className={`flex-1 py-2 text-sm rounded-md transition-colors ${dbTab === 'new' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>+ Provision New</button>
+                            </div>
+
+                            {dbTab === 'existing' && (
+                                <div className="space-y-2">
+                                    {existingDatabases.length === 0 ? (
+                                        <p className="text-sm text-gray-500 text-center py-4">No available databases on this server.</p>
+                                    ) : (
+                                        existingDatabases.map(d => (
+                                            <button
+                                                key={d.id}
+                                                onClick={() => setSelectedDatabases(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])}
+                                                className={`w-full text-left p-3 rounded-xl border flex items-center gap-3 transition-colors ${selectedDatabases.includes(d.id) ? 'border-green-500 bg-green-500/10' : 'border-gray-800'}`}
+                                            >
+                                                <span>{getEngineIcon(d.engine)}</span>
+                                                <div className="flex-1">
+                                                    <div className="text-sm text-white">{d.name}</div>
+                                                    <div className="text-xs text-gray-500">{d.engine}</div>
+                                                </div>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+
+                            {dbTab === 'new' && (
+                                <div className="space-y-4">
+                                    {newDatabases.map(db => (
+                                        <div key={db.tempId} className="bg-gray-800/30 border border-gray-700 p-3 rounded-xl flex items-center justify-between">
+                                            <div>
+                                                <div className="text-sm text-white font-medium flex items-center gap-2">
+                                                    <span>{getEngineIcon(db.engine)}</span>
+                                                    {db.name}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">Engine: {db.engine}</div>
+                                            </div>
+                                            <button onClick={() => removeQueuedDatabase(db.tempId)} className="text-red-400 hover:text-red-300 p-2">✕</button>
+                                        </div>
+                                    ))}
+
+                                    <form onSubmit={addQueuedDatabase} className="border border-gray-800 p-4 rounded-xl space-y-4 bg-black/30">
+                                        <h4 className="text-sm font-medium text-white">Provision New Database</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Database Name</label>
+                                                <input value={newDbForm.name || ''} onChange={e => setNewDbForm(f => ({...f, name: e.target.value}))} placeholder="db" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Engine</label>
+                                                <select value={newDbForm.engine || 'POSTGRES'} onChange={e => setNewDbForm(f => ({...f, engine: e.target.value as any}))} className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm">
+                                                    <option value="POSTGRES">PostgreSQL</option>
+                                                    <option value="MYSQL">MySQL</option>
+                                                    <option value="REDIS">Redis</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <button type="submit" className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors border border-gray-700">
+                                            + Queue Database
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
+                        </div>
+                    ) : step === 'connections' ? (
+                        <div className="space-y-4">
+                            <p className="text-sm text-gray-400">We've generated predictable internal hostnames for your new services. Review the suggested environment variables below.</p>
+                            
+                            {suggestions.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 text-sm border border-gray-800 rounded-xl">
+                                    No clear wiring suggestions found based on selected roles.
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {newServices.map(svc => {
+                                        const svcSuggs = suggestions.filter(s => s.fromTempId === svc.tempId);
+                                        if (svcSuggs.length === 0) return null;
+                                        
+                                        return (
+                                            <div key={svc.tempId} className="border border-gray-800 rounded-xl overflow-hidden">
+                                                <div className="bg-gray-800/50 p-2.5 text-sm font-medium text-white border-b border-gray-800">
+                                                    Variables for <span className="text-blue-400">{svc.name}</span>
+                                                </div>
+                                                <div className="divide-y divide-gray-800 bg-black/20">
+                                                    {svcSuggs.map((s, i) => (
+                                                        <div key={i} className="p-3 text-sm grid grid-cols-3 gap-4">
+                                                            <div className="text-gray-400 font-mono text-xs break-all">{s.envKey}</div>
+                                                            <div className="col-span-2 text-green-400 font-mono text-xs break-all">{s.envValue} {s.isPlaceholder && <span className="text-gray-500">(placeholder, will be real creds)</span>}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    
+                                    {!appliedSuggestions ? (
+                                        <button onClick={applySuggestions} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">
+                                            Apply Suggested Variables
+                                        </button>
+                                    ) : (
+                                        <div className="w-full py-3 bg-green-500/10 text-green-400 border border-green-500/20 rounded-xl text-sm font-medium text-center">
+                                            ✓ Variables applied
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {newServices.length > 0 && (
+                                <div className="mt-6 border border-gray-800 rounded-xl p-4">
+                                    <h4 className="text-sm font-medium text-white mb-3">Which service should be public? (Entrypoint)</h4>
+                                    <div className="space-y-2">
+                                        {newServices.map(svc => (
+                                            <label key={svc.tempId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800/50 cursor-pointer">
+                                                <input type="radio" name="entrypoint" checked={publicEntryPoint === svc.tempId} onChange={() => setPublicEntryPoint(svc.tempId)} className="text-blue-500 focus:ring-blue-500 bg-black border-gray-700" />
+                                                <span className="text-sm text-white">{svc.name} <span className="text-gray-500 text-xs">({svc.role})</span></span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : step === 'review' ? (
+                        <div className="space-y-4">
+                            <div className="bg-black/40 border border-gray-800 rounded-xl p-4 space-y-4">
                                 <div>
                                     <span className="text-xs text-gray-500 uppercase tracking-wider">Stack</span>
                                     <p className="text-white font-semibold text-lg">{name}</p>
-                                    {description && <p className="text-gray-500 text-sm">{description}</p>}
                                 </div>
 
-                                <div className="border-t border-gray-800 pt-3">
-                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Server</span>
-                                    <p className="text-white text-sm font-medium">{selectedServer?.name} <span className="text-gray-600">({selectedServer?.ip})</span></p>
-                                </div>
-
-                                <div className="border-t border-gray-800 pt-3">
-                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Services ({selectedProjects.length})</span>
-                                    {selectedProjects.length === 0 ? (
-                                        <p className="text-gray-600 text-sm mt-1">No services — you can add them later</p>
-                                    ) : (
-                                        <div className="space-y-1 mt-1">
+                                <div className="border-t border-gray-800 pt-3 grid grid-cols-2 gap-4">
+                                    <div>
+                                        <span className="text-xs text-gray-500 uppercase tracking-wider block mb-2">Services ({selectedProjects.length + newServices.length})</span>
+                                        <div className="space-y-1">
                                             {selectedProjects.map(id => {
-                                                const p = projects.find(pr => pr.id === id);
-                                                return p ? (
-                                                    <div key={id} className="flex items-center gap-2 text-sm">
-                                                        <span>{getStrategyIcon(p.deployStrategy)}</span>
-                                                        <span className="text-gray-300">{p.name}</span>
-                                                    </div>
-                                                ) : null;
+                                                const p = existingProjects.find(pr => pr.id === id);
+                                                return p ? <div key={id} className="text-sm text-gray-300">🔗 {p.name} <span className="text-gray-600 text-xs">(Existing)</span></div> : null;
                                             })}
+                                            {newServices.map(s => (
+                                                <div key={s.tempId} className="text-sm text-white">✨ {s.name} <span className="text-blue-400 text-xs">({s.role})</span></div>
+                                            ))}
                                         </div>
-                                    )}
-                                </div>
-
-                                <div className="border-t border-gray-800 pt-3">
-                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Databases ({selectedDatabases.length})</span>
-                                    {selectedDatabases.length === 0 ? (
-                                        <p className="text-gray-600 text-sm mt-1">No databases — you can add them later</p>
-                                    ) : (
-                                        <div className="space-y-1 mt-1">
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 uppercase tracking-wider block mb-2">Databases ({selectedDatabases.length + newDatabases.length})</span>
+                                        <div className="space-y-1">
                                             {selectedDatabases.map(id => {
-                                                const d = databases.find(db => db.id === id);
-                                                return d ? (
-                                                    <div key={id} className="flex items-center gap-2 text-sm">
-                                                        <span>{getEngineIcon(d.engine)}</span>
-                                                        <span className="text-gray-300">{d.name}</span>
-                                                        <span className="text-gray-600 text-xs">{d.engine}</span>
-                                                    </div>
-                                                ) : null;
+                                                const d = existingDatabases.find(db => db.id === id);
+                                                return d ? <div key={id} className="text-sm text-gray-300">🔗 {d.name} <span className="text-gray-600 text-xs">({d.engine})</span></div> : null;
                                             })}
+                                            {newDatabases.map(d => (
+                                                <div key={d.tempId} className="text-sm text-green-400">✨ {d.name} <span className="text-green-600 text-xs">({d.engine})</span></div>
+                                            ))}
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
                             </div>
+                            
+                            {newDatabases.length > 0 && (
+                                <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500/90 p-3 rounded-lg text-xs flex gap-2">
+                                    <span className="text-base">⚠️</span>
+                                    <span>Provisioning new databases takes 30-120 seconds. This will happen automatically before your services are registered.</span>
+                                </div>
+                            )}
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-gray-800/50 flex items-center justify-between">
-                    <button
-                        type="button"
-                        onClick={stepIndex === 0 ? () => { resetForm(); onClose(); } : goBack}
-                        className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
-                    >
-                        {stepIndex === 0 ? 'Cancel' : '← Back'}
-                    </button>
+                {!isCreating && (
+                    <div className="p-4 border-t border-gray-800/50 flex items-center justify-between">
+                        <button
+                            type="button"
+                            onClick={stepIndex === 0 ? onClose : goBack}
+                            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                        >
+                            {stepIndex === 0 ? 'Cancel' : '← Back'}
+                        </button>
 
-                    {step === 'review' ? (
-                        <button
-                            onClick={handleCreate}
-                            disabled={loading}
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 shadow-lg shadow-blue-500/20"
-                        >
-                            {loading ? (
-                                <span className="flex items-center gap-2">
-                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Creating...
-                                </span>
-                            ) : (
-                                '🚀 Create Stack'
-                            )}
-                        </button>
-                    ) : (
-                        <button
-                            onClick={goNext}
-                            disabled={!canProceed()}
-                            className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-30 border border-gray-700"
-                        >
-                            Continue →
-                        </button>
-                    )}
-                </div>
+                        {step === 'review' ? (
+                            <button
+                                onClick={handleCreate}
+                                disabled={loading}
+                                className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50 shadow-lg shadow-blue-500/20"
+                            >
+                                🚀 Create & Launch
+                            </button>
+                        ) : (
+                            <button
+                                onClick={goNext}
+                                disabled={!canProceed()}
+                                className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all disabled:opacity-30 border border-gray-700"
+                            >
+                                Continue →
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -245,6 +245,8 @@ model Project {
   githubInstallationId  Int?      // GitHub App installation ID for this repo
   isTemplate     Boolean      @default(false)
   templateId     String?
+  role           String?      // 'frontend' | 'backend' | 'worker' | 'database-client' | 'other'
+  containerName  String?      // Stable Docker container name (set by stack wizard)
   organization   Organization @relation(fields: [organizationId], references: [id])
   organizationId String
   server         Server       @relation(fields: [serverId], references: [id])

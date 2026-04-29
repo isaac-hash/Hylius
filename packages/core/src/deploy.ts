@@ -171,6 +171,14 @@ function getComposeProjectName(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+/, '');
 }
 
+/** Replace localhost/127.0.0.1 in agent-returned URLs with the actual server IP */
+function fixAgentUrl(url: string | undefined, serverHost: string): string | undefined {
+    if (!url) return url;
+    return url
+        .replace(/\/\/localhost([:\/])/i, `//${serverHost}$1`)
+        .replace(/\/\/127\.0\.0\.1([:\/])/i, `//${serverHost}$1`);
+}
+
 /**
  * Write a .env file into the release directory so docker compose can pick up
  * all project environment variables (POSTGRES_PASSWORD, ENCRYPTION_KEY, etc.)
@@ -973,6 +981,7 @@ async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
                     dockerComposeYaml: project.dockerComposeYaml,
                     containerName: project.containerName,
                     dockerComposeFile: project.dockerComposeFile,
+                    releaseCommand: project.releaseCommand,
                 },
                 domains: domains || [],
                 tlsMode: tlsMode || 'production',
@@ -990,6 +999,86 @@ async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
             };
         }
 
+        // ─── Post-deploy: configure Laravel & run release command ─────────────
+        // The agent runs the container but doesn't run post-start hooks.
+        // Replicate what configureLaravelContainer + executeReleaseCommand do in SSH mode.
+        try {
+            const containerName = project.containerName || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-app`;
+
+            // Give the container a moment to fully start before exec'ing into it
+            await new Promise(r => setTimeout(r, 3000));
+
+            // Use a simpler exec helper
+            const agentExecPost = async (cmd: string): Promise<string> => {
+                let out = '';
+                try {
+                    await agent!.streamCommand('exec', { cmd }, (chunk: string) => { out += chunk; });
+                } catch { /* ignore */ }
+                return out;
+            };
+
+            const artisanVersion = await agentExecPost(`docker exec ${containerName} php artisan --version 2>/dev/null`);
+            const isLaravel = artisanVersion.includes('Laravel');
+
+            if (isLaravel) {
+                log(`\n\x1b[36m[Post-deploy] Laravel detected — running post-start configuration...\x1b[0m\n`);
+                const isHttpsDeploy = !!(domains && domains.length > 0);
+
+                // Key generation (safe — only generates if not already set)
+                await agentExecPost(`docker exec ${containerName} php artisan key:generate --force 2>/dev/null || true`);
+
+                // Config & route caching
+                await agentExecPost(`docker exec ${containerName} php artisan config:cache 2>/dev/null || true`);
+                await agentExecPost(`docker exec ${containerName} php artisan route:cache 2>/dev/null || true`);
+                await agentExecPost(`docker exec ${containerName} php artisan view:cache 2>/dev/null || true`);
+
+                // Trust all proxies for reverse-proxy setups
+                await agentExecPost(
+                    `docker exec ${containerName} php artisan tinker --execute="app('Illuminate\\\\Http\\\\Request')::setTrustedProxies(['*'], \\\\Symfony\\\\Component\\\\HttpFoundation\\\\Request::HEADER_X_FORWARDED_FOR | \\\\Symfony\\\\Component\\\\HttpFoundation\\\\Request::HEADER_X_FORWARDED_HOST | \\\\Symfony\\\\Component\\\\HttpFoundation\\\\Request::HEADER_X_FORWARDED_PORT | \\\\Symfony\\\\Component\\\\HttpFoundation\\\\Request::HEADER_X_FORWARDED_PROTO | \\\\Symfony\\\\Component\\\\HttpFoundation\\\\Request::HEADER_X_FORWARDED_AWS_ELB);" 2>/dev/null || true`
+                );
+
+                if (isHttpsDeploy) {
+                    await agentExecPost(`docker exec ${containerName} php artisan config:set --env session.secure_cookie true 2>/dev/null || true`);
+                }
+
+                // Determine and run release command (migrate by default for Laravel)
+                const releaseCmd = project.releaseCommand || 'php artisan migrate --force';
+                log(`\x1b[36m[Post-deploy] Running release command: ${releaseCmd}\x1b[0m\n`);
+                const maxRetries = 10;
+                for (let i = 1; i <= maxRetries; i++) {
+                    const migrateOut = await agentExecPost(
+                        `docker exec ${containerName} sh -c "${releaseCmd.replace(/"/g, '\\"')}" 2>&1`
+                    );
+                    if (migrateOut.toLowerCase().includes('nothing to migrate') ||
+                        migrateOut.toLowerCase().includes('running') ||
+                        migrateOut.toLowerCase().includes('migrated') ||
+                        !migrateOut.toLowerCase().includes('error')) {
+                        log(`\x1b[32m[Post-deploy] ✅ ${releaseCmd} completed\x1b[0m\n`);
+                        if (migrateOut.trim()) log(migrateOut);
+                        break;
+                    }
+                    if (i === maxRetries) {
+                        log(`\x1b[33m[Post-deploy] ⚠️  Release command failed after ${maxRetries} attempts: ${migrateOut}\x1b[0m\n`);
+                    } else {
+                        log(`\x1b[33m[Post-deploy] Release command attempt ${i}/${maxRetries} failed, retrying in 3s...\x1b[0m\n`);
+                        await new Promise(r => setTimeout(r, 3000));
+                    }
+                }
+
+                log(`\x1b[32m[Post-deploy] ✅ Laravel post-start configuration complete\x1b[0m\n`);
+            } else if (project.releaseCommand) {
+                // Non-Laravel project with a custom release command
+                log(`\n\x1b[36m[Post-deploy] Running release command: ${project.releaseCommand}\x1b[0m\n`);
+                const releaseOut = await agentExecPost(
+                    `docker exec ${containerName} sh -c "${project.releaseCommand.replace(/"/g, '\\"')}" 2>&1`
+                );
+                if (releaseOut.trim()) log(releaseOut);
+            }
+        } catch (postErr: any) {
+            // Post-deploy failures are non-fatal — container is running, just log the warning
+            log(`\x1b[33m[Post-deploy] Warning: post-deploy hook failed: ${postErr.message}\x1b[0m\n`);
+        }
+
         // Parse result JSON embedded in the done message
         let url: string | undefined;
         if (resultData) {
@@ -1001,17 +1090,23 @@ async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
                         success: true,
                         releaseId: result.releaseId,
                         durationMs: Date.now() - startTime,
-                        url,
+                        url: fixAgentUrl(url, options.server.host),
                     };
                 }
             } catch { /* resultData was not JSON, ignore */ }
+        }
+
+        // If the agent didn't return a URL, try to extract it from the streamed logs
+        // (the agent logs "Application URL: http://localhost:PORT")
+        if (!url) {
+            url = `http://${options.server.host}:3000`;
         }
 
         return {
             success: true,
             releaseId,
             durationMs: Date.now() - startTime,
-            url,
+            url: fixAgentUrl(url, options.server.host),
         };
 
     } catch (err: any) {
