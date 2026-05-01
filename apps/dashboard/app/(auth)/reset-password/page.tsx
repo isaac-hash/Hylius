@@ -1,12 +1,10 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -170,5 +168,25 @@ export default function ResetPasswordPage() {
             <div className="absolute top-1/4 -right-32 w-96 h-96 bg-blue-900/20 rounded-full blur-[100px] pointer-events-none"></div>
             <div className="absolute bottom-1/4 -left-32 w-96 h-96 bg-indigo-900/20 rounded-full blur-[100px] pointer-events-none"></div>
         </div>
+    );
+}
+
+export default function ResetPasswordPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-black flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-black to-black">
+                <div className="max-w-md w-full relative z-10">
+                    <div className="text-center mb-10">
+                        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 mb-5 shadow-[0_0_30px_rgba(37,99,235,0.4)]">
+                            <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                        </div>
+                        <h1 className="text-3xl font-bold text-white tracking-tight">Set new password</h1>
+                        <p className="text-neutral-400 mt-2">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        }>
+            <ResetPasswordContent />
+        </Suspense>
     );
 }
