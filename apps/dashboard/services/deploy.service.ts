@@ -23,7 +23,37 @@ export interface DeployServiceOptions {
  * This is the single source of truth for the deploy pipeline — called by
  * both the Socket.io handler (dashboard) and the GitHub webhook endpoint.
  */
+// Global in-memory queue to prevent concurrent deployments for the SAME project
+const deploymentMutexes = new Map<string, Promise<void>>();
+
 export async function executeDeployment(options: DeployServiceOptions): Promise<DeployResult & { deploymentId: string }> {
+    const { projectId, onLog } = options;
+    
+    // Wait for existing deployment for this project to finish (queuing)
+    const existingDeployment = deploymentMutexes.get(projectId);
+    if (existingDeployment) {
+        if (onLog) onLog(`\n⏳ Another deployment is currently in progress for this service. Queuing this deployment until it finishes...\n`);
+        await existingDeployment;
+    }
+
+    let resolveMutex: () => void;
+    const currentDeploymentPromise = new Promise<void>((resolve) => { resolveMutex = resolve; });
+    deploymentMutexes.set(projectId, currentDeploymentPromise);
+
+    try {
+        return await _executeDeploymentInternal(options);
+    } finally {
+        resolveMutex!();
+        if (deploymentMutexes.get(projectId) === currentDeploymentPromise) {
+            deploymentMutexes.delete(projectId);
+        }
+    }
+}
+
+/**
+ * Internal deployment logic — do not call directly, use executeDeployment instead.
+ */
+async function _executeDeploymentInternal(options: DeployServiceOptions): Promise<DeployResult & { deploymentId: string }> {
     const { projectId, trigger, prNumber, onLog } = options;
     const isPreview = !!prNumber;
 
@@ -154,6 +184,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
         previewId: isPreview ? `pr-${prNumber}` : undefined,
         dockerComposeYaml, // Passed to core
+        containerName: (project as any).containerName || undefined,
     };
 
     // Auto-inject URL environment variables
@@ -451,13 +482,13 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
         if (useAgent) {
             console.log(`[Agent] Destroying preview deployment via VPS agent...`);
             const agent = agentGateway.getAgentConfig(project.server.id);
-            
+
             // 1 & 2. Kill container and remove directory
-            await agent.streamCommand('exec', { cmd: `docker rm -f ${containerName} > /dev/null 2>&1 || true && rm -rf ${environmentPath} > /dev/null 2>&1 || true` }, () => {});
-            
+            await agent.streamCommand('exec', { cmd: `docker rm -f ${containerName} > /dev/null 2>&1 || true && rm -rf ${environmentPath} > /dev/null 2>&1 || true` }, () => { });
+
             // 3. Update Caddy
-            await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => {});
-            
+            await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => { });
+
         } else {
             console.log(`[SSH] Destroying preview deployment via SSH...`);
             let privateKey = '';

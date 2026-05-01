@@ -7,6 +7,7 @@ import Link from "next/link";
 import { AuthGuard } from "@/components/AuthGuard";
 import { useAuth } from "@/providers/auth.provider";
 import io from "socket.io-client";
+import AddProjectModal from "@/components/AddProjectModal";
 
 interface StackDetail {
     id: string;
@@ -107,6 +108,22 @@ export default function StackDetailPage() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteWipe, setDeleteWipe] = useState(false);
 
+    // GitHub Actions setup panel
+    const [ghSetupProjectId, setGhSetupProjectId] = useState<string | null>(null);
+    const [apiTokenValue, setApiTokenValue] = useState<string | null>(null);
+    const [apiTokenLoading, setApiTokenLoading] = useState(false);
+
+    // Provisioned PR banners (set from CreateStackModal via localStorage)
+    const [provisionedPrs, setProvisionedPrs] = useState<Record<string, { name: string; prUrl: string; token: string; webhookUrl: string }>>({});
+
+    // Add Resource state
+    const [showAddProject, setShowAddProject] = useState(false);
+    const [showAddDatabase, setShowAddDatabase] = useState(false);
+    const [dbProvisionName, setDbProvisionName] = useState('');
+    const [dbProvisionEngine, setDbProvisionEngine] = useState<'POSTGRES' | 'MYSQL' | 'REDIS'>('POSTGRES');
+    const [dbProvisioning, setDbProvisioning] = useState(false);
+    const [dbProvisionLinkTo, setDbProvisionLinkTo] = useState<string | null>(null);
+
     const fetchStack = useCallback(async () => {
         try {
             const res = await fetch(`/api/stacks/${id}`, {
@@ -127,6 +144,19 @@ export default function StackDetailPage() {
     useEffect(() => {
         if (token && id) fetchStack();
     }, [token, id, fetchStack]);
+
+    // Read provisioned PRs from localStorage (set by CreateStackModal after creation)
+    useEffect(() => {
+        if (!id) return;
+        const key = `hylius_stack_prs_${id}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+            try {
+                setProvisionedPrs(JSON.parse(stored));
+            } catch { /* ignore */ }
+            localStorage.removeItem(key); // one-time display
+        }
+    }, [id]);
 
     // Auto-scroll logs
     useEffect(() => {
@@ -206,8 +236,39 @@ export default function StackDetailPage() {
         }
     }
 
+    async function openGhSetup(projectId: string) {
+        setGhSetupProjectId(projectId);
+        if (apiTokenValue) return; // already loaded
+        setApiTokenLoading(true);
+        try {
+            // Try to reuse an existing token, or create one
+            const listRes = await fetch('/api/tokens', { headers: { Authorization: `Bearer ${token}` } });
+            const listData = await listRes.json();
+            const existing = (listData || []).find((t: any) => t.name?.startsWith('GitHub Actions'));
+            if (existing?.plainToken) {
+                setApiTokenValue(existing.plainToken);
+            } else if (existing) {
+                // We have a token but plain value not stored — prompt user to create new
+                setApiTokenValue('(create a new token on the API Tokens page to reveal)');
+            } else {
+                // Create one automatically
+                const createRes = await fetch('/api/tokens', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ name: 'GitHub Actions - Auto' }),
+                });
+                const createData = await createRes.json();
+                setApiTokenValue(createData.plainToken || '(check API Tokens page)');
+            }
+        } catch {
+            setApiTokenValue('(failed to load — check API Tokens page)');
+        } finally {
+            setApiTokenLoading(false);
+        }
+    }
+
     async function handleRemoveDatabase(databaseId: string) {
-        if (!confirm('Remove this database from the stack?')) return;
+        if (!confirm('Remove this database from the stack? (This does not delete the database)')) return;
         try {
             await fetch(`/api/stacks/${id}/databases?databaseId=${databaseId}`, {
                 method: 'DELETE',
@@ -216,6 +277,79 @@ export default function StackDetailPage() {
             fetchStack();
         } catch {
             alert('Failed to remove database');
+        }
+    }
+
+    // --- Independent Actions ---
+    async function handleDeployService(projectId: string) {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/deploy`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('Failed to start deployment');
+            alert('Deployment started! View logs from the Server or Project page.');
+            fetchStack();
+        } catch (err: any) {
+            alert(err.message || 'Deployment error');
+        }
+    }
+
+    async function handleDeleteService(projectId: string, projectName: string) {
+        if (!confirm(`WARNING: Completely wipe service "${projectName}"? This will stop and remove its container, and delete all deployment files permanently.`)) return;
+        try {
+            const res = await fetch(`/api/projects/${projectId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('Failed to wipe service');
+            fetchStack();
+        } catch (err: any) {
+            alert(err.message || 'Failed to wipe service');
+        }
+    }
+
+    async function handleDeleteDatabase(databaseId: string, databaseName: string) {
+        if (!confirm(`WARNING: Completely wipe database "${databaseName}"? This will stop and remove its container, and DELETE THE PERSISTENT DATA VOLUME. All data will be lost forever.`)) return;
+        try {
+            const res = await fetch(`/api/databases/${databaseId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeVolume: true }),
+            });
+            if (!res.ok) throw new Error('Failed to wipe database');
+            fetchStack();
+        } catch (err: any) {
+            alert(err.message || 'Failed to wipe database');
+        }
+    }
+
+    async function handleProvisionDatabase() {
+        if (!dbProvisionName.trim() || !stack) return;
+        setDbProvisioning(true);
+        try {
+            const version = { POSTGRES: '16', MYSQL: '8', REDIS: '7' }[dbProvisionEngine];
+            const res = await fetch(`/api/stacks/${stack.id}/databases/provision`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ 
+                    name: dbProvisionName.trim(), 
+                    engine: dbProvisionEngine, 
+                    version,
+                    linkToProjectIds: dbProvisionLinkTo ? [dbProvisionLinkTo] : []
+                })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Provisioning failed');
+            }
+            setShowAddDatabase(false);
+            setDbProvisionName('');
+            fetchStack();
+        } catch (err: any) {
+            alert(err.message || 'Failed to provision database');
+        } finally {
+            setDbProvisioning(false);
         }
     }
 
@@ -335,6 +469,28 @@ export default function StackDetailPage() {
                             </div>
 
                             <div className="flex items-center gap-2">
+                                <div className="relative group">
+                                    <button className="bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 border border-violet-500/30 px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Add Resource
+                                    </button>
+                                    <div className="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-800 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+                                        <button
+                                            onClick={() => setShowAddProject(true)}
+                                            className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white flex items-center gap-2"
+                                        >
+                                            <span className="text-blue-400">📦</span> Add Service
+                                        </button>
+                                        <button
+                                            onClick={() => setShowAddDatabase(true)}
+                                            className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white flex items-center gap-2"
+                                        >
+                                            <span className="text-violet-400">🗄️</span> Add Database
+                                        </button>
+                                    </div>
+                                </div>
                                 <button
                                     onClick={handleDeployAll}
                                     disabled={deploying || stack.projects.length === 0}
@@ -434,6 +590,52 @@ export default function StackDetailPage() {
                                                 <div className="absolute left-7 top-full w-px h-3 bg-gray-800 z-0" />
                                             )}
 
+                                            {/* Provisioned PR Banner */}
+                                            {provisionedPrs[project.id] && (
+                                                <div className="mb-2 bg-green-500/10 border border-green-500/20 text-green-400 p-4 rounded-xl">
+                                                    <div className="flex items-start gap-3 mb-3">
+                                                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                                        <div>
+                                                            <h3 className="font-medium text-green-300 text-sm">Project Created &amp; Workflow Provisioned!</h3>
+                                                            <p className="text-xs mt-1 text-green-100/70">Add these two secrets to your GitHub repo so the workflow can notify Hylius when a build completes:</p>
+                                                        </div>
+                                                        <button onClick={() => setProvisionedPrs(prev => { const n = {...prev}; delete n[project.id]; return n; })} className="ml-auto text-green-400 hover:text-green-300">
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-3 pl-8">
+                                                        <div>
+                                                            <label className="block text-xs text-green-400/80 font-mono mb-1">HYLIUS_WEBHOOK_URL</label>
+                                                            <div className="flex bg-black/50 border border-green-500/30 rounded overflow-hidden">
+                                                                <input readOnly value={provisionedPrs[project.id].webhookUrl || ''} className="flex-1 bg-transparent p-2 text-sm text-green-100 font-mono outline-none" />
+                                                                <button onClick={() => navigator.clipboard.writeText(provisionedPrs[project.id].webhookUrl || '')} className="px-3 bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors" title="Copy">📋</button>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs text-green-400/80 font-mono mb-1">HYLIUS_API_TOKEN</label>
+                                                            <div className="flex bg-black/50 border border-green-500/30 rounded overflow-hidden">
+                                                                <input readOnly value={provisionedPrs[project.id].token || ''} className="flex-1 bg-transparent p-2 text-sm text-green-100 font-mono outline-none" />
+                                                                <button onClick={() => navigator.clipboard.writeText(provisionedPrs[project.id].token || '')} className="px-3 bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors" title="Copy">📋</button>
+                                                            </div>
+                                                        </div>
+                                                        {provisionedPrs[project.id].prUrl && (
+                                                            <div className="p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg">
+                                                                <p className="text-xs text-violet-300 mb-2">⚡ <strong>One more step:</strong> Merge the Dagger CI pipeline PR to activate auto-deploys.</p>
+                                                                <a
+                                                                    href={provisionedPrs[project.id].prUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                                    View &amp; Merge PR on GitHub
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition-all relative z-10">
                                                 <div className="flex items-center gap-4">
                                                     {/* Status dot */}
@@ -464,6 +666,23 @@ export default function StackDetailPage() {
 
                                                     {/* Actions */}
                                                     <div className="flex items-center gap-1">
+                                                        {(project.deployStrategy === 'dagger' || project.deployStrategy === 'ghcr-pull') && (
+                                                            <button
+                                                                onClick={() => openGhSetup(project.id)}
+                                                                title="GitHub Actions setup"
+                                                                className="text-xs text-yellow-500 hover:text-yellow-400 px-2 py-1.5 rounded-lg hover:bg-yellow-500/10 transition-colors flex items-center gap-1"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" /></svg>
+                                                                CI/CD Setup
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleDeployService(project.id)}
+                                                            className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1.5 rounded-lg hover:bg-blue-500/10 transition-colors flex items-center gap-1"
+                                                            title="Deploy this service independently"
+                                                        >
+                                                            🚀 Deploy
+                                                        </button>
                                                         <Link
                                                             href={`/servers/${stack.server.id}`}
                                                             className="text-xs text-gray-500 hover:text-white px-2 py-1.5 rounded-lg hover:bg-gray-800 transition-colors"
@@ -474,9 +693,16 @@ export default function StackDetailPage() {
                                                         <button
                                                             onClick={() => handleRemoveService(project.id)}
                                                             className="text-xs text-gray-600 hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
-                                                            title="Remove from stack"
+                                                            title="Unlink from stack (does not delete)"
                                                         >
-                                                            ✕
+                                                            Unlink
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteService(project.id, project.name)}
+                                                            className="text-xs text-red-500 hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                                                            title="Completely wipe service and delete data"
+                                                        >
+                                                            🗑️ Wipe & Delete
                                                         </button>
                                                     </div>
                                                 </div>
@@ -524,10 +750,17 @@ export default function StackDetailPage() {
                                                 </span>
                                                 <button
                                                     onClick={() => handleRemoveDatabase(db.id)}
-                                                    className="text-xs text-gray-600 hover:text-red-400 px-1.5 py-1 rounded hover:bg-red-500/10 transition-colors"
-                                                    title="Remove from stack"
+                                                    className="text-xs text-gray-600 hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                                                    title="Unlink from stack (does not delete)"
                                                 >
-                                                    ✕
+                                                    Unlink
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteDatabase(db.id, db.name)}
+                                                    className="text-xs text-red-500 hover:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                                                    title="Completely wipe database and delete data"
+                                                >
+                                                    🗑️ Wipe & Delete
                                                 </button>
                                             </div>
                                         </div>
@@ -559,6 +792,118 @@ export default function StackDetailPage() {
                     )}
                 </main>
             </div>
+
+            {/* GitHub Actions Setup Modal */}
+            {ghSetupProjectId && stack && (() => {
+                const project = stack.projects.find(p => p.id === ghSetupProjectId);
+                if (!project) return null;
+                const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/deploy-complete` : '/api/webhooks/deploy-complete';
+                const repoName = project.repoUrl?.replace(/.*github\.com\//, '').replace(/\.git$/, '') || 'your-org/your-repo';
+                const imageName = `ghcr.io/${repoName.toLowerCase()}:latest`;
+                const workflowYaml = `name: Deploy to Hylius
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: \${{ github.actor }}
+          password: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${imageName}
+
+      - name: Notify Hylius
+        run: |
+          curl -X POST ${webhookUrl} \\
+            -H "Authorization: Bearer \${{ secrets.HYLIUS_API_TOKEN }}" \\
+            -H "Content-Type: application/json" \\
+            -d '{
+              "repo": "${repoName}",
+              "image": "${imageName}",
+              "sha": "'\${{ github.sha }}'",
+              "ref": "'\${{ github.ref }}'"
+            }'`;
+
+                return (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setGhSetupProjectId(null)}>
+                        <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" /></svg>
+                                        GitHub Actions Setup — {project.name}
+                                    </h2>
+                                    <p className="text-xs text-gray-500 mt-1">Add these secrets to your GitHub repo and copy the workflow below.</p>
+                                </div>
+                                <button onClick={() => setGhSetupProjectId(null)} className="text-gray-500 hover:text-white transition-colors text-xl">✕</button>
+                            </div>
+
+                            <div className="p-6 space-y-5">
+                                {/* Secrets */}
+                                <div>
+                                    <h3 className="text-sm font-semibold text-white mb-3">1. Add GitHub Repository Secrets</h3>
+                                    <div className="space-y-2">
+                                        <div className="bg-black border border-gray-800 rounded-xl p-3">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs font-mono text-yellow-400">HYLIUS_API_TOKEN</span>
+                                                <button
+                                                    onClick={() => { if (apiTokenValue) { navigator.clipboard.writeText(apiTokenValue); } }}
+                                                    className="text-xs text-gray-500 hover:text-white transition-colors"
+                                                >
+                                                    Copy
+                                                </button>
+                                            </div>
+                                            {apiTokenLoading ? (
+                                                <div className="text-xs text-gray-500">Loading token...</div>
+                                            ) : (
+                                                <div className="text-xs font-mono text-gray-300 break-all">{apiTokenValue || '—'}</div>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-600">Go to your GitHub repo → Settings → Secrets and variables → Actions → New repository secret.</p>
+                                    </div>
+                                </div>
+
+                                {/* Webhook URL */}
+                                <div>
+                                    <h3 className="text-sm font-semibold text-white mb-3">2. Webhook URL (for reference)</h3>
+                                    <div className="bg-black border border-gray-800 rounded-xl p-3 flex items-center justify-between">
+                                        <span className="text-xs font-mono text-blue-400 truncate">{webhookUrl}</span>
+                                        <button onClick={() => navigator.clipboard.writeText(webhookUrl)} className="text-xs text-gray-500 hover:text-white ml-3 shrink-0 transition-colors">Copy</button>
+                                    </div>
+                                </div>
+
+                                {/* Workflow YAML */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-semibold text-white">3. Add Workflow File</h3>
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(workflowYaml)}
+                                            className="text-xs text-gray-500 hover:text-white transition-colors px-2 py-1 rounded hover:bg-gray-800"
+                                        >
+                                            Copy YAML
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mb-2">Save this as <code className="text-gray-400">.github/workflows/deploy.yml</code> in your repository.</p>
+                                    <pre className="bg-black border border-gray-800 rounded-xl p-4 text-xs text-gray-300 font-mono overflow-auto max-h-80 whitespace-pre">{workflowYaml}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Delete Stack Modal */}
             {showDeleteModal && (
@@ -595,6 +940,147 @@ export default function StackDetailPage() {
                             </button>
                             <button onClick={confirmDeleteStack} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all text-white ${deleteWipe ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-500/20' : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20'}`}>
                                 {deleteWipe ? 'Wipe Everything' : 'Delete Stack'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Add Project Modal */}
+            {stack && (
+                <AddProjectModal
+                    isOpen={showAddProject}
+                    onClose={() => setShowAddProject(false)}
+                    serverId={stack.server.id}
+                    serverName={stack.server.name}
+                    onAdded={async (projectId, successData) => {
+                        if (projectId) {
+                            try {
+                                await fetch(`/api/stacks/${stack.id}/services`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify({ projectId }),
+                                });
+                                // Automatically save PR metadata so the banner shows up
+                                if (successData && successData.prUrl) {
+                                    setProvisionedPrs(prev => ({
+                                        ...prev,
+                                        [projectId]: {
+                                            name: 'New Service',
+                                            prUrl: successData.prUrl!,
+                                            token: successData.token,
+                                            webhookUrl: successData.webhookUrl
+                                        }
+                                    }));
+                                }
+                                fetchStack();
+                            } catch {
+                                alert('Project created but failed to link to stack.');
+                            }
+                        }
+                    }}
+                />
+            )}
+
+            {/* Add Database Modal */}
+            {showAddDatabase && stack && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget && !dbProvisioning) setShowAddDatabase(false); }}>
+                    <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+                            <h2 className="text-lg font-bold flex items-center gap-2">🗄️ Add Database</h2>
+                            {!dbProvisioning && (
+                                <button onClick={() => setShowAddDatabase(false)} className="text-gray-400 hover:text-white">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Engine</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(['POSTGRES', 'MYSQL', 'REDIS'] as const).map(eng => (
+                                        <button
+                                            key={eng}
+                                            onClick={() => setDbProvisionEngine(eng)}
+                                            disabled={dbProvisioning}
+                                            className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
+                                                dbProvisionEngine === eng
+                                                    ? 'border-violet-500 bg-violet-500/10 text-violet-300'
+                                                    : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+                                            }`}
+                                        >
+                                            <span className="text-xl">{getEngineIcon(eng)}</span>
+                                            <span className="text-xs font-medium">{eng}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Name</label>
+                                <input
+                                    type="text"
+                                    value={dbProvisionName}
+                                    onChange={e => setDbProvisionName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                                    disabled={dbProvisioning}
+                                    placeholder="e.g. my-app-db"
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 disabled:opacity-60"
+                                />
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    Container: <code className="text-gray-400">hylius-db-{dbProvisionName || 'my-app-db'}</code>
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Link to Service (Optional)</label>
+                                <select
+                                    value={dbProvisionLinkTo || ''}
+                                    onChange={e => setDbProvisionLinkTo(e.target.value || null)}
+                                    disabled={dbProvisioning}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 disabled:opacity-60"
+                                >
+                                    <option value="">Don't link to a service</option>
+                                    {stack.projects.map(p => (
+                                        <option key={p.id} value={p.id}>Link to {p.name}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    Automatically injects connection strings into the selected service.
+                                </p>
+                            </div>
+
+                            <div className="flex items-start gap-2 text-[10px] text-gray-500 bg-gray-800/50 rounded-lg p-3">
+                                <span className="flex-shrink-0">🔒</span>
+                                <span>
+                                    Password is auto-generated. Database binds to <code>127.0.0.1</code> only.
+                                    It will be available for you to link to services.
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 px-5 pb-5">
+                            <button
+                                onClick={() => setShowAddDatabase(false)}
+                                disabled={dbProvisioning}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-700 text-gray-400 hover:bg-gray-800 text-sm transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleProvisionDatabase}
+                                disabled={!dbProvisionName.trim() || dbProvisioning}
+                                className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(124,58,237,0.3)]"
+                            >
+                                {dbProvisioning ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Provisioning...
+                                    </>
+                                ) : (
+                                    <>🚀 Provision Database</>
+                                )}
                             </button>
                         </div>
                     </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/auth.provider';
 import { STACK_TEMPLATES } from './StackTemplates';
 import toast from 'react-hot-toast';
@@ -118,10 +119,11 @@ function getEngineIcon(engine: string) {
 
 export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateStackModalProps) {
     const { token } = useAuth();
+    const router = useRouter();
     const [step, setStep] = useState<Step>('template');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    
+
     // Creation Progress State
     const [isCreating, setIsCreating] = useState(false);
     const [creationProgress, setCreationProgress] = useState<{ step: string; status: 'pending' | 'active' | 'done' | 'error'; message?: string }[]>([]);
@@ -135,7 +137,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
     const [servers, setServers] = useState<Server[]>([]);
     const [existingProjects, setExistingProjects] = useState<Project[]>([]);
     const [existingDatabases, setExistingDatabases] = useState<Database[]>([]);
-    
+
     // GitHub lookup
     const [repos, setRepos] = useState<GitHubRepo[]>([]);
     const [githubConnected, setGithubConnected] = useState(false);
@@ -150,22 +152,22 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
     // Queued New Items
     const [newServices, setNewServices] = useState<NewService[]>([]);
     const [newDatabases, setNewDatabases] = useState<NewDatabase[]>([]);
-    
+
     // Wiring Suggestions
     const [suggestions, setSuggestions] = useState<WiringSuggestion[]>([]);
     const [appliedSuggestions, setAppliedSuggestions] = useState<boolean>(false);
-    
+
     // Service Forms
     const [serviceTab, setServiceTab] = useState<'existing' | 'new'>('existing');
     const [dbTab, setDbTab] = useState<'existing' | 'new'>('existing');
     const [repoMode, setRepoMode] = useState<'manual' | 'github'>('manual');
-    
+
     const [newServiceForm, setNewServiceForm] = useState<Partial<NewService>>({
         role: 'frontend',
         deployStrategy: 'dagger',
         branch: 'main',
     });
-    
+
     const [newDbForm, setNewDbForm] = useState<Partial<NewDatabase>>({
         engine: 'POSTGRES',
         version: '16'
@@ -189,7 +191,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             fetchServerResources();
         }
     }, [serverId]);
-    
+
     // Compute suggestions when entering connections step
     useEffect(() => {
         if (step === 'connections') {
@@ -225,7 +227,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             // Non-critical
         }
     }
-    
+
     async function fetchRepos() {
         setReposLoading(true);
         try {
@@ -248,18 +250,31 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
     }
 
     // Handlers
+    function selectRepoForService(repo: GitHubRepo) {
+        setNewServiceForm(f => ({
+            ...f,
+            repoUrl: repo.cloneUrl,
+            githubRepoFullName: repo.fullName,
+            githubInstallationId: installationId
+        }));
+        if (!newServiceForm.name) {
+            setNewServiceForm(f => ({ ...f, name: repo.name }));
+        }
+        setRepoMode('manual');
+    }
+
     function applyTemplate(templateId: string) {
         if (templateId === 'blank') {
             setStep('info');
             return;
         }
-        
+
         const template = STACK_TEMPLATES.find(t => t.id === templateId);
         if (!template) return;
-        
+
         // Auto-generate some names based on template
         const slug = name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'my-app';
-        
+
         const services = template.services.map(s => ({
             tempId: generateTempId(),
             name: `${slug}-${s.name}`,
@@ -271,7 +286,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             containerName: `${slug}-${s.name}`,
             envVars: {}
         }));
-        
+
         const dbs = template.databases.map(d => ({
             tempId: generateTempId(),
             name: `${slug}-${d.name}`,
@@ -279,16 +294,16 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             version: d.version,
             containerName: `${slug}-${d.name}`
         }));
-        
+
         setNewServices(services);
         setNewDatabases(dbs);
         setServiceTab('new');
         setDbTab('new');
-        
+
         if (services.length > 0) {
             setPublicEntryPoint(services[0].tempId);
         }
-        
+
         setStep('info');
     }
 
@@ -298,10 +313,10 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             toast.error('Name and repo URL are required');
             return;
         }
-        
+
         const stackSlug = name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'stack';
         const serviceSlug = newServiceForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-        
+
         const service: NewService = {
             tempId: generateTempId(),
             name: newServiceForm.name,
@@ -317,10 +332,10 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             containerName: `${stackSlug}-${serviceSlug}`,
             envVars: {}
         };
-        
+
         setNewServices(prev => [...prev, service]);
         if (!publicEntryPoint) setPublicEntryPoint(service.tempId);
-        
+
         // Reset form
         setNewServiceForm({
             role: 'frontend',
@@ -343,10 +358,10 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             toast.error('Name and engine are required');
             return;
         }
-        
+
         const stackSlug = name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : 'stack';
         const dbSlug = newDbForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-        
+
         const db: NewDatabase = {
             tempId: generateTempId(),
             name: newDbForm.name,
@@ -354,7 +369,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             version: newDbForm.version,
             containerName: `${stackSlug}-${dbSlug}`
         };
-        
+
         setNewDatabases(prev => [...prev, db]);
         setNewDbForm({ engine: 'POSTGRES', version: '16' });
     }
@@ -365,35 +380,55 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
 
     function computeSuggestions() {
         const suggs: WiringSuggestion[] = [];
-        
+
+        // Get the selected server's IP for building public sslip.io URLs
+        const selectedServer = servers.find(s => s.id === serverId);
+        const serverIpSlug = selectedServer ? selectedServer.ip.replace(/\./g, '-') : 'your-server-ip';
+
         const frontends = newServices.filter(s => s.role === 'frontend');
         const backends = newServices.filter(s => s.role === 'backend');
-        
+
         // Frontend -> Backend
         for (const fe of frontends) {
             for (const be of backends) {
+                // Server-side var: use internal Docker network hostname (fast, no DNS)
                 suggs.push({
                     fromTempId: fe.tempId,
                     toTempId: be.tempId,
                     envKey: 'API_URL',
-                    envValue: `http://${be.containerName}:3000`
+                    envValue: `http://${be.containerName}:8000`
                 });
+                // Public/browser var: use predictable sslip.io public domain
+                // (browsers can't resolve internal Docker hostnames)
+                const publicBackendUrl = `https://${be.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${serverIpSlug}.sslip.io`;
                 suggs.push({
                     fromTempId: fe.tempId,
                     toTempId: be.tempId,
                     envKey: 'NEXT_PUBLIC_API_URL',
-                    envValue: `http://${be.containerName}:3000`
+                    envValue: publicBackendUrl
+                });
+                suggs.push({
+                    fromTempId: fe.tempId,
+                    toTempId: be.tempId,
+                    envKey: 'VITE_API_URL',
+                    envValue: publicBackendUrl
+                });
+                suggs.push({
+                    fromTempId: fe.tempId,
+                    toTempId: be.tempId,
+                    envKey: 'REACT_APP_API_URL',
+                    envValue: publicBackendUrl
                 });
             }
         }
-        
+
         // Backend -> DB
         for (const be of backends) {
             for (const db of newDatabases) {
                 const port = db.engine === 'POSTGRES' ? 5432 : db.engine === 'MYSQL' ? 3306 : 6379;
                 const protocol = db.engine === 'POSTGRES' ? 'postgres' : db.engine === 'MYSQL' ? 'mysql' : 'redis';
                 const envKey = db.engine === 'REDIS' ? 'REDIS_URL' : 'DATABASE_URL';
-                
+
                 suggs.push({
                     fromTempId: be.tempId,
                     toTempId: `db:${db.tempId}`,
@@ -403,21 +438,21 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                 });
             }
         }
-        
+
         setSuggestions(suggs);
         setAppliedSuggestions(false);
     }
-    
+
     function applySuggestions() {
         setNewServices(prev => prev.map(service => {
             const serviceSuggs = suggestions.filter(s => s.fromTempId === service.tempId);
             if (serviceSuggs.length === 0) return service;
-            
+
             const newEnvVars = { ...service.envVars };
             serviceSuggs.forEach(sugg => {
                 newEnvVars[sugg.envKey] = sugg.envValue;
             });
-            
+
             return { ...service, envVars: newEnvVars };
         }));
         setAppliedSuggestions(true);
@@ -427,7 +462,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
     async function handleCreate() {
         setError('');
         setIsCreating(true);
-        
+
         // Initialize progress
         type ProgressStep = { step: string; status: 'pending' | 'active' | 'done' | 'error'; message?: string };
         const prog: ProgressStep[] = [
@@ -437,8 +472,8 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
         if (newServices.length > 0) prog.push({ step: 'services', status: 'pending', message: `Registering ${newServices.length} service(s)...` });
         prog.push({ step: 'link', status: 'pending', message: 'Finalising connections...' });
         setCreationProgress(prog);
-        
-        const updateProg = (stepKey: string, status: 'active'|'done'|'error') => {
+
+        const updateProg = (stepKey: string, status: 'active' | 'done' | 'error') => {
             setCreationProgress(prev => prev.map(p => p.step === stepKey ? { ...p, status } : p));
         };
 
@@ -453,7 +488,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             if (!stackRes.ok) throw new Error((await stackRes.json()).error || 'Failed to create stack');
             const stack = await stackRes.json();
             updateProg('stack', 'done');
-            
+
             // Link existing items first (fast)
             for (const projectId of selectedProjects) {
                 await fetch(`/api/stacks/${stack.id}/services`, {
@@ -471,7 +506,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             }
 
             // Map to store created DB IDs for linking
-            const dbMap: Record<string, string> = {}; 
+            const dbMap: Record<string, string> = {};
             const projectMap: Record<string, string> = {};
 
             // 2. Provision New Databases (slow)
@@ -481,9 +516,9 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                     const dbRes = await fetch(`/api/stacks/${stack.id}/databases/provision`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({ 
-                            name: db.name, 
-                            engine: db.engine, 
+                        body: JSON.stringify({
+                            name: db.name,
+                            engine: db.engine,
                             version: db.version
                         }),
                     });
@@ -495,13 +530,14 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             }
 
             // 3. Create New Services
+            const provisionedPrUrls: Record<string, { name: string; prUrl: string; token: string; webhookUrl: string }> = {};
             if (newServices.length > 0) {
                 updateProg('services', 'active');
                 for (const service of newServices) {
                     const svcRes = await fetch('/api/projects', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({ 
+                        body: JSON.stringify({
                             name: service.name,
                             repoUrl: service.repoUrl,
                             branch: service.branch,
@@ -519,14 +555,38 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                     if (!svcRes.ok) throw new Error((await svcRes.json()).error || `Failed to create service ${service.name}`);
                     const svcData = await svcRes.json();
                     projectMap[service.tempId] = svcData.id;
-                    
+
+                    // Capture PR URL + credentials if a Dagger/GHCR workflow was provisioned
+                    if (svcData.prUrl || service.deployStrategy === 'dagger' || service.deployStrategy === 'ghcr-pull') {
+                        // Create a per-service API token for GitHub Actions
+                        let deployToken = '';
+                        try {
+                            const tokenRes = await fetch('/api/tokens', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                body: JSON.stringify({ name: `GitHub Actions - ${service.name}` }),
+                            });
+                            if (tokenRes.ok) {
+                                const tokenData = await tokenRes.json();
+                                deployToken = tokenData.token || tokenData.plainToken || '';
+                            }
+                        } catch { /* non-fatal */ }
+
+                        provisionedPrUrls[svcData.id] = {
+                            name: service.name,
+                            prUrl: svcData.prUrl ?? '',
+                            token: deployToken,
+                            webhookUrl: `${window.location.origin}/api/webhooks/deploy-complete`,
+                        };
+                    }
+
                     // Link to stack
                     await fetch(`/api/stacks/${stack.id}/services`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                         body: JSON.stringify({ projectId: svcData.id }),
                     });
-                    
+
                     // Save Env Vars
                     if (Object.keys(service.envVars).length > 0) {
                         // Strip placeholder DB URLs as real ones will be injected if linked
@@ -534,7 +594,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                         Object.keys(varsToSave).forEach(k => {
                             if (varsToSave[k].includes('user:pass@')) delete varsToSave[k];
                         });
-                        
+
                         await fetch(`/api/projects/${svcData.id}/env`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -544,7 +604,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                 }
                 updateProg('services', 'done');
             }
-            
+
             // 4. Link new DBs to new Projects based on suggestions
             updateProg('link', 'active');
             for (const sugg of suggestions) {
@@ -568,10 +628,16 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
             updateProg('link', 'done');
 
             setTimeout(() => {
+                // Store provisioned PR data so the stack detail page can show the banner
+                if (Object.keys(provisionedPrUrls ?? {}).length > 0) {
+                    localStorage.setItem(`hylius_stack_prs_${stack.id}`, JSON.stringify(provisionedPrUrls));
+                }
                 onCreated?.(stack.id);
+                onClose();
                 resetForm();
+                router.push(`/stacks/${stack.id}`);
             }, 1000);
-            
+
         } catch (err: unknown) {
             updateProg('stack', 'error');
             updateProg('db', 'error');
@@ -639,9 +705,8 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                             {STEPS.map((s, i) => (
                                 <div
                                     key={s}
-                                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                                        i <= stepIndex ? 'bg-blue-500' : 'bg-gray-800'
-                                    }`}
+                                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= stepIndex ? 'bg-blue-500' : 'bg-gray-800'
+                                        }`}
                                 />
                             ))}
                         </div>
@@ -776,15 +841,15 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
 
                                     <form onSubmit={addQueuedService} className="border border-gray-800 p-4 rounded-xl space-y-4 bg-black/30">
                                         <h4 className="text-sm font-medium text-white">Define New Service</h4>
-                                        
+
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Service Name</label>
-                                                <input value={newServiceForm.name || ''} onChange={e => setNewServiceForm(f => ({...f, name: e.target.value}))} placeholder="api" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
+                                                <input value={newServiceForm.name || ''} onChange={e => setNewServiceForm(f => ({ ...f, name: e.target.value }))} placeholder="api" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Role</label>
-                                                <select value={newServiceForm.role || 'frontend'} onChange={e => setNewServiceForm(f => ({...f, role: e.target.value as any}))} className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm">
+                                                <select value={newServiceForm.role || 'frontend'} onChange={e => setNewServiceForm(f => ({ ...f, role: e.target.value as any }))} className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm">
                                                     <option value="frontend">Frontend</option>
                                                     <option value="backend">Backend</option>
                                                     <option value="worker">Worker</option>
@@ -793,12 +858,83 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                                                 </select>
                                             </div>
                                         </div>
-                                        
+
                                         <div>
-                                            <label className="block text-xs text-gray-500 mb-1">Repository URL</label>
-                                            <input value={newServiceForm.repoUrl || ''} onChange={e => setNewServiceForm(f => ({...f, repoUrl: e.target.value}))} placeholder="https://github.com/org/repo.git" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
+                                            <label className="block text-xs text-gray-500 mb-1">Deployment Strategy</label>
+                                            <select
+                                                value={newServiceForm.deployStrategy || 'dagger'}
+                                                onChange={e => setNewServiceForm(f => ({ ...f, deployStrategy: e.target.value as any }))}
+                                                className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm"
+                                            >
+                                                <option value="dagger">⚡ Dagger (GitHub Actions → GHCR)</option>
+                                                <option value="ghcr-pull">📦 GHCR Pull (CI/CD pre-built image)</option>
+                                                <option value="railpack">🏗️ Railpack (auto-build on server)</option>
+                                                <option value="nixpacks">🏗️ Nixpacks (auto-build on server)</option>
+                                                <option value="compose-server">🐳 Docker Compose (build on server)</option>
+                                                <option value="compose-registry">🐳 Compose + Registry (pull &amp; run)</option>
+                                            </select>
+                                            {(newServiceForm.deployStrategy === 'dagger' || newServiceForm.deployStrategy === 'ghcr-pull') && (
+                                                <p className="text-xs text-yellow-500/80 mt-1.5 flex items-center gap-1">
+                                                    <span>⚠️</span> GitHub Actions workflow required. Setup instructions will appear on the stack page after creation.
+                                                </p>
+                                            )}
                                         </div>
-                                        
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="block text-xs text-gray-500">Repository</label>
+                                                <div className="flex gap-1 bg-black/50 p-1 rounded-lg border border-gray-800">
+                                                    <button type="button" onClick={() => setRepoMode('manual')} className={`px-2 py-1 text-xs rounded transition-colors ${repoMode === 'manual' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>Manual</button>
+                                                    <button type="button" onClick={() => setRepoMode('github')} className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${repoMode === 'github' ? 'bg-gray-800 text-white' : 'text-gray-500'}`}>
+                                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" /></svg>
+                                                        GitHub
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {repoMode === 'manual' ? (
+                                                <input
+                                                    value={newServiceForm.repoUrl || ''}
+                                                    onChange={e => {
+                                                        setNewServiceForm(f => ({ ...f, repoUrl: e.target.value }));
+                                                        if (newServiceForm.githubRepoFullName && !e.target.value.includes(newServiceForm.githubRepoFullName)) {
+                                                            setNewServiceForm(f => ({ ...f, githubRepoFullName: undefined, githubInstallationId: undefined }));
+                                                        }
+                                                    }}
+                                                    placeholder="https://github.com/org/repo.git"
+                                                    className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm"
+                                                    required={repoMode === 'manual'}
+                                                />
+                                            ) : (
+                                                <div className="bg-black border border-gray-800 rounded p-3">
+                                                    {reposLoading ? (
+                                                        <div className="text-gray-500 text-sm text-center py-4">Loading repos...</div>
+                                                    ) : !githubConnected ? (
+                                                        <div className="text-center py-4">
+                                                            <p className="text-gray-400 text-sm mb-3">GitHub App not connected yet</p>
+                                                            <a href={`https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'hylius-platform'}/installations/new`} className="inline-block px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded text-sm transition-colors" target="_blank" rel="noopener noreferrer">Connect GitHub</a>
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <input type="text" placeholder="Search repos..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-gray-900 border border-gray-800 rounded p-2 text-white text-sm mb-2" />
+                                                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                                                                {repos.filter(r => (r.fullName || '').toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                                                                    <div className="text-gray-500 text-sm text-center py-4">No repos found</div>
+                                                                ) : (
+                                                                    repos.filter(r => (r.fullName || '').toLowerCase().includes(searchQuery.toLowerCase())).map(repo => (
+                                                                        <button key={repo.id} type="button" onClick={() => selectRepoForService(repo)} className="w-full text-left p-2 rounded hover:bg-gray-800 text-sm text-gray-300 transition-colors flex items-center gap-2">
+                                                                            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                                                                            {repo.fullName || repo.name}
+                                                                        </button>
+                                                                    ))
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <button type="submit" className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors border border-gray-700">
                                             + Queue Service
                                         </button>
@@ -855,11 +991,11 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Database Name</label>
-                                                <input value={newDbForm.name || ''} onChange={e => setNewDbForm(f => ({...f, name: e.target.value}))} placeholder="db" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
+                                                <input value={newDbForm.name || ''} onChange={e => setNewDbForm(f => ({ ...f, name: e.target.value }))} placeholder="db" className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm" required />
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-gray-500 mb-1">Engine</label>
-                                                <select value={newDbForm.engine || 'POSTGRES'} onChange={e => setNewDbForm(f => ({...f, engine: e.target.value as any}))} className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm">
+                                                <select value={newDbForm.engine || 'POSTGRES'} onChange={e => setNewDbForm(f => ({ ...f, engine: e.target.value as any }))} className="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm">
                                                     <option value="POSTGRES">PostgreSQL</option>
                                                     <option value="MYSQL">MySQL</option>
                                                     <option value="REDIS">Redis</option>
@@ -876,7 +1012,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                     ) : step === 'connections' ? (
                         <div className="space-y-4">
                             <p className="text-sm text-gray-400">We've generated predictable internal hostnames for your new services. Review the suggested environment variables below.</p>
-                            
+
                             {suggestions.length === 0 ? (
                                 <div className="text-center py-8 text-gray-500 text-sm border border-gray-800 rounded-xl">
                                     No clear wiring suggestions found based on selected roles.
@@ -886,7 +1022,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                                     {newServices.map(svc => {
                                         const svcSuggs = suggestions.filter(s => s.fromTempId === svc.tempId);
                                         if (svcSuggs.length === 0) return null;
-                                        
+
                                         return (
                                             <div key={svc.tempId} className="border border-gray-800 rounded-xl overflow-hidden">
                                                 <div className="bg-gray-800/50 p-2.5 text-sm font-medium text-white border-b border-gray-800">
@@ -903,7 +1039,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                                             </div>
                                         );
                                     })}
-                                    
+
                                     {!appliedSuggestions ? (
                                         <button onClick={applySuggestions} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">
                                             Apply Suggested Variables
@@ -965,7 +1101,7 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                                     </div>
                                 </div>
                             </div>
-                            
+
                             {newDatabases.length > 0 && (
                                 <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500/90 p-3 rounded-lg text-xs flex gap-2">
                                     <span className="text-base">⚠️</span>

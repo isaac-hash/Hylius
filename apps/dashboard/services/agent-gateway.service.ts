@@ -240,4 +240,6 @@ class AgentGatewayService {
 }
 
 // Singleton — shared across the whole server process
-export const agentGateway = new AgentGatewayService();
+const globalForAgent = global as unknown as { agentGateway: AgentGatewayService };
+export const agentGateway = globalForAgent.agentGateway || new AgentGatewayService();
+if (process.env.NODE_ENV !== 'production') globalForAgent.agentGateway = agentGateway;

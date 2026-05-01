@@ -41,6 +41,11 @@ export default function StacksPage() {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
 
+    // Delete state
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteWipe, setDeleteWipe] = useState(false);
+    const [stackToDelete, setStackToDelete] = useState<{id: string, name: string} | null>(null);
+
     const fetchStacks = useCallback(async () => {
         try {
             const res = await fetch('/api/stacks', {
@@ -59,15 +64,22 @@ export default function StacksPage() {
         if (token) fetchStacks();
     }, [token, fetchStacks]);
 
-    async function handleDelete(stackId: string, stackName: string) {
-        if (!confirm(`Delete stack "${stackName}"? This will unlink all services but not destroy them.`)) return;
+    function openDeleteModal(stackId: string, stackName: string) {
+        setStackToDelete({ id: stackId, name: stackName });
+        setDeleteWipe(false);
+        setShowDeleteModal(true);
+    }
 
+    async function confirmDeleteStack() {
+        if (!stackToDelete) return;
         try {
-            await fetch(`/api/stacks/${stackId}`, {
+            await fetch(`/api/stacks/${stackToDelete.id}?wipe=${deleteWipe}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` },
             });
-            setStacks(prev => prev.filter(s => s.id !== stackId));
+            setStacks(prev => prev.filter(s => s.id !== stackToDelete.id));
+            setShowDeleteModal(false);
+            setStackToDelete(null);
         } catch {
             alert('Failed to delete stack');
         }
@@ -185,7 +197,7 @@ export default function StacksPage() {
                                                 View
                                             </Link>
                                             <button
-                                                onClick={() => handleDelete(stack.id, stack.name)}
+                                                onClick={() => openDeleteModal(stack.id, stack.name)}
                                                 className="text-xs text-gray-500 hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
                                             >
                                                 Delete
@@ -204,6 +216,47 @@ export default function StacksPage() {
                 onClose={() => setShowCreate(false)}
                 onCreated={() => fetchStacks()}
             />
+
+            {/* Delete Stack Modal */}
+            {showDeleteModal && stackToDelete && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                        <h2 className="text-xl font-bold text-white mb-2">Delete Stack: {stackToDelete.name}</h2>
+                        <p className="text-sm text-gray-400 mb-6">How do you want to handle the resources inside this stack?</p>
+
+                        <div className="space-y-3 mb-6">
+                            <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${!deleteWipe ? 'border-blue-500 bg-blue-500/10' : 'border-gray-800 bg-black/50 hover:border-gray-600'}`}>
+                                <div className="flex items-center gap-3">
+                                    <input type="radio" checked={!deleteWipe} onChange={() => setDeleteWipe(false)} className="text-blue-500 focus:ring-blue-500 bg-black border-gray-700" />
+                                    <div>
+                                        <div className="text-sm font-medium text-white">Unlink Only (Safe)</div>
+                                        <div className="text-xs text-gray-400 mt-0.5">Stack is deleted, but services and databases keep running normally.</div>
+                                    </div>
+                                </div>
+                            </label>
+
+                            <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${deleteWipe ? 'border-red-500 bg-red-500/10' : 'border-gray-800 bg-black/50 hover:border-gray-600'}`}>
+                                <div className="flex items-center gap-3">
+                                    <input type="radio" checked={deleteWipe} onChange={() => setDeleteWipe(true)} className="text-red-500 focus:ring-red-500 bg-black border-gray-700" />
+                                    <div>
+                                        <div className="text-sm font-medium text-red-400">Complete Wipe (Destructive)</div>
+                                        <div className="text-xs text-red-400/70 mt-0.5">Stack, all projects, and all databases are permanently destroyed and pruned from the server.</div>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
+                            <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+                                Cancel
+                            </button>
+                            <button onClick={confirmDeleteStack} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all text-white ${deleteWipe ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-500/20' : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20'}`}>
+                                {deleteWipe ? 'Wipe Everything' : 'Delete Stack'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthGuard>
     );
 }

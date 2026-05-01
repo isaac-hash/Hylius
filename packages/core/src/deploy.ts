@@ -470,7 +470,24 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const containerName = getContainerName(project);
 
             log(`Pulling pre-built image: ${image}`);
-            await execStreamOrThrow(client, `docker pull ${image}`, 'Docker pull', onLog);
+            let pullSuccess = false;
+            let pullError = '';
+            for (let i = 1; i <= 3; i++) {
+                try {
+                    await execStreamOrThrow(client, `docker pull ${image}`, 'Docker pull', onLog);
+                    pullSuccess = true;
+                    break;
+                } catch (err: any) {
+                    pullError = err.message || String(err);
+                    if (i < 3) {
+                        log(`Warning: Docker pull failed on attempt ${i} (often a containerd race condition). Retrying in 3 seconds...`);
+                        await new Promise(res => setTimeout(res, 3000));
+                    }
+                }
+            }
+            if (!pullSuccess) {
+                throw new Error(`Failed to pull image after 3 attempts: ${pullError}`);
+            }
             log(`Checking for existing container port...`);
             let existingPort = '';
             try {
