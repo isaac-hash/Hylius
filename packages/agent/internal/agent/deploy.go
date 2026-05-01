@@ -147,6 +147,15 @@ func (a *Agent) executeDeploy(commandID string, p *deployPayload) deployResult {
 	// Symlink
 	runLocal(fmt.Sprintf("ln -sfn %s %s", releasePath, currentPath), nil)
 
+	// Open UFW firewall for the assigned port (matches SSH deploy path behaviour)
+	if finalURL != "" {
+		port := extractPort(finalURL)
+		if port != "" && port != "80" && port != "443" {
+			log(fmt.Sprintf("Opening UFW firewall for port %s...\n", port))
+			runLocal(fmt.Sprintf("ufw allow %s/tcp > /dev/null 2>&1 || true", port), nil)
+		}
+	}
+
 	// Configure Caddy if domains provided
 	if len(p.Domains) > 0 && finalURL != "" {
 		appPort := extractPort(finalURL)

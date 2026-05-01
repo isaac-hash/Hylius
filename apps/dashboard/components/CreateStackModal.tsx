@@ -613,15 +613,11 @@ export default function CreateStackModal({ isOpen, onClose, onCreated }: CreateS
                     const dbId = dbMap[dbTempId];
                     const projectId = projectMap[sugg.fromTempId];
                     if (dbId && projectId) {
-                        // The endpoint does not currently support direct linking after provision,
-                        // so we need to rely on the backend's auto-inject logic or do it manually.
-                        // Actually our provision endpoint accepts linkToProjectIds! But we didn't have the project IDs yet.
-                        // So we need to call a link endpoint or just update the DB record if we had one.
-                        // Since we don't have a direct link DB to Project endpoint exposed to frontend, 
-                        // we should have passed linkToProjectIds during provision.
-                        // Wait, we can't because projects are created *after* DBs (to have env vars ready).
-                        // Let's create an endpoint or just skip for now and manually tell user it's a WIP, 
-                        // or we rely on the backend.
+                        await fetch(`/api/databases/${dbId}/link`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ projectId }),
+                        });
                     }
                 }
             }
