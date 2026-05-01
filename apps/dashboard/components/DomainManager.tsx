@@ -91,6 +91,7 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
     const handleVerify = async (hostname: string) => {
         if (!token) return;
         setVerifyingDomain(hostname);
+        setAddError('');
 
         try {
             const res = await fetch(`/api/projects/${projectId}/domains/verify`, {
@@ -106,13 +107,18 @@ export default function DomainManager({ projectId, serverIp, token }: DomainMana
 
             if (data.verified) {
                 setDnsInstructions(null);
+            } else if (data.error) {
+                setAddError(data.error);
+                if (data.dnsInstructions) {
+                    setDnsInstructions({ hostname: data.dnsInstructions.name, ip: data.dnsInstructions.value });
+                }
             } else if (data.dnsInstructions) {
                 setDnsInstructions({ hostname: data.dnsInstructions.name, ip: data.dnsInstructions.value });
             }
 
             fetchDomains();
-        } catch {
-            // Silently fail
+        } catch (err: any) {
+            setAddError(err.message || 'Failed to verify domain');
         } finally {
             setVerifyingDomain(null);
         }
