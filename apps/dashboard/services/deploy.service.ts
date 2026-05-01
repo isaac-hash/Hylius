@@ -347,7 +347,7 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         server: serverConfig,
         project: projectConfig,
         trigger,
-        domains: domainConfigs,
+        domains: domainConfigs.length > 0 ? domainConfigs : undefined,
         onLog: (chunk) => log(chunk),
         executionMode: useAgent ? 'agent' : 'ssh',
         agent: useAgent ? agentGateway.getAgentConfig(project.server.id) : undefined,
@@ -486,8 +486,10 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
             // 1 & 2. Kill container and remove directory
             await agent.streamCommand('exec', { cmd: `docker rm -f ${containerName} > /dev/null 2>&1 || true && rm -rf ${environmentPath} > /dev/null 2>&1 || true` }, () => { });
 
-            // 3. Update Caddy
-            await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => { });
+            // 3. Update Caddy (only if there are domains to configure)
+            if (domainConfigs.length > 0) {
+                await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => { });
+            }
 
         } else {
             console.log(`[SSH] Destroying preview deployment via SSH...`);
@@ -516,8 +518,10 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
                 // 2. Remove the preview directory
                 await client.exec(`rm -rf ${environmentPath} > /dev/null 2>&1 || true`);
 
-                // 3. Update Caddy
-                await configureCaddy(client, { domains: domainConfigs, tlsMode: 'production' });
+                // 3. Update Caddy (only if there are domains to configure)
+                if (domainConfigs.length > 0) {
+                    await configureCaddy(client, { domains: domainConfigs, tlsMode: 'production' });
+                }
             } finally {
                 client.end();
             }
