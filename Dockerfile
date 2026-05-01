@@ -9,7 +9,6 @@ WORKDIR /app
 # Install all dependencies (workspaces need all package.json files first)
 COPY package*.json ./
 COPY apps/dashboard/package.json ./apps/dashboard/
-COPY apps/docs/package.json ./apps/docs/
 COPY packages/cli/package.json ./packages/cli/
 COPY packages/core/package.json ./packages/core/
 RUN npm ci
@@ -48,7 +47,6 @@ WORKDIR /app
 # Install production dependencies only (workspaces)
 COPY package*.json ./
 COPY apps/dashboard/package.json ./apps/dashboard/
-COPY apps/docs/package.json ./apps/docs/
 COPY packages/cli/package.json ./packages/cli/
 COPY packages/core/package.json ./packages/core/
 RUN npm ci --omit=dev
