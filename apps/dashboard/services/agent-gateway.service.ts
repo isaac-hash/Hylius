@@ -48,7 +48,8 @@ class AgentGatewayService {
         this.wss = wss;
 
         wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
-            console.log('[AgentGateway] New connection from', req.socket.remoteAddress);
+            const realIp = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.socket.remoteAddress;
+            console.log('[AgentGateway] New connection from', realIp);
             let agent: ConnectedAgent | null = null;
 
             ws.on('message', async (raw: Buffer) => {
@@ -65,7 +66,7 @@ class AgentGatewayService {
                         where: { agentToken: msg.token },
                     });
                     if (!server) {
-                        console.warn('[AgentGateway] Invalid token from', req.socket.remoteAddress);
+                        console.warn(`[AgentGateway] Invalid token from ${realIp} | serverId=${msg.serverId} | token=${(msg.token || '').slice(0, 20)}...`);
                         ws.close(4001, 'Invalid token');
                         return;
                     }
