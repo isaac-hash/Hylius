@@ -37,6 +37,27 @@ export async function verifyDns(hostname: string, expectedIp: string): Promise<{
     }
 }
 
+// ─── Read Existing Domains from VPS ─────────────────────────
+
+/**
+ * Parse existing domain configurations from the Caddyfile on the remote server.
+ * Returns an array of { hostname, upstreamPort } for each domain block found.
+ */
+export async function readExistingDomains(client: SSHClient): Promise<DomainConfig[]> {
+    const { stdout, code } = await client.exec(`cat ${CADDYFILE_PATH} 2>/dev/null`);
+    if (code !== 0 || !stdout.trim()) return [];
+
+    const domains: DomainConfig[] = [];
+    const blockRegex = /^(\S+)\s*\{[^}]*reverse_proxy\s+localhost:(\d+)/gm;
+    let match;
+    while ((match = blockRegex.exec(stdout)) !== null) {
+        // Skip comment-only lines or header markers
+        if (match[1].startsWith('#')) continue;
+        domains.push({ hostname: match[1], upstreamPort: match[2] });
+    }
+    return domains;
+}
+
 // ─── Caddyfile Generation ───────────────────────────────────
 
 /**
@@ -189,7 +210,12 @@ export async function ensureCaddyRunning(
 
 /**
  * Write/update the Caddyfile on the remote server and reload Caddy.
- * This replaces the entire Caddyfile with the provided domain set.
+ *
+ * MERGE-AWARE: Reads the existing Caddyfile first. Any domains already on the
+ * VPS that are NOT in the incoming list are preserved. This prevents accidental
+ * wipes when the dashboard DB has lost domain records (e.g. after a DB migration).
+ *
+ * To explicitly remove a domain, use removeDomainFromCaddy() instead.
  */
 export async function configureCaddy(
     client: SSHClient,
@@ -202,14 +228,37 @@ export async function configureCaddy(
     // Ensure Caddy is running first
     await ensureCaddyRunning(client, onLog);
 
-    // Generate the new Caddyfile
-    const caddyfileContent = generateCaddyfile(options.domains, tlsMode);
+    // Read existing domains from the VPS Caddyfile
+    const existingDomains = await readExistingDomains(client);
 
-    // Write it to the host (escape for shell)
-    const escaped = caddyfileContent.replace(/'/g, "'\\''");
+    // Build a set of hostnames we're explicitly configuring
+    const incomingHostnames = new Set(options.domains.map(d => d.hostname));
+
+    // Preserve VPS domains that are NOT in the incoming list
+    // (these belong to other projects, or the DB simply lost track of them)
+    const preservedDomains = existingDomains.filter(d => !incomingHostnames.has(d.hostname));
+
+    if (preservedDomains.length > 0) {
+        log(`Preserving ${preservedDomains.length} existing domain(s) from VPS: ${preservedDomains.map(d => d.hostname).join(', ')}`);
+    }
+
+    // Merge: incoming domains take priority, preserved domains are appended
+    const mergedDomains = [...options.domains, ...preservedDomains];
+
+    // Safety guard: if the incoming list is empty AND there are existing domains,
+    // skip the Caddyfile write entirely to prevent accidental wipes
+    if (options.domains.length === 0 && existingDomains.length > 0) {
+        log(`Skipping Caddyfile update — incoming domain list is empty but ${existingDomains.length} domain(s) already configured on VPS. Use removeDomainFromCaddy() to explicitly remove domains.`);
+        return;
+    }
+
+    // Generate the new Caddyfile
+    const caddyfileContent = generateCaddyfile(mergedDomains, tlsMode);
+
+    // Write it to the host
     await client.exec(`cat > ${CADDYFILE_PATH} << 'HYLIUS_EOF'\n${caddyfileContent}HYLIUS_EOF`);
 
-    log(`Caddyfile updated with ${options.domains.length} domain(s).`);
+    log(`Caddyfile updated with ${mergedDomains.length} domain(s) (${options.domains.length} configured + ${preservedDomains.length} preserved).`);
 
     // Reload Caddy config (graceful reload, no downtime)
     const { code: reloadCode, stderr } = await client.exec(
@@ -228,6 +277,7 @@ export async function configureCaddy(
 /**
  * Remove a specific domain from the Caddyfile.
  * Reads the current Caddyfile, filters out the domain block, and rewrites it.
+ * This is the ONLY safe way to remove a domain — configureCaddy() preserves unknown domains.
  */
 export async function removeDomainFromCaddy(
     client: SSHClient,
@@ -240,8 +290,28 @@ export async function removeDomainFromCaddy(
 
     log(`Removing domain ${hostname} from Caddy...`);
 
-    // Rewrite the Caddyfile with the remaining domains (excluding the removed one)
-    await configureCaddy(client, { domains: remainingDomains, tlsMode }, onLog);
+    // Ensure Caddy is running
+    await ensureCaddyRunning(client, onLog);
+
+    // Read ALL domains currently on the VPS
+    const existingDomains = await readExistingDomains(client);
+
+    // Filter out the domain being removed
+    const filteredDomains = existingDomains.filter(d => d.hostname !== hostname);
+
+    // Generate the new Caddyfile from the filtered list
+    const caddyfileContent = generateCaddyfile(filteredDomains, tlsMode);
+    await client.exec(`cat > ${CADDYFILE_PATH} << 'HYLIUS_EOF'\n${caddyfileContent}HYLIUS_EOF`);
+
+    log(`Caddyfile updated — removed ${hostname}, ${filteredDomains.length} domain(s) remaining.`);
+
+    // Reload Caddy
+    const { code: reloadCode, stderr } = await client.exec(
+        `docker exec ${CADDY_CONTAINER} caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`
+    );
+    if (reloadCode !== 0) {
+        throw new Error(`Caddy reload failed: ${stderr}`);
+    }
 
     log(`Domain ${hostname} removed.`);
 }
