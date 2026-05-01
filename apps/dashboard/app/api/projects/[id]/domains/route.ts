@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../services/prisma';
 import { requireAuth } from '../../../../../services/auth.service';
 import { decrypt } from '../../../../../services/crypto.service';
+import { agentGateway } from '../../../../../services/agent-gateway.service';
 // @ts-ignore - Local workspace package
-import { ServerConfig, setupDomain, configureCaddy, DomainConfig, SSHClient } from '@hylius/core';
+import { ServerConfig, setupDomain, configureCaddy, DomainConfig, SSHClient, verifyDns } from '@hylius/core';
 
 // ─── GET: List domains for a project ────────────────────────
 
@@ -81,20 +82,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
         const serverIp = project.server.ip;
 
-        // Build server config for SSH
-        let privateKey = '';
-        if (project.server.privateKeyEncrypted && project.server.keyIv) {
-            privateKey = decrypt(project.server.privateKeyEncrypted, project.server.keyIv);
-        }
-
-        const serverConfig: ServerConfig = {
-            host: serverIp,
-            port: project.server.port,
-            username: project.server.username,
-            privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
-            password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
-        };
-
         // Determine upstream port from the latest deployment URL or default to 3000
         let upstreamPort = '3000';
         if (project.deployments[0]?.deployUrl) {
@@ -125,14 +112,61 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
         const tlsMode = process.env.HYLIUS_TLS_MODE === 'internal' ? 'internal' as const : 'production' as const;
 
-        // Attempt full setup (DNS verify + Caddy configure)
-        const result = await setupDomain(
-            serverConfig,
-            allDomains,
-            cleanHostname,
-            serverIp,
-            { tlsMode }
-        );
+        // Check if we should use the Agent or SSH
+        const server = project.server as any;
+        const useAgent = server.connectionMode === 'AGENT'
+            && agentGateway.isConnected(server.id);
+
+        let result: { success: boolean; sslProvisioned?: boolean; error?: string };
+
+        if (useAgent) {
+            // Agent mode: verify DNS first, then send configure-caddy command
+            const dnsResult = await verifyDns(cleanHostname, serverIp);
+
+            if (!dnsResult.verified) {
+                const resolvedStr = dnsResult.resolvedIps.length > 0
+                    ? `Resolved to: ${dnsResult.resolvedIps.join(', ')}`
+                    : 'No A records found';
+                result = {
+                    success: false,
+                    sslProvisioned: false,
+                    error: `DNS verification failed. ${resolvedStr}. Expected: ${serverIp}. Please add an A record pointing ${cleanHostname} to ${serverIp}.`,
+                };
+            } else {
+                try {
+                    const agent = agentGateway.getAgentConfig(server.id);
+                    await agent.sendCommand('configure-caddy', {
+                        domains: allDomains,
+                        tlsMode,
+                    });
+                    result = { success: true, sslProvisioned: tlsMode === 'production' };
+                } catch (agentErr: any) {
+                    result = { success: false, error: agentErr.message };
+                }
+            }
+        } else {
+            // SSH mode: use the original setupDomain flow
+            let privateKey = '';
+            if (server.privateKeyEncrypted && server.keyIv) {
+                privateKey = decrypt(server.privateKeyEncrypted, server.keyIv);
+            }
+
+            const serverConfig: ServerConfig = {
+                host: serverIp,
+                port: server.port,
+                username: server.username,
+                privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
+            };
+
+            result = await setupDomain(
+                serverConfig,
+                allDomains,
+                cleanHostname,
+                serverIp,
+                { tlsMode }
+            );
+        }
 
         if (result.success) {
             await prisma.domain.update({
@@ -207,19 +241,6 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
         // Remove from Caddy on the VPS
         try {
-            let privateKey = '';
-            if (domain.project.server.privateKeyEncrypted && domain.project.server.keyIv) {
-                privateKey = decrypt(domain.project.server.privateKeyEncrypted, domain.project.server.keyIv);
-            }
-
-            const serverConfig: ServerConfig = {
-                host: domain.project.server.ip,
-                port: domain.project.server.port,
-                username: domain.project.server.username,
-                privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
-                password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
-            };
-
             // Build remaining domain list (exclude the one being removed)
             let upstreamPort = '3000';
             if (domain.project.deployments[0]?.deployUrl) {
@@ -238,12 +259,40 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
             const tlsMode = process.env.HYLIUS_TLS_MODE === 'internal' ? 'internal' as const : 'production' as const;
 
-            const client = new SSHClient(serverConfig);
-            await client.connect();
-            await configureCaddy(client, { domains: remainingDomains, tlsMode });
-            client.end();
-        } catch (sshError: any) {
-            console.warn(`Caddy cleanup failed for ${hostname}: ${sshError.message}`);
+            // Check if we should use the Agent or SSH
+            const server = domain.project.server as any;
+            const useAgent = server.connectionMode === 'AGENT'
+                && agentGateway.isConnected(server.id);
+
+            if (useAgent) {
+                // Route through the VPS agent
+                const agent = agentGateway.getAgentConfig(server.id);
+                await agent.sendCommand('configure-caddy', {
+                    domains: remainingDomains,
+                    tlsMode,
+                });
+            } else {
+                // Fall back to direct SSH
+                let privateKey = '';
+                if (server.privateKeyEncrypted && server.keyIv) {
+                    privateKey = decrypt(server.privateKeyEncrypted, server.keyIv);
+                }
+
+                const serverConfig: ServerConfig = {
+                    host: server.ip,
+                    port: server.port,
+                    username: server.username,
+                    privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                    password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
+                };
+
+                const client = new SSHClient(serverConfig);
+                await client.connect();
+                await configureCaddy(client, { domains: remainingDomains, tlsMode });
+                client.end();
+            }
+        } catch (configError: any) {
+            console.warn(`Caddy cleanup failed for ${hostname}: ${configError.message}`);
         }
 
         // Delete from DB

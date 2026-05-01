@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../../../services/prisma';
 import { requireAuth } from '../../../../../../services/auth.service';
 import { decrypt } from '../../../../../../services/crypto.service';
+import { agentGateway } from '../../../../../../services/agent-gateway.service';
 // @ts-ignore - Local workspace package
 import { ServerConfig, verifyDns, configureCaddy, DomainConfig, SSHClient } from '@hylius/core';
 
@@ -68,19 +69,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
         // DNS verified — configure Caddy
         try {
-            let privateKey = '';
-            if (domain.project.server.privateKeyEncrypted && domain.project.server.keyIv) {
-                privateKey = decrypt(domain.project.server.privateKeyEncrypted, domain.project.server.keyIv);
-            }
-
-            const serverConfig: ServerConfig = {
-                host: serverIp,
-                port: domain.project.server.port,
-                username: domain.project.server.username,
-                privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
-                password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
-            };
-
             // Determine upstream port
             let upstreamPort = '3000';
             if (domain.project.deployments[0]?.deployUrl) {
@@ -97,10 +85,38 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
             const tlsMode = process.env.HYLIUS_TLS_MODE === 'internal' ? 'internal' as const : 'production' as const;
 
-            const client = new SSHClient(serverConfig);
-            await client.connect();
-            await configureCaddy(client, { domains: allDomains, tlsMode });
-            client.end();
+            // Check if we should use the Agent or SSH
+            const server = domain.project.server as any;
+            const useAgent = server.connectionMode === 'AGENT'
+                && agentGateway.isConnected(server.id);
+
+            if (useAgent) {
+                // Route through the VPS agent — no SSH needed
+                const agent = agentGateway.getAgentConfig(server.id);
+                await agent.sendCommand('configure-caddy', {
+                    domains: allDomains,
+                    tlsMode,
+                });
+            } else {
+                // Fall back to direct SSH
+                let privateKey = '';
+                if (server.privateKeyEncrypted && server.keyIv) {
+                    privateKey = decrypt(server.privateKeyEncrypted, server.keyIv);
+                }
+
+                const serverConfig: ServerConfig = {
+                    host: serverIp,
+                    port: server.port,
+                    username: server.username,
+                    privateKey: privateKey.includes('BEGIN') ? privateKey : undefined,
+                    password: privateKey && !privateKey.includes('BEGIN') ? privateKey : undefined,
+                };
+
+                const client = new SSHClient(serverConfig);
+                await client.connect();
+                await configureCaddy(client, { domains: allDomains, tlsMode });
+                client.end();
+            }
 
             await prisma.domain.update({
                 where: { id: domain.id },
@@ -115,19 +131,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
                 verified: true,
                 domain: await prisma.domain.findUnique({ where: { id: domain.id } }),
             });
-        } catch (sshError: any) {
+        } catch (configError: any) {
             await prisma.domain.update({
                 where: { id: domain.id },
                 data: {
                     status: 'DNS_VERIFIED',
-                    errorMessage: `DNS verified but Caddy configuration failed: ${sshError.message}`,
+                    errorMessage: `DNS verified but Caddy configuration failed: ${configError.message}`,
                 },
             });
 
             return NextResponse.json({
                 verified: true,
                 caddyConfigured: false,
-                error: `DNS verified but Caddy configuration failed: ${sshError.message}`,
+                error: `DNS verified but Caddy configuration failed: ${configError.message}`,
             }, { status: 500 });
         }
     } catch (error: any) {
