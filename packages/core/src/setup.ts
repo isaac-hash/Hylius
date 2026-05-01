@@ -1,9 +1,37 @@
-import { SetupOptions, SetupResult } from './types.js';
+import { SetupOptions, SetupResult, AgentConfig } from './types.js';
 import { SSHClient } from './ssh/client.js';
+
+// ─── Agent-mode execution helpers ────────────────────────────────────────────
+
+/** Run a command via agent, collect all stdout chunks, and return the result. */
+async function agentExec(agent: AgentConfig, cmd: string): Promise<{ stdout: string; code: number }> {
+    let stdout = '';
+    try {
+        const result = await agent.streamCommand('exec', { cmd }, (chunk) => {
+            stdout += chunk;
+        });
+        return { stdout, code: result.exitCode ?? 0 };
+    } catch {
+        return { stdout, code: 1 };
+    }
+}
+
+/** Stream a command via agent and pipe output through onLog. */
+async function agentStream(
+    agent: AgentConfig,
+    cmd: string,
+    onLog?: (chunk: string) => void,
+): Promise<void> {
+    await agent.streamCommand('exec', { cmd }, (chunk) => { if (onLog) onLog(chunk); });
+}
 
 export async function setup(options: SetupOptions): Promise<SetupResult> {
     const { server, onLog } = options;
-    const client = new SSHClient(server);
+    const agent = (options as any).agent as AgentConfig | undefined;
+    const useAgent = !!agent;
+
+    // SSH client is only created / connected when NOT using agent mode
+    const client = useAgent ? null : new SSHClient(server);
     const startTime = Date.now();
 
     const log = (msg: string) => {
@@ -11,14 +39,22 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     };
 
     try {
-        log(`\x1b[36mConnecting to ${server.host}...\x1b[0m`);
-        await client.connect();
-        log('\x1b[32mConnected successfully.\x1b[0m\n');
+        if (useAgent) {
+            log(`\x1b[35m[Agent] Running setup via VPS agent (no SSH required)\x1b[0m`);
+        } else {
+            log(`\x1b[36mConnecting to ${server.host}...\x1b[0m`);
+            await client!.connect();
+            log('\x1b[32mConnected successfully.\x1b[0m\n');
+        }
 
         // 1. Detect OS and User
         log('\x1b[33m[1/5] Detecting Operating System and User...\x1b[0m');
-        const osResult = await client.exec('cat /etc/os-release');
-        const userResult = await client.exec('whoami');
+        const osResult = useAgent
+            ? await agentExec(agent!, 'cat /etc/os-release')
+            : await client!.exec('cat /etc/os-release');
+        const userResult = useAgent
+            ? await agentExec(agent!, 'whoami')
+            : await client!.exec('whoami');
 
         const currentUser = userResult.stdout.trim();
         const isRoot = currentUser === 'root';
@@ -77,7 +113,11 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
         for (const cmd of dockerCommands) {
             log(`> Executing: ${cmd}`);
-            await client.execStream(cmd, onLog, onLog);
+            if (useAgent) {
+                await agentStream(agent!, cmd, onLog);
+            } else {
+                await client!.execStream(cmd, onLog, onLog);
+            }
         }
         log('\x1b[32mDocker and Git installed successfully.\x1b[0m\n');
 
@@ -89,12 +129,22 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         log('Stopping pre-installed web servers that may block Caddy...');
         const conflictingServices = ['apache2', 'nginx', 'httpd', 'sw-cp-server', 'lighttpd'];
         for (const svc of conflictingServices) {
-            await client.exec(`${sudoPrefix}systemctl stop ${svc} 2>/dev/null || true`);
-            await client.exec(`${sudoPrefix}systemctl disable ${svc} 2>/dev/null || true`);
+            if (useAgent) {
+                await agentExec(agent!, `${sudoPrefix}systemctl stop ${svc} 2>/dev/null || true`);
+                await agentExec(agent!, `${sudoPrefix}systemctl disable ${svc} 2>/dev/null || true`);
+            } else {
+                await client!.exec(`${sudoPrefix}systemctl stop ${svc} 2>/dev/null || true`);
+                await client!.exec(`${sudoPrefix}systemctl disable ${svc} 2>/dev/null || true`);
+            }
         }
         // Force-kill anything still holding ports 80/443
-        await client.exec(`${sudoPrefix}fuser -k 80/tcp 2>/dev/null || true`);
-        await client.exec(`${sudoPrefix}fuser -k 443/tcp 2>/dev/null || true`);
+        if (useAgent) {
+            await agentExec(agent!, `${sudoPrefix}fuser -k 80/tcp 2>/dev/null || true`);
+            await agentExec(agent!, `${sudoPrefix}fuser -k 443/tcp 2>/dev/null || true`);
+        } else {
+            await client!.exec(`${sudoPrefix}fuser -k 80/tcp 2>/dev/null || true`);
+            await client!.exec(`${sudoPrefix}fuser -k 443/tcp 2>/dev/null || true`);
+        }
         await new Promise(r => setTimeout(r, 1000));
         log('\x1b[32mConflicting web servers cleared.\x1b[0m\n');
 
@@ -113,7 +163,11 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
         for (const cmd of caddyCommands) {
             log(`> Executing: ${cmd}`);
-            await client.execStream(cmd, onLog, onLog);
+            if (useAgent) {
+                await agentStream(agent!, cmd, onLog);
+            } else {
+                await client!.execStream(cmd, onLog, onLog);
+            }
         }
         log('\x1b[32mCaddy reverse proxy installed and running.\x1b[0m\n');
 
@@ -130,16 +184,21 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
         for (const cmd of ufwCommands) {
             log(`> Executing: ${cmd}`);
-            await client.execStream(cmd, onLog, onLog);
+            if (useAgent) {
+                await agentStream(agent!, cmd, onLog);
+            } else {
+                await client!.execStream(cmd, onLog, onLog);
+            }
         }
         log('\x1b[32mFirewall configured (if supported by OS).\x1b[0m\n');
 
         // ─── Step 5: Install Hylius Agent ─────────────────────────────────
+        // Skip when already running via agent — it's clearly already installed.
         const agentToken = (options as any).agentToken;
         const agentServerUrl = (options as any).agentServerUrl;
         const agentServerId = (options as any).agentServerId;
 
-        if (agentToken && agentServerUrl && agentServerId) {
+        if (!useAgent && agentToken && agentServerUrl && agentServerId) {
             log('\x1b[33m[5/5] Installing Hylius Agent...\x1b[0m');
             const installCmd = [
                 `curl -sSL https://github.com/Hylius-org/hylius-agent/releases/latest/download/install.sh`,
@@ -150,13 +209,15 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
             ].join(' ');
 
             try {
-                await client.execStream(installCmd, onLog, onLog);
+                await client!.execStream(installCmd, onLog, onLog);
                 log('\x1b[32mHylius Agent installed and running.\x1b[0m\n');
             } catch (agentErr: any) {
                 // Non-fatal: server is still provisioned, user can install agent manually
                 log(`\x1b[33mWarning: Agent install failed (${agentErr.message}).\x1b[0m`);
                 log(`\x1b[33mYou can install it manually from the server details page.\x1b[0m\n`);
             }
+        } else if (useAgent) {
+            log('\x1b[32m[5/5] Hylius Agent already connected — skipping reinstall.\x1b[0m\n');
         }
 
         const durationMs = Date.now() - startTime;
@@ -175,6 +236,6 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
             error: err.message
         };
     } finally {
-        client.end();
+        if (!useAgent && client) client.end();
     }
 }

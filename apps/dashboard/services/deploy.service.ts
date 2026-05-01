@@ -23,7 +23,37 @@ export interface DeployServiceOptions {
  * This is the single source of truth for the deploy pipeline — called by
  * both the Socket.io handler (dashboard) and the GitHub webhook endpoint.
  */
+// Global in-memory queue to prevent concurrent deployments for the SAME project
+const deploymentMutexes = new Map<string, Promise<void>>();
+
 export async function executeDeployment(options: DeployServiceOptions): Promise<DeployResult & { deploymentId: string }> {
+    const { projectId, onLog } = options;
+    
+    // Wait for existing deployment for this project to finish (queuing)
+    const existingDeployment = deploymentMutexes.get(projectId);
+    if (existingDeployment) {
+        if (onLog) onLog(`\n⏳ Another deployment is currently in progress for this service. Queuing this deployment until it finishes...\n`);
+        await existingDeployment;
+    }
+
+    let resolveMutex: () => void;
+    const currentDeploymentPromise = new Promise<void>((resolve) => { resolveMutex = resolve; });
+    deploymentMutexes.set(projectId, currentDeploymentPromise);
+
+    try {
+        return await _executeDeploymentInternal(options);
+    } finally {
+        resolveMutex!();
+        if (deploymentMutexes.get(projectId) === currentDeploymentPromise) {
+            deploymentMutexes.delete(projectId);
+        }
+    }
+}
+
+/**
+ * Internal deployment logic — do not call directly, use executeDeployment instead.
+ */
+async function _executeDeploymentInternal(options: DeployServiceOptions): Promise<DeployResult & { deploymentId: string }> {
     const { projectId, trigger, prNumber, onLog } = options;
     const isPreview = !!prNumber;
 
@@ -154,6 +184,7 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
         environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
         previewId: isPreview ? `pr-${prNumber}` : undefined,
         dockerComposeYaml, // Passed to core
+        containerName: (project as any).containerName || undefined,
     };
 
     // Auto-inject URL environment variables
@@ -187,32 +218,32 @@ export async function executeDeployment(options: DeployServiceOptions): Promise<
                 // Reconstruct container name if missing (matches @hylius/core getContainerName)
                 const resolvedContainerName = db.containerName || `hylius-db-${db.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
 
-                // Inject the URL itself only if not already set from project envVars
-                if (!projectConfig.env![envKey]) {
-                    const { buildInternalDbConnectionString } = await import('@hylius/core' as any);
-                    const connectionString = buildInternalDbConnectionString(
-                        db.engine, db.dbUser || '', password, db.dbName || '', resolvedContainerName
-                    );
-                    projectConfig.env![envKey] = connectionString;
-                    if (envKey === 'DATABASE_URL' && !projectConfig.env!['DB_URL']) {
-                        projectConfig.env!['DB_URL'] = connectionString;
-                    }
-                }
+                const { buildInternalDbConnectionString } = await import('@hylius/core' as any);
+                // Always build the internal connection string — the container name
+                // is only reachable inside the Docker network, never via localhost.
+                const internalConnectionString = buildInternalDbConnectionString(
+                    db.engine, db.dbUser || '', password, db.dbName || '', resolvedContainerName
+                );
 
-                // ALWAYS inject granular vars — frameworks like Laravel need these
-                // even when DATABASE_URL is already present from project envVars
+                // Force DATABASE_URL / REDIS_URL to the internal string unconditionally.
+                // A user may have saved localhost-based URLs in their project env vars
+                // (e.g. from the "Show Connection String" panel) — these are wrong at runtime.
+                projectConfig.env![envKey] = internalConnectionString;
+
                 if (envKey === 'DATABASE_URL') {
+                    // DB_URL is the Laravel-specific alias — force it too
+                    projectConfig.env!['DB_URL'] = internalConnectionString;
                     if (!projectConfig.env!['DB_CONNECTION']) projectConfig.env!['DB_CONNECTION'] = db.engine === 'POSTGRES' ? 'pgsql' : 'mysql';
-                    if (!projectConfig.env!['DB_HOST']) projectConfig.env!['DB_HOST'] = resolvedContainerName;
-                    if (!projectConfig.env!['DB_PORT']) projectConfig.env!['DB_PORT'] = db.engine === 'POSTGRES' ? '5432' : '3306';
+                    projectConfig.env!['DB_HOST'] = resolvedContainerName;
+                    projectConfig.env!['DB_PORT'] = db.engine === 'POSTGRES' ? '5432' : '3306';
                     if (!projectConfig.env!['DB_DATABASE']) projectConfig.env!['DB_DATABASE'] = db.dbName || '';
                     if (!projectConfig.env!['DB_USERNAME']) projectConfig.env!['DB_USERNAME'] = db.dbUser || '';
                     if (!projectConfig.env!['DB_PASSWORD']) projectConfig.env!['DB_PASSWORD'] = password;
                 }
                 if (envKey === 'REDIS_URL') {
-                    if (!projectConfig.env!['REDIS_HOST']) projectConfig.env!['REDIS_HOST'] = resolvedContainerName;
+                    projectConfig.env!['REDIS_HOST'] = resolvedContainerName;
                     if (!projectConfig.env!['REDIS_PASSWORD']) projectConfig.env!['REDIS_PASSWORD'] = password;
-                    if (!projectConfig.env!['REDIS_PORT']) projectConfig.env!['REDIS_PORT'] = '6379';
+                    projectConfig.env!['REDIS_PORT'] = '6379';
                 }
 
                 log(`[DB] Auto-injected env vars for ${db.engine} database "${db.name}" (container: ${resolvedContainerName})\n`);
@@ -451,13 +482,13 @@ export async function destroyPreviewDeployment(projectId: string, prNumber: numb
         if (useAgent) {
             console.log(`[Agent] Destroying preview deployment via VPS agent...`);
             const agent = agentGateway.getAgentConfig(project.server.id);
-            
+
             // 1 & 2. Kill container and remove directory
-            await agent.streamCommand('exec', { cmd: `docker rm -f ${containerName} > /dev/null 2>&1 || true && rm -rf ${environmentPath} > /dev/null 2>&1 || true` }, () => {});
-            
+            await agent.streamCommand('exec', { cmd: `docker rm -f ${containerName} > /dev/null 2>&1 || true && rm -rf ${environmentPath} > /dev/null 2>&1 || true` }, () => { });
+
             // 3. Update Caddy
-            await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => {});
-            
+            await agent.streamCommand('configure-caddy', { domains: domainConfigs, tlsMode: 'production' }, () => { });
+
         } else {
             console.log(`[SSH] Destroying preview deployment via SSH...`);
             let privateKey = '';
