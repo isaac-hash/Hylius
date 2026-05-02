@@ -14,6 +14,7 @@ export interface Organization {
     id: string;
     name: string;
     slug: string;
+    plan: string;
 }
 
 interface AuthContextType {

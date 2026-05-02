@@ -185,7 +185,16 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         previewId: isPreview ? `pr-${prNumber}` : undefined,
         dockerComposeYaml, // Passed to core
         containerName: (project as any).containerName || undefined,
-    };
+        // Analytics: inject Umami tracking script at build time if project has it enabled
+        analyticsScript: (() => {
+            const siteId = (project as any).trafficAnalyticsSiteId as string | null;
+            const umamiUrl = (project.server as any).trafficAnalyticsUrl as string | null;
+            if (siteId && umamiUrl && !isPreview) {
+                return `<script defer src="${umamiUrl}/script.js" data-website-id="${siteId}"></script>`;
+            }
+            return '';
+        })(),
+    } as any;
 
     // Auto-inject URL environment variables
     const serverIpSlug = project.server.ip.replace(/\./g, '-');

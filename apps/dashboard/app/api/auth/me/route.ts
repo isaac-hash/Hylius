@@ -29,6 +29,7 @@ export async function GET(request: Request) {
                 id: user.organization.id,
                 name: user.organization.name,
                 slug: user.organization.slug,
+                plan: user.organization.plan,
             } : null,
         });
 

@@ -34,6 +34,7 @@ export default function LandingPage() {
     }, []);
 
     return (
+        
         <div className="min-h-screen bg-black text-white selection:bg-blue-500/30 overflow-x-hidden">
             {/* Navigation */}
             <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? "glass py-3" : "py-6"}`}>

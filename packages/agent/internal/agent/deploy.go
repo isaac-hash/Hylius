@@ -25,6 +25,7 @@ type deployPayload struct {
 		DockerComposeYaml string            `json:"dockerComposeYaml"`
 		ContainerName     string            `json:"containerName"`
 		DockerComposeFile string            `json:"dockerComposeFile"`
+		AnalyticsScript   string            `json:"analyticsScript"` // Pre-built <script> tag; empty = skip
 	} `json:"project"`
 	Domains []struct {
 		Hostname     string `json:"hostname"`
@@ -116,6 +117,11 @@ func (a *Agent) executeDeploy(commandID string, p *deployPayload) deployResult {
 		strategy = resolveDeployStrategy(releasePath)
 	}
 	log(fmt.Sprintf("Deploy strategy: %s\n", strategy))
+
+	// Inject analytics tracking script (before build so frameworks can pick it up)
+	if p.Project.AnalyticsScript != "" {
+		injectAnalyticsScript(releasePath, p.Project.AnalyticsScript, strategy, log)
+	}
 
 	// Write .env file for compose strategies
 	if isComposeStrategy(strategy) && len(p.Project.Env) > 0 {
@@ -348,6 +354,190 @@ func resolveDeployStrategy(path string) string {
 func isComposeStrategy(s string) bool {
 	return s == "docker-compose" || s == "compose-server" || s == "compose-registry"
 }
+
+// ─── Analytics Script Injection ───────────────────────────────────────────────
+
+// injectAnalyticsScript attempts to inject the Umami tracking script into the
+// project source before build. Framework detection order:
+//  1. Next.js (app router): app/layout.tsx or src/app/layout.tsx
+//  2. Next.js (pages router): pages/_document.tsx or pages/_document.jsx
+//  3. Laravel Blade: resources/views/layouts/*.blade.php
+//  4. Any index.html in project root or public/
+func injectAnalyticsScript(releasePath, script, strategy string, log func(string)) {
+	if strategy == "ghcr-pull" {
+		log("[Analytics] Skipping injection — pre-built image. Enable a sidecar proxy for GHCR projects.\n")
+		return
+	}
+
+	injected := false
+
+	// 1. Next.js app router: app/layout.tsx (or src/app/layout.tsx)
+	for _, candidate := range []string{
+		filepath.Join(releasePath, "app", "layout.tsx"),
+		filepath.Join(releasePath, "src", "app", "layout.tsx"),
+		filepath.Join(releasePath, "app", "layout.jsx"),
+		filepath.Join(releasePath, "src", "app", "layout.jsx"),
+	} {
+		if fileExists(candidate) {
+			if injectIntoNextLayout(candidate, script, log) {
+				injected = true
+				break
+			}
+		}
+	}
+
+	// 2. Next.js pages router: pages/_document.tsx
+	if !injected {
+		for _, candidate := range []string{
+			filepath.Join(releasePath, "pages", "_document.tsx"),
+			filepath.Join(releasePath, "pages", "_document.jsx"),
+			filepath.Join(releasePath, "src", "pages", "_document.tsx"),
+			filepath.Join(releasePath, "src", "pages", "_document.jsx"),
+		} {
+			if fileExists(candidate) {
+				if injectIntoHead(candidate, "</Head>", script, log) {
+					injected = true
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Laravel Blade: resources/views/layouts/*.blade.php
+	if !injected {
+		bladeDir := filepath.Join(releasePath, "resources", "views", "layouts")
+		if fileExists(bladeDir) {
+			entries, _ := os.ReadDir(bladeDir)
+			for _, e := range entries {
+				if !e.IsDir() && filepath.Ext(e.Name()) == ".php" {
+					candidate := filepath.Join(bladeDir, e.Name())
+					if injectIntoHead(candidate, "</head>", script, log) {
+						injected = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Generic index.html: public/index.html or index.html
+	if !injected {
+		for _, candidate := range []string{
+			filepath.Join(releasePath, "public", "index.html"),
+			filepath.Join(releasePath, "index.html"),
+			filepath.Join(releasePath, "dist", "index.html"),
+		} {
+			if fileExists(candidate) {
+				if injectIntoHead(candidate, "</head>", script, log) {
+					injected = true
+					break
+				}
+			}
+		}
+	}
+
+	if !injected {
+		log("[Analytics] Could not find a suitable injection point. Add the script tag manually.\n")
+		log(fmt.Sprintf("[Analytics] Script: %s\n", script))
+	}
+}
+
+// injectIntoNextLayout injects a Next.js <Script> component into layout.tsx.
+// It imports Script from 'next/script' and adds it inside the <body> tag.
+func injectIntoNextLayout(path, rawScript string, log func(string)) bool {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	src := string(content)
+
+	// Skip if already injected
+	if strings.Contains(src, "data-website-id") {
+		log(fmt.Sprintf("[Analytics] Script already present in %s\n", filepath.Base(path)))
+		return true
+	}
+
+	// Extract src and data-website-id from the raw HTML script tag
+	// Raw: <script defer src="http://..." data-website-id="uuid"></script>
+	scriptSrc := extractAttr(rawScript, "src")
+	siteId := extractAttr(rawScript, "data-website-id")
+	if scriptSrc == "" || siteId == "" {
+		return false
+	}
+
+	nextScript := fmt.Sprintf(`<Script defer src="%s" data-website-id="%s" strategy="afterInteractive" />`, scriptSrc, siteId)
+
+	// Add import if not present
+	if !strings.Contains(src, `from 'next/script'`) && !strings.Contains(src, `from "next/script"`) {
+		src = strings.Replace(src, "import ", `import Script from 'next/script';`+"\nimport ", 1)
+	}
+
+	// Inject before </body>
+	if strings.Contains(src, "</body>") {
+		src = strings.Replace(src, "</body>", nextScript+"\n      </body>", 1)
+	} else {
+		// Fallback: inject at end of file before closing JSX
+		src = src + "\n" + nextScript
+	}
+
+	if err := os.WriteFile(path, []byte(src), 0644); err != nil {
+		log(fmt.Sprintf("[Analytics] Failed to write %s: %v\n", filepath.Base(path), err))
+		return false
+	}
+	log(fmt.Sprintf("[Analytics] ✅ Injected Next.js Script component into %s\n", filepath.Base(path)))
+	return true
+}
+
+// injectIntoHead inserts the script tag before a closing tag (e.g. </head> or </Head>).
+func injectIntoHead(path, closingTag, script string, log func(string)) bool {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	src := string(content)
+
+	if strings.Contains(src, "data-website-id") {
+		log(fmt.Sprintf("[Analytics] Script already present in %s\n", filepath.Base(path)))
+		return true
+	}
+
+	lowerSrc := strings.ToLower(src)
+	lowerTag := strings.ToLower(closingTag)
+	idx := strings.LastIndex(lowerSrc, lowerTag)
+	if idx < 0 {
+		return false
+	}
+
+	// Find the actual position in original src preserving original case
+	src = src[:idx] + "\n    " + script + "\n" + src[idx:]
+
+	if err := os.WriteFile(path, []byte(src), 0644); err != nil {
+		log(fmt.Sprintf("[Analytics] Failed to write %s: %v\n", filepath.Base(path), err))
+		return false
+	}
+	log(fmt.Sprintf("[Analytics] ✅ Injected tracking script into %s\n", filepath.Base(path)))
+	return true
+}
+
+// extractAttr pulls an HTML attribute value from a raw tag string.
+func extractAttr(tag, attr string) string {
+	prefix := attr + `="`
+	start := strings.Index(tag, prefix)
+	if start < 0 {
+		prefix = attr + `='`
+		start = strings.Index(tag, prefix)
+		if start < 0 {
+			return ""
+		}
+	}
+	start += len(prefix)
+	end := strings.IndexAny(tag[start:], `"'`)
+	if end < 0 {
+		return ""
+	}
+	return tag[start : start+end]
+}
+
 
 func writeEnvFile(path string, env map[string]string, log func(string)) {
 	var lines []string

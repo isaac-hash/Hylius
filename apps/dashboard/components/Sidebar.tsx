@@ -64,10 +64,27 @@ const LogoutIcon = () => (
     </svg>
 );
 
+const MarketplaceIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 0 1-8 0"/>
+    </svg>
+);
+
+const AnalyticsIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18"/>
+        <path d="m7 16 4-4 4 4 4-7"/>
+    </svg>
+);
+
 const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: <DashboardIcon /> },
     { name: "Stacks", href: "/stacks", icon: <StacksIcon /> },
     { name: "Templates", href: "/dashboard/templates", icon: <TemplatesIcon />, badge: "✨" },
+    { name: "Marketplace", href: "/marketplace", icon: <MarketplaceIcon />, badge: "NEW" },
+    { name: "Analytics", href: "/analytics", icon: <AnalyticsIcon /> },
     { name: "Deployments", href: "/deployments", icon: <DeploymentsIcon /> },
     { name: "Billing", href: "/billing", icon: <BillingIcon /> },
 ];
