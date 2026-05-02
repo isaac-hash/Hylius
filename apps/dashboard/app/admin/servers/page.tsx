@@ -16,6 +16,8 @@ interface AdminServer {
     metrics: { createdAt: string; cpu: number; memory: number; disk: number }[];
 }
 
+type UpdateStatus = 'idle' | 'updating' | 'success' | 'error';
+
 export default function AdminServersPage() {
     const { token } = useAuth();
     const [servers, setServers] = useState<AdminServer[]>([]);
@@ -23,6 +25,9 @@ export default function AdminServersPage() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
+    const [updateStatus, setUpdateStatus] = useState<Record<string, UpdateStatus>>({});
+    const [updateMsg, setUpdateMsg] = useState<Record<string, string>>({});
+    const [updatingAll, setUpdatingAll] = useState(false);
 
     const fetchServers = useCallback(() => {
         if (!token) return;
@@ -42,9 +47,53 @@ export default function AdminServersPage() {
             .catch(() => setLoading(false));
     }, [token, page]);
 
-    useEffect(() => {
-        fetchServers();
-    }, [fetchServers]);
+    useEffect(() => { fetchServers(); }, [fetchServers]);
+
+    const updateAgent = async (serverId: string, serverName: string) => {
+        if (!token) return;
+        setUpdateStatus(s => ({ ...s, [serverId]: 'updating' }));
+        setUpdateMsg(s => ({ ...s, [serverId]: '' }));
+
+        try {
+            const res = await fetch(`/api/admin/servers/${serverId}/update-agent`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dashboardUrl: window.location.origin }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setUpdateStatus(s => ({ ...s, [serverId]: 'success' }));
+                setUpdateMsg(s => ({ ...s, [serverId]: data.message }));
+            } else {
+                setUpdateStatus(s => ({ ...s, [serverId]: 'error' }));
+                setUpdateMsg(s => ({ ...s, [serverId]: data.error || 'Update failed' }));
+            }
+        } catch {
+            setUpdateStatus(s => ({ ...s, [serverId]: 'error' }));
+            setUpdateMsg(s => ({ ...s, [serverId]: 'Network error' }));
+        }
+
+        // Reset after 8s
+        setTimeout(() => setUpdateStatus(s => ({ ...s, [serverId]: 'idle' })), 8000);
+    };
+
+    const updateAllAgents = async () => {
+        if (!token || !confirm(`Send agent update to all ${servers.length} servers?`)) return;
+        setUpdatingAll(true);
+        for (const server of servers) {
+            await updateAgent(server.id, server.name);
+            await new Promise(r => setTimeout(r, 500)); // stagger requests
+        }
+        setUpdatingAll(false);
+    };
+
+    const statusIcon = (id: string) => {
+        const s = updateStatus[id];
+        if (s === 'updating') return <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />;
+        if (s === 'success') return <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>;
+        if (s === 'error') return <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>;
+        return <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>;
+    };
 
     return (
         <div>
@@ -54,6 +103,18 @@ export default function AdminServersPage() {
                     <h1 className="text-3xl font-bold mb-1">All Servers</h1>
                     <p className="text-gray-400 text-sm">{total} servers across all organizations.</p>
                 </div>
+                {servers.length > 0 && (
+                    <button
+                        onClick={updateAllAgents}
+                        disabled={updatingAll}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-400 text-sm font-semibold hover:bg-blue-600/20 transition-all disabled:opacity-50"
+                    >
+                        {updatingAll
+                            ? <><div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />Updating all...</>
+                            : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>Update All Agents</>
+                        }
+                    </button>
+                )}
             </div>
 
             {loading ? (
@@ -75,6 +136,7 @@ export default function AdminServersPage() {
                                     <th className="px-5 py-3">Projects</th>
                                     <th className="px-5 py-3">Last Metrics</th>
                                     <th className="px-5 py-3">Added</th>
+                                    <th className="px-5 py-3">Agent</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-800">
@@ -112,6 +174,30 @@ export default function AdminServersPage() {
                                         <td className="px-5 py-4 text-gray-500 text-xs">
                                             {new Date(server.createdAt).toLocaleDateString()}
                                         </td>
+                                        <td className="px-5 py-4">
+                                            <div className="flex flex-col gap-1">
+                                                <button
+                                                    onClick={() => updateAgent(server.id, server.name)}
+                                                    disabled={updateStatus[server.id] === 'updating'}
+                                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap
+                                                        ${updateStatus[server.id] === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                                                        : updateStatus[server.id] === 'error' ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+                                                        : 'bg-white/[0.03] border border-white/[0.08] text-gray-400 hover:text-white hover:border-blue-500/30 hover:bg-blue-500/5'} 
+                                                        disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                >
+                                                    {statusIcon(server.id)}
+                                                    {updateStatus[server.id] === 'updating' ? 'Updating...'
+                                                        : updateStatus[server.id] === 'success' ? 'Updated!'
+                                                        : updateStatus[server.id] === 'error' ? 'Failed'
+                                                        : 'Update Agent'}
+                                                </button>
+                                                {updateMsg[server.id] && (
+                                                    <p className={`text-[10px] max-w-[180px] leading-tight ${updateStatus[server.id] === 'error' ? 'text-red-400' : 'text-gray-500'}`}>
+                                                        {updateMsg[server.id]}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -123,18 +209,12 @@ export default function AdminServersPage() {
                         <div className="flex items-center justify-between mt-6">
                             <p className="text-sm text-gray-500">Page {page} of {totalPages}</p>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                    disabled={page <= 1}
-                                    className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 text-sm text-gray-400 hover:bg-gray-800 disabled:opacity-30 transition-colors"
-                                >
+                                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                                    className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 text-sm text-gray-400 hover:bg-gray-800 disabled:opacity-30 transition-colors">
                                     Previous
                                 </button>
-                                <button
-                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                    disabled={page >= totalPages}
-                                    className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 text-sm text-gray-400 hover:bg-gray-800 disabled:opacity-30 transition-colors"
-                                >
+                                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                                    className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 text-sm text-gray-400 hover:bg-gray-800 disabled:opacity-30 transition-colors">
                                     Next
                                 </button>
                             </div>
