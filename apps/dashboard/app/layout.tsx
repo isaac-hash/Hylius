@@ -24,6 +24,7 @@ export const metadata: Metadata = {
 
 import { AuthProvider } from "@/providers/auth.provider";
 import { Toaster } from "react-hot-toast";
+import Script from "next/script";
 
 export default function RootLayout({
   children,
@@ -32,6 +33,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {process.env.NEXT_PUBLIC_UMAMI_SITE_ID && process.env.NEXT_PUBLIC_UMAMI_URL && (
+          <Script defer src={`${process.env.NEXT_PUBLIC_UMAMI_URL}/script.js`} data-website-id={process.env.NEXT_PUBLIC_UMAMI_SITE_ID} />
+        )}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${instrumentSans.variable} antialiased selection:bg-blue-500/30`}
       >
