@@ -74,11 +74,15 @@ export async function POST(request: Request) {
                     // Auto-inject standard framework DB env vars for repository-based templates
                     if (!template.generateCompose && template.repository) {
                         envOverrides['DB_CONNECTION'] = engine === 'POSTGRES' ? 'pgsql' : 'mysql';
-                        envOverrides['DB_HOST'] = ctx.dbHost;
-                        envOverrides['DB_PORT'] = engine === 'POSTGRES' ? '5432' : '3306';
-                        envOverrides['DB_DATABASE'] = ctx.dbName;
-                        envOverrides['DB_USERNAME'] = ctx.dbUser;
-                        envOverrides['DB_PASSWORD'] = ctx.dbPassword;
+                        if (engine === 'POSTGRES') {
+                            envOverrides['DATABASE_URL'] = `postgresql://${ctx.dbUser}:${ctx.dbPassword}@${ctx.dbHost}:5432/${ctx.dbName}`;
+                        } else {
+                            envOverrides['DB_HOST'] = ctx.dbHost;
+                            envOverrides['DB_PORT'] = '3306';
+                            envOverrides['DB_DATABASE'] = ctx.dbName;
+                            envOverrides['DB_USERNAME'] = ctx.dbUser;
+                            envOverrides['DB_PASSWORD'] = ctx.dbPassword;
+                        }
                     }
                 }
             }

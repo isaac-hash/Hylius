@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AuthGuard } from '@/components/AuthGuard';
+
 import { useAuth } from '@/providers/auth.provider';
 import DeploymentHistory from '@/components/DeploymentHistory';
 import AddProjectModal from '@/components/AddProjectModal';
@@ -183,37 +183,12 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
     }
 
     return (
-        <AuthGuard>
-            <div className="min-h-screen bg-black text-white">
-                {/* Navbar */}
-                <nav className="border-b border-gray-800 bg-black/50 backdrop-blur-md sticky top-0 z-10">
-                    <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold">H</div>
-                                <span className="font-bold text-xl tracking-tight">Hylius</span>
-                            </Link>
-                            <span className="text-gray-600">/</span>
-                            <Link href="/" className="text-gray-400 hover:text-white transition-colors">Servers</Link>
-                            <span className="text-gray-600">/</span>
-                            <span className="text-gray-200">{server?.name || 'Loading...'}</span>
-                        </div>
-                        <div className="flex items-center gap-6 text-sm text-gray-400">
-                            <Link href="/deployments" className="hover:text-white transition-colors">Deployments</Link>
-                            <div className="flex items-center gap-3 pl-4 border-l border-gray-800">
-                                <span className="text-gray-300">{user?.email}</span>
-                                <button
-                                    onClick={logout}
-                                    className="px-3 py-1.5 rounded-md bg-gray-900 border border-gray-800 hover:bg-gray-800 hover:text-white transition-colors text-xs"
-                                >
-                                    Logout
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
-
-                <main className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto py-6">
+            <header className="mb-8 flex items-center gap-2 text-sm text-gray-400">
+                <Link href="/" className="hover:text-white transition-colors">Servers</Link>
+                <span>/</span>
+                <span className="text-gray-200">{server?.name || 'Loading...'}</span>
+            </header>
                     {loading && !server ? (
                         <div className="flex items-center justify-center py-20">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -642,7 +617,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                             </div>
                         </div>
                     )}
-                </main>
+
 
                 <ProvisionTerminalModal
                     isOpen={provisionModalOpen}
@@ -682,7 +657,6 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                         onClose={() => setActiveEnvProjectId(null)}
                     />
                 )}
-            </div>
-        </AuthGuard>
+        </div>
     );
 }

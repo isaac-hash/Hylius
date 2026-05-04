@@ -210,6 +210,13 @@ volumes:
         description: 'The full URL of your application (e.g. https://myapp.example.com)',
         defaultValue: 'http://localhost',
       },
+      {
+        key: 'APP_KEY',
+        label: 'App Key',
+        type: 'text',
+        description: 'The application key used for encryption and security.',
+        defaultValue: 'base64:rWl2O44tJk/kS/c6q76Hl9R+i74GvM+T2K5z8J88v8k=',
+      },
     ],
     repository: {
       url: 'https://github.com/isaac-hash/laravel.git',
