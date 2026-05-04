@@ -999,6 +999,7 @@ async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
                     containerName: project.containerName,
                     dockerComposeFile: project.dockerComposeFile,
                     releaseCommand: project.releaseCommand,
+                    analyticsScript: project.analyticsScript,
                 },
                 domains: domains || [],
                 tlsMode: tlsMode || 'production',
