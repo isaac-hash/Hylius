@@ -13,7 +13,10 @@ export async function GET(request: Request) {
             orderBy: { createdAt: 'desc' },
             include: {
                 server: {
-                    select: { id: true, name: true, ip: true },
+                    select: { id: true, name: true, ip: true, hasTrafficAnalytics: true, trafficAnalyticsUrl: true },
+                },
+                domains: {
+                    select: { hostname: true },
                 },
                 _count: {
                     select: { deployments: true },
@@ -75,7 +78,10 @@ export async function POST(request: Request) {
             },
             include: {
                 server: {
-                    select: { id: true, name: true, ip: true },
+                    select: { id: true, name: true, ip: true, hasTrafficAnalytics: true, trafficAnalyticsUrl: true },
+                },
+                domains: {
+                    select: { hostname: true },
                 },
             },
         });

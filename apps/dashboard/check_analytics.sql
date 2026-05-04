@@ -1,0 +1,1 @@
+SELECT p.id, p.name, p."trafficAnalyticsSiteId", s."hasTrafficAnalytics", s."trafficAnalyticsUrl", s."trafficAnalyticsToken" IS NOT NULL as "hasToken" FROM "Project" p JOIN "Server" s ON p."serverId" = s.id;

@@ -89,11 +89,11 @@ export default function LandingPage() {
                             Now in Public Beta
                         </div>
                         <h1 className="font-display text-5xl md:text-7xl font-bold leading-[1.1] mb-8">
-                            Deploy anywhere in Africa. <br />
-                            <span className="text-gradient">Own everything.</span>
+                            Your infrastructure. Your data. <br />
+                            <span className="text-gradient">Deployed in seconds.</span>
                         </h1>
                         <p className="text-xl text-gray-400 max-w-2xl mb-10 leading-relaxed">
-                            Connect your VPS, on any African hosting provider, and deploy full-stack apps, databases, and APIs in seconds. No per-server fees. No project limits. Your infrastructure, our platform.
+                            Connect your VPS from any hosting provider, Hostzealot, Hetzner, DigitalOcean, etc., and deploy full-stack apps, databases, and APIs without per-server fees, project limits, or surprises.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4">
                             <Link 
@@ -151,14 +151,19 @@ export default function LandingPage() {
                                 icon: "🔗"
                             },
                             {
-                                title: "Starting at ₦5,000",
-                                desc: "Affordable and transparent pricing tailored for African developers.",
+                                title: "Starting at £3 / ₦5,000",
+                                desc: "Affordable and transparent pricing tailored for developers.",
                                 icon: "💳"
                             },
                             {
-                                title: "African Server Focus",
-                                desc: "Coming soon: We are partnering with African hosting providers to bring servers closer to you.",
-                                icon: "📡"
+                                title: "Traffic Analytics",
+                                desc: "Real-time visitor data, referrer tracking, and page performance, running on your own VPS. No third-party data sharing, no cookie banners.",
+                                icon: "📊"
+                            },
+                            {
+                                title: "Business Observability",
+                                desc: "Understand how users move through your product. Funnel analytics, error tracking, and uptime monitoring - the data layer that turns your deployment into a business.",
+                                icon: "📈"
                             }
                         ].map((f, i) => (
                             <div key={i} className="glass p-8 rounded-3xl group hover:border-blue-500/50 transition-all hover:-translate-y-2">
@@ -208,6 +213,18 @@ export default function LandingPage() {
                             </div>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section id="about" className="py-40 border border-t border-white/5">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="mb-16 text-center">
+                        <h2 className="font-display text-5xl md:text-6xl font-bold mb-8 text-gradient">Deploy it. Monitor it. Understand it.</h2>
+                        <p className="text-xl md:text-2xl text-gray-400 md:max-w-3xl max-w-4xl mx-auto leading-relaxed">
+                        Most platforms stop when your app goes live. Hylius doesn't. Whether you're a solo founder in Lagos or a startup in London building for actual users, you need more than deployment convenience, you need to know if what you shipped is actually working.
+                        Hylius gives you the infrastructure ownership of self-hosting and the business intelligence of an enterprise analytics stack. On your servers. In your currency. Without the complexity.</p>
+                    </div>
+                    
                 </div>
             </section>
 
