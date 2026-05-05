@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"strings"
@@ -111,12 +112,15 @@ func (a *Agent) connect() error {
 }
 
 func (a *Agent) runLoop() {
-	go a.heartbeatLoop()
-	go a.writePump()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go a.heartbeatLoop(ctx)
+	go a.writePump(ctx)
 	a.readPump() // blocking
 }
 
-func (a *Agent) heartbeatLoop() {
+func (a *Agent) heartbeatLoop(ctx context.Context) {
 	// Send an immediate heartbeat on connect, then every 30s
 	a.sendHeartbeat()
 	ticker := time.NewTicker(30 * time.Second)
@@ -125,6 +129,8 @@ func (a *Agent) heartbeatLoop() {
 		select {
 		case <-ticker.C:
 			a.sendHeartbeat()
+		case <-ctx.Done():
+			return
 		case <-a.stop:
 			return
 		}
@@ -147,7 +153,7 @@ func (a *Agent) sendHeartbeat() {
 	}
 }
 
-func (a *Agent) writePump() {
+func (a *Agent) writePump(ctx context.Context) {
 	for {
 		select {
 		case msg := <-a.send:
@@ -155,6 +161,8 @@ func (a *Agent) writePump() {
 				log.Printf("[agent] Write error: %v", err)
 				return
 			}
+		case <-ctx.Done():
+			return
 		case <-a.stop:
 			return
 		}
