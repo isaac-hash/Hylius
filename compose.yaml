@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     ports:
       - "0:3000"
+    env_file: .env
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-hylius}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hylius}
@@ -41,6 +42,11 @@ services:
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
       NEXT_PUBLIC_GITHUB_APP_SLUG: ${NEXT_PUBLIC_GITHUB_APP_SLUG}
       HYLIUS_TLS_MODE: ${HYLIUS_TLS_MODE:-production}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME}
+      PAGESPEED_API_KEY: ${PAGESPEED_API_KEY}
+
     depends_on:
       postgres:
         condition: service_healthy
