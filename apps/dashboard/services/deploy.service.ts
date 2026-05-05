@@ -192,8 +192,15 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
                 // Also inject natively into env for frameworks that support it
                 if (!envVars) envVars = {};
                 envVars['NEXT_PUBLIC_UMAMI_SITE_ID'] = siteId;
-                envVars['NEXT_PUBLIC_UMAMI_URL'] = umamiUrl;
-                return `<script defer src="${umamiUrl}/script.js" data-website-id="${siteId}"></script>`;
+                
+                // Use relative path for projects with domains (routed via Caddy proxy)
+                // Fallback to absolute HTTP URL for direct IP access
+                const useRelative = project.domains && project.domains.length > 0;
+                const scriptSrc = useRelative ? '/_umami/script.js' : `${umamiUrl}/script.js`;
+                const scriptUrl = useRelative ? '/_umami' : umamiUrl;
+                
+                envVars['NEXT_PUBLIC_UMAMI_URL'] = scriptUrl;
+                return `<script defer src="${scriptSrc}" data-website-id="${siteId}"></script>`;
             }
             return '';
         })(),

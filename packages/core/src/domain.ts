@@ -63,7 +63,7 @@ export async function readExistingDomains(client: SSHClient): Promise<DomainConf
 /**
  * Generate a Caddyfile string from an array of domain configurations.
  */
-export function generateCaddyfile(domains: DomainConfig[], tlsMode: 'production' | 'internal' = 'production'): string {
+export function generateCaddyfile(domains: DomainConfig[], tlsMode: 'production' | 'internal' = 'production', umamiRunning: boolean = false): string {
     if (domains.length === 0) {
         // Empty Caddyfile — Caddy will just idle
         return '# Hylius Managed Caddyfile\n# No domains configured yet.\n';
@@ -71,7 +71,8 @@ export function generateCaddyfile(domains: DomainConfig[], tlsMode: 'production'
 
     const blocks = domains.map(d => {
         const tlsDirective = tlsMode === 'internal' ? '\n    tls internal' : '';
-        return `${d.hostname} {${tlsDirective}\n    reverse_proxy localhost:${d.upstreamPort}\n}`;
+        const umamiBlock = umamiRunning ? '\n    handle_path /_umami/* {\n        reverse_proxy localhost:3100\n    }' : '';
+        return `${d.hostname} {${tlsDirective}${umamiBlock}\n    reverse_proxy localhost:${d.upstreamPort}\n}`;
     });
 
     return `# Hylius Managed Caddyfile — DO NOT EDIT MANUALLY\n# Last updated: ${new Date().toISOString()}\n\n${blocks.join('\n\n')}\n`;
@@ -252,8 +253,12 @@ export async function configureCaddy(
         return;
     }
 
+    // Check if Umami is running
+    const { stdout: umamiCheck } = await client.exec(`docker ps --filter name=hylius-umami-app --format '{{.Names}}' | grep -q hylius-umami-app && echo yes || echo no`);
+    const umamiRunning = umamiCheck.trim() === 'yes';
+
     // Generate the new Caddyfile
-    const caddyfileContent = generateCaddyfile(mergedDomains, tlsMode);
+    const caddyfileContent = generateCaddyfile(mergedDomains, tlsMode, umamiRunning);
 
     // Write it to the host
     await client.exec(`cat > ${CADDYFILE_PATH} << 'HYLIUS_EOF'\n${caddyfileContent}HYLIUS_EOF`);
@@ -299,8 +304,12 @@ export async function removeDomainFromCaddy(
     // Filter out the domain being removed
     const filteredDomains = existingDomains.filter(d => d.hostname !== hostname);
 
+    // Check if Umami is running
+    const { stdout: umamiCheck } = await client.exec(`docker ps --filter name=hylius-umami-app --format '{{.Names}}' | grep -q hylius-umami-app && echo yes || echo no`);
+    const umamiRunning = umamiCheck.trim() === 'yes';
+
     // Generate the new Caddyfile from the filtered list
-    const caddyfileContent = generateCaddyfile(filteredDomains, tlsMode);
+    const caddyfileContent = generateCaddyfile(filteredDomains, tlsMode, umamiRunning);
     await client.exec(`cat > ${CADDYFILE_PATH} << 'HYLIUS_EOF'\n${caddyfileContent}HYLIUS_EOF`);
 
     log(`Caddyfile updated — removed ${hostname}, ${filteredDomains.length} domain(s) remaining.`);

@@ -357,12 +357,6 @@ func isComposeStrategy(s string) bool {
 
 // ─── Analytics Script Injection ───────────────────────────────────────────────
 
-// injectAnalyticsScript attempts to inject the Umami tracking script into the
-// project source before build. Framework detection order:
-//  1. Next.js (app router): app/layout.tsx or src/app/layout.tsx
-//  2. Next.js (pages router): pages/_document.tsx or pages/_document.jsx
-//  3. Laravel Blade: resources/views/layouts/*.blade.php
-//  4. Any index.html in project root or public/
 func injectAnalyticsScript(releasePath, script, strategy string, log func(string)) {
 	if strategy == "ghcr-pull" {
 		log("[Analytics] Skipping injection — pre-built image. Enable a sidecar proxy for GHCR projects.\n")
@@ -371,69 +365,64 @@ func injectAnalyticsScript(releasePath, script, strategy string, log func(string
 
 	injected := false
 
-	// 1. Next.js app router: app/layout.tsx (or src/app/layout.tsx)
-	for _, candidate := range []string{
-		filepath.Join(releasePath, "app", "layout.tsx"),
-		filepath.Join(releasePath, "src", "app", "layout.tsx"),
-		filepath.Join(releasePath, "app", "layout.jsx"),
-		filepath.Join(releasePath, "src", "app", "layout.jsx"),
-	} {
-		if fileExists(candidate) {
-			if injectIntoNextLayout(candidate, script, log) {
+	// Define a WalkDirFunc to search for files
+	err := filepath.WalkDir(releasePath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // ignore errors
+		}
+		
+		// Stop if already injected
+		if injected {
+			return filepath.SkipDir
+		}
+
+		// Skip irrelevant directories
+		if d.IsDir() {
+			name := d.Name()
+			if name == "node_modules" || name == "vendor" || name == ".git" || name == "dist" || name == "build" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// 1. Next.js app router layout (layout.tsx or layout.jsx)
+		name := d.Name()
+		if name == "layout.tsx" || name == "layout.jsx" {
+			if injectIntoNextLayout(path, script, log) {
 				injected = true
-				break
+				return filepath.SkipDir
 			}
 		}
-	}
 
-	// 2. Next.js pages router: pages/_document.tsx
-	if !injected {
-		for _, candidate := range []string{
-			filepath.Join(releasePath, "pages", "_document.tsx"),
-			filepath.Join(releasePath, "pages", "_document.jsx"),
-			filepath.Join(releasePath, "src", "pages", "_document.tsx"),
-			filepath.Join(releasePath, "src", "pages", "_document.jsx"),
-		} {
-			if fileExists(candidate) {
-				if injectIntoHead(candidate, "</Head>", script, log) {
-					injected = true
-					break
-				}
+		// 2. Next.js pages router document (_document.tsx or _document.jsx)
+		if name == "_document.tsx" || name == "_document.jsx" {
+			if injectIntoHead(path, "</Head>", script, log) {
+				injected = true
+				return filepath.SkipDir
 			}
 		}
-	}
 
-	// 3. Laravel Blade: resources/views/layouts/*.blade.php
-	if !injected {
-		bladeDir := filepath.Join(releasePath, "resources", "views", "layouts")
-		if fileExists(bladeDir) {
-			entries, _ := os.ReadDir(bladeDir)
-			for _, e := range entries {
-				if !e.IsDir() && filepath.Ext(e.Name()) == ".php" {
-					candidate := filepath.Join(bladeDir, e.Name())
-					if injectIntoHead(candidate, "</head>", script, log) {
-						injected = true
-						break
-					}
-				}
+		// 3. Laravel Blade (*.blade.php) - could be in layouts or standalone like welcome.blade.php
+		if strings.HasSuffix(name, ".blade.php") {
+			if injectIntoHead(path, "</head>", script, log) {
+				injected = true
+				return filepath.SkipDir
 			}
 		}
-	}
 
-	// 4. Generic index.html: public/index.html or index.html
-	if !injected {
-		for _, candidate := range []string{
-			filepath.Join(releasePath, "public", "index.html"),
-			filepath.Join(releasePath, "index.html"),
-			filepath.Join(releasePath, "dist", "index.html"),
-		} {
-			if fileExists(candidate) {
-				if injectIntoHead(candidate, "</head>", script, log) {
-					injected = true
-					break
-				}
+		// 4. Generic index.html
+		if name == "index.html" {
+			if injectIntoHead(path, "</head>", script, log) {
+				injected = true
+				return filepath.SkipDir
 			}
 		}
+
+		return nil
+	})
+
+	if err != nil {
+		log(fmt.Sprintf("[Analytics] WalkDir error: %v\n", err))
 	}
 
 	if !injected {

@@ -65,6 +65,38 @@ export async function configureLaravelContainer(
             log(`Updated .env APP_URL to ${appUrl}`);
         }
 
+        // 4. Install required PDO database driver if missing
+        const dbConnection = project.env?.DB_CONNECTION || '';
+        const databaseUrl = project.env?.DATABASE_URL || '';
+        const needsPgsql = dbConnection === 'pgsql' || databaseUrl.startsWith('postgresql');
+        const needsMysql = dbConnection === 'mysql' || databaseUrl.startsWith('mysql');
+
+        if (needsPgsql) {
+            // Check if pdo_pgsql is already installed
+            const { code: hasPgsql } = await client.exec(
+                `docker exec ${containerName} php -m 2>/dev/null | grep -qi pdo_pgsql`
+            );
+            if (hasPgsql !== 0) {
+                log('Installing pdo_pgsql extension (required for PostgreSQL)...');
+                // Try install-php-extensions first (common in official PHP images), then fall back to apt
+                await client.exec(
+                    `docker exec ${containerName} sh -c "if command -v install-php-extensions >/dev/null 2>&1; then install-php-extensions pdo_pgsql; elif command -v docker-php-ext-install >/dev/null 2>&1; then apt-get update -qq && apt-get install -y -qq libpq-dev >/dev/null 2>&1; docker-php-ext-install pdo_pgsql; else apt-get update -qq && apt-get install -y -qq php-pgsql >/dev/null 2>&1; fi" 2>/dev/null || true`
+                );
+                log('pdo_pgsql extension installed.');
+            }
+        } else if (needsMysql) {
+            const { code: hasMysql } = await client.exec(
+                `docker exec ${containerName} php -m 2>/dev/null | grep -qi pdo_mysql`
+            );
+            if (hasMysql !== 0) {
+                log('Installing pdo_mysql extension (required for MySQL)...');
+                await client.exec(
+                    `docker exec ${containerName} sh -c "if command -v install-php-extensions >/dev/null 2>&1; then install-php-extensions pdo_mysql; elif command -v docker-php-ext-install >/dev/null 2>&1; then docker-php-ext-install pdo_mysql; else apt-get update -qq && apt-get install -y -qq php-mysql >/dev/null 2>&1; fi" 2>/dev/null || true`
+                );
+                log('pdo_mysql extension installed.');
+            }
+        }
+
         // 5. Clear all Laravel caches
         await client.exec(
             `docker exec -w ${workdir} ${containerName} php artisan config:clear 2>/dev/null || true`

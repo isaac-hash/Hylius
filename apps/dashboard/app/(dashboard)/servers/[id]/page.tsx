@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { useAuth } from '@/providers/auth.provider';
+import toast from 'react-hot-toast';
 import DeploymentHistory from '@/components/DeploymentHistory';
 import AddProjectModal from '@/components/AddProjectModal';
 import EditServerModal from '@/components/EditServerModal';
@@ -96,6 +97,7 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
     const [activeLogsProjectId, setActiveLogsProjectId] = useState<string | null>(null);
     const [activeEnvProjectId, setActiveEnvProjectId] = useState<string | null>(null);
     const [deletingProject, setDeletingProject] = useState<string | null>(null);
+    const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null);
     const [newlyProvisionedProjects, setNewlyProvisionedProjects] = useState<Record<string, { token: string; webhookUrl: string; prUrl?: string | null }>>({});
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -145,29 +147,22 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
         }
     };
 
-    const handleDeleteProject = async (projectId: string, projectName: string) => {
-        if (!confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone and will erase all deployment history.`)) {
-            return;
-        }
-
+    const handleDeleteProject = async (projectId: string) => {
+        setConfirmDeleteProjectId(null);
         setDeletingProject(projectId);
         try {
             const res = await fetch(`/api/projects/${projectId}`, {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
-
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.error || 'Failed to delete project');
             }
-
-            // Refresh the server details to update the project list
+            toast.success('Project deleted successfully');
             fetchServer();
         } catch (err: any) {
-            alert(err.message || 'Failed to delete project');
+            toast.error(err.message || 'Failed to delete project');
         } finally {
             setDeletingProject(null);
         }
@@ -337,18 +332,35 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                                                 })()}
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                <button
-                                                                    onClick={() => handleDeleteProject(project.id, project.name)}
-                                                                    disabled={deletingProject === project.id}
-                                                                    className="p-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                                                                    title="Delete Project"
-                                                                >
-                                                                    {deletingProject === project.id ? (
-                                                                        <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin"></div>
-                                                                    ) : (
+                                                                {confirmDeleteProjectId === project.id ? (
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-xs text-red-400">Delete?</span>
+                                                                        <button
+                                                                            onClick={() => handleDeleteProject(project.id)}
+                                                                            disabled={deletingProject === project.id}
+                                                                            className="px-2 py-1 rounded text-xs font-medium bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-50"
+                                                                        >
+                                                                            {deletingProject === project.id ? (
+                                                                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                                            ) : 'Yes'}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setConfirmDeleteProjectId(null)}
+                                                                            className="px-2 py-1 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                                                                        >
+                                                                            No
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => setConfirmDeleteProjectId(project.id)}
+                                                                        disabled={deletingProject !== null}
+                                                                        className="p-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                                        title="Delete Project"
+                                                                    >
                                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                                    )}
-                                                                </button>
+                                                                    </button>
+                                                                )}
                                                                 {/* Logs button */}
                                                                 <button
                                                                     onClick={() => setActiveLogsProjectId(

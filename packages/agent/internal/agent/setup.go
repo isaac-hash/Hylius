@@ -292,13 +292,26 @@ func (a *Agent) handleConfigureCaddy(msg Message) {
 func configureCaddy(domains []caddyDomain, tlsMode string, log func(string)) error {
 	const caddyfile = "/opt/hylius/caddy/Caddyfile"
 
+	// Check if Umami is running
+	umamiRunning := false
+	out, err := execShellOutput("docker ps --filter name=hylius-umami-app --format '{{.Names}}' | grep -q hylius-umami-app && echo yes || echo no")
+	if err == nil && strings.TrimSpace(out) == "yes" {
+		umamiRunning = true
+	}
+
 	var blocks []string
 	for _, d := range domains {
 		tls := ""
 		if tlsMode == "internal" {
 			tls = "\n    tls internal"
 		}
-		blocks = append(blocks, fmt.Sprintf("%s {%s\n    reverse_proxy localhost:%s\n}", d.Hostname, tls, d.UpstreamPort))
+
+		umamiBlock := ""
+		if umamiRunning {
+			umamiBlock = "\n    handle_path /_umami/* {\n        reverse_proxy localhost:3100\n    }"
+		}
+
+		blocks = append(blocks, fmt.Sprintf("%s {%s%s\n    reverse_proxy localhost:%s\n}", d.Hostname, tls, umamiBlock, d.UpstreamPort))
 	}
 
 	content := fmt.Sprintf("# Hylius Managed Caddyfile — DO NOT EDIT MANUALLY\n# Last updated: %s\n\n%s\n",

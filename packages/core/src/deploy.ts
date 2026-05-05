@@ -256,6 +256,39 @@ async function executeReleaseCommand(
     }
 }
 
+// ─── Analytics Script Injection (SSH Path) ────────────────────────────
+async function injectAnalyticsScriptSSH(client: SSHClient, releasePath: string, script: string, log: (msg: string) => void): Promise<void> {
+    if (!script) return;
+
+    log(`[Analytics] Attempting to inject Umami tracking script via deep search...`);
+
+    // A one-liner bash script that replicates the Go agent's WalkDir logic.
+    // It searches for layout.tsx, layout.jsx, _document.tsx, _document.jsx, *.blade.php, and index.html
+    // and injects the script right before </head> or </Head>.
+    const injectCmd = `
+        INJECTED="false"
+        SCRIPT_TAG='${script.replace(/'/g, "'\\''")}'
+        
+        find "${releasePath}" -type f \\( -name "layout.tsx" -o -name "layout.jsx" -o -name "_document.tsx" -o -name "_document.jsx" -o -name "*.blade.php" -o -name "index.html" \\) ! -path "*/node_modules/*" ! -path "*/vendor/*" ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/.git/*" | while read -r file; do
+            if grep -iq "</head>" "$file"; then
+                # Use awk to inject before the closing head tag (case-insensitive)
+                awk -v script="$SCRIPT_TAG" '/<\\/head>/ || /<\\/Head>/ {print script; print; next}1' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+                echo "INJECTED $file"
+                break
+            fi
+        done
+    `;
+
+    const { stdout, stderr, code } = await client.exec(injectCmd);
+    
+    if (stdout.includes('INJECTED')) {
+        const injectedFile = stdout.split('\\n').find(l => l.startsWith('INJECTED '))?.replace('INJECTED ', '');
+        log(`[Analytics] Successfully injected script into ${injectedFile}`);
+    } else {
+        log(`[Analytics] Could not find a suitable injection point. Add the script tag manually.`);
+    }
+}
+
 export async function deploy(options: DeployOptions): Promise<DeployResult> {
     // ─── Agent mode: delegate entire deploy to the VPS agent ─────────────────
     if (options.executionMode === 'agent' && options.agent) {
@@ -326,6 +359,10 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
                     onLog,
                 );
             }
+        }
+
+        if (strategy !== 'ghcr-pull' && project.analyticsScript) {
+            await injectAnalyticsScriptSSH(client, releasePath, project.analyticsScript, log);
         }
 
         if (!strategy) {
@@ -982,6 +1019,17 @@ async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
     log(`\x1b[36m[Agent] Sending deploy command to VPS agent...\x1b[0m\n`);
 
     try {
+        // Pre-deploy: force-remove any stale container to prevent "name already in use" errors.
+        // Wrapped in try/catch — if the agent doesn't support 'exec', this fails silently
+        // and the deploy payload's forceCleanup flag below handles it on the agent side.
+        const preflightContainerName = project.containerName || `${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-app`;
+        log(`\x1b[36m[Agent] Pre-deploy cleanup: removing stale container ${preflightContainerName}...\x1b[0m\n`);
+        try {
+            await agent!.streamCommand('exec', { cmd: `docker rm -f ${preflightContainerName} > /dev/null 2>&1 || true` }, () => {});
+        } catch {
+            // Agent may not support 'exec' action — forceCleanup in deploy payload handles it
+        }
+
         const { exitCode, resultData } = await agent!.streamCommand(
             'deploy',
             {
@@ -1058,6 +1106,41 @@ async function deployViaAgent(options: DeployOptions): Promise<DeployResult> {
                 if (isHttpsDeploy) {
                     await agentExecPost(`docker exec ${containerName} php artisan config:set --env session.secure_cookie true 2>/dev/null || true`);
                 }
+
+                // Install required PDO database driver if missing
+                const dbConnection = project.env?.DB_CONNECTION || '';
+                const databaseUrl = project.env?.DATABASE_URL || '';
+                const needsPgsql = dbConnection === 'pgsql' || databaseUrl.startsWith('postgresql');
+                const needsMysql = dbConnection === 'mysql' || databaseUrl.startsWith('mysql');
+
+                if (needsPgsql) {
+                    const hasPgsqlOut = await agentExecPost(`docker exec ${containerName} php -m 2>/dev/null | grep -qi pdo_pgsql && echo OK || echo MISSING`);
+                    if (hasPgsqlOut.includes('MISSING')) {
+                        log(`\x1b[36m[Post-deploy] Installing pdo_pgsql extension...\x1b[0m\n`);
+                        await agentExecPost(
+                            `docker exec ${containerName} sh -c "if command -v install-php-extensions >/dev/null 2>&1; then install-php-extensions pdo_pgsql; elif command -v docker-php-ext-install >/dev/null 2>&1; then apt-get update -qq && apt-get install -y -qq libpq-dev >/dev/null 2>&1; docker-php-ext-install pdo_pgsql; else apt-get update -qq && apt-get install -y -qq php-pgsql >/dev/null 2>&1; fi" 2>/dev/null || true`
+                        );
+                        log(`\x1b[32m[Post-deploy] pdo_pgsql installed\x1b[0m\n`);
+                    }
+                } else if (needsMysql) {
+                    const hasMysqlOut = await agentExecPost(`docker exec ${containerName} php -m 2>/dev/null | grep -qi pdo_mysql && echo OK || echo MISSING`);
+                    if (hasMysqlOut.includes('MISSING')) {
+                        log(`\x1b[36m[Post-deploy] Installing pdo_mysql extension...\x1b[0m\n`);
+                        await agentExecPost(
+                            `docker exec ${containerName} sh -c "if command -v install-php-extensions >/dev/null 2>&1; then install-php-extensions pdo_mysql; elif command -v docker-php-ext-install >/dev/null 2>&1; then docker-php-ext-install pdo_mysql; else apt-get update -qq && apt-get install -y -qq php-mysql >/dev/null 2>&1; fi" 2>/dev/null || true`
+                        );
+                        log(`\x1b[32m[Post-deploy] pdo_mysql installed\x1b[0m\n`);
+                    }
+                }
+
+                // Restart the container so PHP-FPM reloads with the cached config
+                // and all extensions active. Without this, the web server process
+                // keeps its original startup state (stale extension list / stale config).
+                log(`\x1b[36m[Post-deploy] Restarting container to reload PHP-FPM with fresh config...\x1b[0m\n`);
+                await agentExecPost(`docker restart ${containerName} 2>/dev/null || true`);
+                // Wait for the container to be back up and accepting connections
+                await new Promise(r => setTimeout(r, 4000));
+                log(`\x1b[32m[Post-deploy] Container restarted\x1b[0m\n`);
 
                 // Determine and run release command (migrate by default for Laravel)
                 const releaseCmd = project.releaseCommand || 'php artisan migrate --force';
