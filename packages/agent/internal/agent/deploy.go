@@ -233,7 +233,7 @@ func (a *Agent) deployRailpack(releasePath, currentPath, containerName string, p
 	runLocal("docker start buildkit 2>/dev/null || docker run --privileged -d --name buildkit --restart unless-stopped moby/buildkit", nil)
 	log(fmt.Sprintf("Building with Railpack: %s\n", imageName))
 	code := runStream(
-		fmt.Sprintf("cd %s && BUILDKIT_HOST=docker-container://buildkit railpack build . --name %s", releasePath, imageName),
+		fmt.Sprintf("cd %s && BUILDKIT_HOST=docker-container://buildkit railpack build . --name %s%s", releasePath, imageName, envArgs),
 		log,
 	)
 	if code != 0 {
@@ -247,9 +247,10 @@ func (a *Agent) deployDockerfile(releasePath, currentPath, containerName string,
 	hostPort := findFreePort(3011)
 	containerPort := envOrDefault(p.Project.Env, "PORT", "3000")
 	envArgs := buildEnvArgs(p.Project.Env)
+	buildArgs := buildBuildArgs(p.Project.Env, "--build-arg")
 
 	log(fmt.Sprintf("Building Docker image: %s\n", img))
-	code := runStream(fmt.Sprintf("cd %s && docker build -t %s .", releasePath, img), log)
+	code := runStream(fmt.Sprintf("cd %s && docker build %s -t %s .", releasePath, buildArgs, img), log)
 	if code != 0 {
 		return "", fmt.Errorf("docker build failed")
 	}
@@ -277,9 +278,10 @@ func (a *Agent) deployNixpacks(releasePath, currentPath, containerName string, p
 	hostPort := findFreePort(3011)
 	containerPort := envOrDefault(p.Project.Env, "PORT", "3000")
 	envArgs := buildEnvArgs(p.Project.Env)
+	buildArgs := buildBuildArgs(p.Project.Env, "--env")
 
 	log(fmt.Sprintf("Building with Nixpacks: %s\n", img))
-	code := runStream(fmt.Sprintf("cd %s && nixpacks build . --name %s", releasePath, img), log)
+	code := runStream(fmt.Sprintf("cd %s && nixpacks build . --name %s%s", releasePath, img, buildArgs), log)
 	if code != 0 {
 		return "", fmt.Errorf("nixpacks build failed")
 	}
@@ -544,6 +546,15 @@ func buildEnvArgs(env map[string]string) string {
 	for k, v := range env {
 		v = strings.ReplaceAll(v, `"`, `\"`)
 		sb.WriteString(fmt.Sprintf(` -e "%s=%s"`, k, v))
+	}
+	return sb.String()
+}
+
+func buildBuildArgs(env map[string]string, flag string) string {
+	var sb strings.Builder
+	for k, v := range env {
+		v = strings.ReplaceAll(v, `"`, `\"`)
+		sb.WriteString(fmt.Sprintf(` %s "%s=%s"`, flag, k, v))
 	}
 	return sb.String()
 }

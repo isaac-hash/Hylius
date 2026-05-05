@@ -166,6 +166,13 @@ function getDockerEnvArgs(env?: Record<string, string>): string {
         .join('');
 }
 
+function getBuilderEnvArgs(env?: Record<string, string>, prefix = '--env'): string {
+    if (!env) return '';
+    return Object.entries(env)
+        .map(([k, v]) => ` ${prefix} "${k}=${String(v).replace(/"/g, '\\"')}"`)
+        .join('');
+}
+
 /** Sanitize a project name for use as a docker compose -p argument */
 function getComposeProjectName(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+/, '');
@@ -621,12 +628,13 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             const imageName = getImageName(project);
             const containerName = getContainerName(project);
             const envArgs = getDockerEnvArgs(project.env);
+            const buildArgs = getBuilderEnvArgs(project.env, '--build-arg');
             const runCommand = project.dockerRunCommand || `docker run -d --name ${containerName}${envArgs} --network hylius --restart unless-stopped ${imageName}`;
 
             log(`Building Docker image: ${imageName}`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && docker build -t ${imageName} .`,
+                `cd ${releasePath} && docker build ${buildArgs} -t ${imageName} .`,
                 'Docker build',
                 onLog,
             );
@@ -669,7 +677,7 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
             log(`Building container image with Railpack: ${imageName}`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && BUILDKIT_HOST=docker-container://buildkit railpack build . --name ${imageName}`,
+                `cd ${releasePath} && BUILDKIT_HOST=docker-container://buildkit railpack build . --name ${imageName}${envArgs}`,
                 'Railpack build',
                 onLog,
             );
@@ -717,12 +725,13 @@ export async function deploy(options: DeployOptions): Promise<DeployResult> {
 
             // Find a free host port (avoids conflicts with port 80/Caddy)
             const hostPort = await findFreeHostPort(client, containerName, log);
+            const buildArgs = getBuilderEnvArgs(project.env, '--env');
 
             // Build with Nixpacks
             log(`Building container image with Nixpacks: ${imageName}`);
             await execStreamOrThrow(
                 client,
-                `cd ${releasePath} && nixpacks build . --name ${imageName}`,
+                `cd ${releasePath} && nixpacks build . --name ${imageName}${buildArgs}`,
                 'Nixpacks build',
                 onLog,
             );
