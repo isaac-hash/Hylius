@@ -82,23 +82,42 @@ export default function MarketplacePage() {
     const [installModal, setInstallModal] = useState<{ open: boolean; feature: Feature | null }>({ open: false, feature: null });
     const [installing, setInstalling] = useState(false);
     const [uninstalling, setUninstalling] = useState<string | null>(null);
-    const [installedFeatures, setInstalledFeatures] = useState<string[]>([]);
+    const [deployingFeatures, setDeployingFeatures] = useState<string[]>([]);
     const [servers, setServers] = useState<{ id: string; name: string; hasTrafficAnalytics: boolean }[]>([]);
     const [selectedServerId, setSelectedServerId] = useState<string>("");
 
+    const refreshServers = (authToken: string) =>
+        fetch("/api/servers", { headers: { Authorization: `Bearer ${authToken}` } })
+            .then((r) => r.json())
+            .then((data) => { if (Array.isArray(data)) setServers(data); })
+            .catch(() => {});
+
     useEffect(() => {
         if (!token) return;
-        fetch("/api/servers", { headers: { Authorization: `Bearer ${token}` } })
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data)) {
-                    setServers(data);
-                    const alreadyInstalled = data.filter((s: any) => s.hasTrafficAnalytics).map(() => "umami");
-                    setInstalledFeatures(alreadyInstalled);
-                }
-            })
-            .catch(() => {});
+        refreshServers(token);
     }, [token]);
+
+    // Poll every 10s while something is deploying
+    useEffect(() => {
+        if (!token || deployingFeatures.length === 0) return;
+        const interval = setInterval(() => {
+            refreshServers(token).then(() => {
+                // If the selected server now has analytics, deployment succeeded
+                setServers(current => {
+                    const srv = current.find(s => s.id === selectedServerId);
+                    if (srv?.hasTrafficAnalytics) {
+                        setDeployingFeatures(prev => prev.filter(f => f !== 'umami'));
+                    }
+                    return current;
+                });
+            });
+        }, 10_000);
+        return () => clearInterval(interval);
+    }, [token, deployingFeatures, selectedServerId]);
+
+    // Derived: which features are installed on the currently-selected server
+    const selectedServer = servers.find((s) => s.id === selectedServerId);
+    const installedFeatures: string[] = selectedServer?.hasTrafficAnalytics ? ["umami"] : [];
 
     const handleInstallClick = (feature: Feature) => {
         if (isFreePlan || feature.comingSoon) return;
@@ -120,8 +139,10 @@ export default function MarketplacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                setInstalledFeatures((prev) => [...prev, featureId]);
                 setInstallModal({ open: false, feature: null });
+                // Mark as deploying — poll until the background task completes
+                setDeployingFeatures(prev => [...prev, featureId]);
+                await refreshServers(token);
             } else {
                 alert(data.error || "Installation failed");
             }
@@ -148,12 +169,7 @@ export default function MarketplacePage() {
             });
             const data = await res.json();
             if (res.ok) {
-                setInstalledFeatures((prev) => prev.filter((id) => id !== featureId));
-                // Refresh server list to get updated state
-                fetch('/api/servers', { headers: { Authorization: `Bearer ${token}` } })
-                    .then(r => r.json())
-                    .then(data => { if (Array.isArray(data)) setServers(data); })
-                    .catch(() => {});
+                await refreshServers(token);
             } else {
                 alert(data.error || 'Uninstall failed');
             }
@@ -260,6 +276,14 @@ export default function MarketplacePage() {
                                             className="w-full px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-gray-600 text-sm font-semibold cursor-not-allowed"
                                         >
                                             Coming Soon
+                                        </button>
+                                    ) : deployingFeatures.includes(feature.id) ? (
+                                        <button
+                                            disabled
+                                            className="w-full px-4 py-2.5 rounded-xl bg-blue-600/20 border border-blue-500/30 text-blue-400 text-sm font-semibold cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                            Deploying...
                                         </button>
                                     ) : isInstalled ? (
                                         <div className="flex gap-2">

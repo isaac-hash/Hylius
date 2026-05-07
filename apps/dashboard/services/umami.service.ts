@@ -99,10 +99,11 @@ export async function deployUmami(serverId: string): Promise<void> {
             log(`Warning: Could not fetch Umami API token: ${e.message}\n`);
         }
 
-        // 9. Update the server record
+        // 9. Update the server record — mark as fully live
         await prisma.server.update({
             where: { id: serverId },
             data: {
+                hasTrafficAnalytics: true,
                 trafficAnalyticsUrl: umamiUrl,
                 trafficAnalyticsToken: apiToken || null,
             } as any,
@@ -113,13 +114,8 @@ export async function deployUmami(serverId: string): Promise<void> {
 
     } catch (error: any) {
         console.error(`[Umami] Deployment failed for server ${serverId}:`, error.message);
-
-        // Revert the flag so the user can retry
-        await prisma.server.update({
-            where: { id: serverId },
-            data: { hasTrafficAnalytics: false } as any,
-        });
-
+        // hasTrafficAnalytics was never set to true so nothing to roll back.
+        // The flag stays false and the user can retry from the Marketplace.
         throw error;
     }
 }

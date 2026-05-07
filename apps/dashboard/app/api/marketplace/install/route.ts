@@ -50,11 +50,8 @@ export async function POST(request: Request) {
                     return NextResponse.json({ error: 'Traffic analytics is already enabled on this server' }, { status: 409 });
                 }
 
-                // Mark as enabled immediately
-                await prisma.server.update({
-                    where: { id: serverId },
-                    data: { hasTrafficAnalytics: true },
-                });
+                // Mark as deploying (trafficAnalyticsUrl still null until done)
+                // We do NOT set hasTrafficAnalytics=true here — deployUmami sets it on success.
 
                 await prisma.auditLog.create({
                     data: {
