@@ -6,10 +6,10 @@ async function redeploy() {
   const orgId = 'cmohhnv7c0009xx9xy5483jxv';
 
   console.log('Redeploying API...');
-  await executeDeployment(apiId, orgId, 'system-fix');
+  await executeDeployment({ projectId: apiId, trigger: 'cli' });
   
   console.log('Redeploying Fron...');
-  await executeDeployment(fronId, orgId, 'system-fix');
+  await executeDeployment({ projectId: fronId, trigger: 'cli' });
 
   console.log('Redeployments triggered.');
 }

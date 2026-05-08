@@ -111,8 +111,43 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: true, feature: 'uptime', serverId });
             }
 
+            case 'glitchtip': {
+                if (!serverId) {
+                    return NextResponse.json({ error: 'serverId is required' }, { status: 400 });
+                }
+
+                const server = await prisma.server.findFirst({
+                    where: { id: serverId, organizationId: auth.organizationId },
+                });
+
+                if (!server) {
+                    return NextResponse.json({ error: 'Server not found' }, { status: 404 });
+                }
+
+                if (!server.hasErrorTracking) {
+                    return NextResponse.json({ error: 'Error Tracking is not installed on this server' }, { status: 409 });
+                }
+
+                const { GlitchtipService } = await import('../../../../services/glitchtip.service');
+                
+                GlitchtipService.uninstall(serverId, auth.userId).catch((err) => {
+                    console.error(`[Marketplace] GlitchTip uninstall failed for server ${serverId}:`, err.message);
+                });
+
+                await prisma.auditLog.create({
+                    data: {
+                        action: 'FEATURE_UNINSTALLED',
+                        organizationId: auth.organizationId,
+                        userId: auth.userId,
+                        metadata: JSON.stringify({ featureId, serverId }),
+                    },
+                });
+
+                return NextResponse.json({ success: true, feature: 'glitchtip', serverId });
+            }
+
             default:
-                return NextResponse.json({ error: `Unknown feature: ${featureId}` }, { status: 400 });
+                return NextResponse.json({ error: 'Unknown feature' }, { status: 400 });
         }
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';

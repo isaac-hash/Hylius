@@ -26,6 +26,7 @@ type deployPayload struct {
 		ContainerName     string            `json:"containerName"`
 		DockerComposeFile string            `json:"dockerComposeFile"`
 		AnalyticsScript   string            `json:"analyticsScript"` // Pre-built <script> tag; empty = skip
+		SentryDsn         string            `json:"sentryDsn"`
 	} `json:"project"`
 	Domains []struct {
 		Hostname     string `json:"hostname"`
@@ -118,9 +119,9 @@ func (a *Agent) executeDeploy(commandID string, p *deployPayload) deployResult {
 	}
 	log(fmt.Sprintf("Deploy strategy: %s\n", strategy))
 
-	// Inject analytics tracking script (before build so frameworks can pick it up)
-	if p.Project.AnalyticsScript != "" {
-		injectAnalyticsScript(releasePath, p.Project.AnalyticsScript, strategy, log)
+	// Inject analytics and error tracking scripts (before build so frameworks can pick it up)
+	if p.Project.AnalyticsScript != "" || p.Project.SentryDsn != "" {
+		injectTrackingScripts(releasePath, p.Project.AnalyticsScript, p.Project.SentryDsn, strategy, log)
 	}
 
 	// Write .env file for compose strategies
@@ -357,15 +358,29 @@ func isComposeStrategy(s string) bool {
 	return s == "docker-compose" || s == "compose-server" || s == "compose-registry"
 }
 
-// ─── Analytics Script Injection ───────────────────────────────────────────────
+// ─── Analytics & Error Tracking Script Injection ───────────────────────────────────────────────
 
-func injectAnalyticsScript(releasePath, script, strategy string, log func(string)) {
+func injectTrackingScripts(releasePath, analyticsScript, sentryDsn, strategy string, log func(string)) {
 	if strategy == "ghcr-pull" {
-		log("[Analytics] Skipping injection — pre-built image. Enable a sidecar proxy for GHCR projects.\n")
+		log("[Tracking] Skipping injection — pre-built image. Enable a sidecar proxy for GHCR projects.\n")
 		return
 	}
 
 	injected := false
+
+	var scriptBuilder strings.Builder
+	if analyticsScript != "" {
+		scriptBuilder.WriteString(analyticsScript)
+	}
+	if sentryDsn != "" {
+		sentryScript := fmt.Sprintf(`<script src="https://browser.sentry-cdn.com/7.73.0/bundle.min.js" crossorigin="anonymous"></script><script>Sentry.init({dsn: "%s"});</script>`, sentryDsn)
+		scriptBuilder.WriteString("\n" + sentryScript)
+	}
+	script := scriptBuilder.String()
+
+	if script == "" {
+		return
+	}
 
 	// Define a WalkDirFunc to search for files
 	err := filepath.WalkDir(releasePath, func(path string, d os.DirEntry, err error) error {
@@ -424,7 +439,7 @@ func injectAnalyticsScript(releasePath, script, strategy string, log func(string
 	})
 
 	if err != nil {
-		log(fmt.Sprintf("[Analytics] WalkDir error: %v\n", err))
+		log(fmt.Sprintf("[Tracking] WalkDir error: %v\n", err))
 	}
 
 	if !injected {
@@ -443,20 +458,42 @@ func injectIntoNextLayout(path, rawScript string, log func(string)) bool {
 	src := string(content)
 
 	// Skip if already injected
-	if strings.Contains(src, "data-website-id") {
-		log(fmt.Sprintf("[Analytics] Script already present in %s\n", filepath.Base(path)))
+	if strings.Contains(src, "data-website-id") || strings.Contains(src, "Sentry.init") {
+		log(fmt.Sprintf("[Tracking] Script already present in %s\n", filepath.Base(path)))
 		return true
 	}
 
-	// Extract src and data-website-id from the raw HTML script tag
-	// Raw: <script defer src="http://..." data-website-id="uuid"></script>
+	var scripts []string
+
+	// Check for Umami
 	scriptSrc := extractAttr(rawScript, "src")
 	siteId := extractAttr(rawScript, "data-website-id")
-	if scriptSrc == "" || siteId == "" {
+	if scriptSrc != "" && siteId != "" && strings.Contains(scriptSrc, "umami") {
+		scripts = append(scripts, fmt.Sprintf(`<Script defer src="%s" data-website-id="%s" strategy="afterInteractive" />`, scriptSrc, siteId))
+	}
+
+	// Check for Sentry
+	if strings.Contains(rawScript, "Sentry.init") {
+		// Extract DSN
+		prefix := `dsn: "`
+		start := strings.Index(rawScript, prefix)
+		if start > 0 {
+			start += len(prefix)
+			end := strings.Index(rawScript[start:], `"`)
+			if end > 0 {
+				dsn := rawScript[start : start+end]
+				sentryScript := fmt.Sprintf(`<Script src="https://browser.sentry-cdn.com/7.73.0/bundle.min.js" strategy="beforeInteractive" crossorigin="anonymous" />
+      <Script id="sentry-init" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: "Sentry.init({ dsn: '%s' });" }} />`, dsn)
+				scripts = append(scripts, sentryScript)
+			}
+		}
+	}
+
+	if len(scripts) == 0 {
 		return false
 	}
 
-	nextScript := fmt.Sprintf(`<Script defer src="%s" data-website-id="%s" strategy="afterInteractive" />`, scriptSrc, siteId)
+	nextScript := strings.Join(scripts, "\n      ")
 
 	// Add import if not present
 	if !strings.Contains(src, `from 'next/script'`) && !strings.Contains(src, `from "next/script"`) {
@@ -472,10 +509,10 @@ func injectIntoNextLayout(path, rawScript string, log func(string)) bool {
 	}
 
 	if err := os.WriteFile(path, []byte(src), 0644); err != nil {
-		log(fmt.Sprintf("[Analytics] Failed to write %s: %v\n", filepath.Base(path), err))
+		log(fmt.Sprintf("[Tracking] Failed to write %s: %v\n", filepath.Base(path), err))
 		return false
 	}
-	log(fmt.Sprintf("[Analytics] ✅ Injected Next.js Script component into %s\n", filepath.Base(path)))
+	log(fmt.Sprintf("[Tracking] ✅ Injected Next.js Script component into %s\n", filepath.Base(path)))
 	return true
 }
 

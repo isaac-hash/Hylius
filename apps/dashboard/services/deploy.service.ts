@@ -185,6 +185,22 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         analyticsScript = `<script defer src="${scriptSrc}" data-website-id="${analyticsSiteId}"></script>`;
     }
 
+    let sentryDsn: string | undefined = undefined;
+    if (project.server.hasErrorTracking && !isPreview) {
+        const { GlitchtipApiService } = await import('./glitchtip-api.service');
+        try {
+            const dsn = await GlitchtipApiService.ensureProject(project.id);
+            if (dsn) {
+                sentryDsn = dsn;
+                envVars['SENTRY_DSN'] = dsn;
+                envVars['NEXT_PUBLIC_SENTRY_DSN'] = dsn;
+                envVars['VITE_SENTRY_DSN'] = dsn;
+            }
+        } catch (e: any) {
+            log(`Warning: Failed to fetch GlitchTip Sentry DSN: ${e.message}\n`);
+        }
+    }
+
     const projectConfig: ProjectConfig = {
         name: project.name,
         repoUrl,
@@ -201,6 +217,7 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         dockerComposeYaml,
         containerName: (project as any).containerName || undefined,
         analyticsScript,
+        sentryDsn,
     } as any;
 
     // Auto-inject URL environment variables

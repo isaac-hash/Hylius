@@ -229,6 +229,10 @@ func (a *Agent) dispatch(msg Message) {
 		a.handleStartUptime(msg)
 	case "stop-uptime":
 		a.handleStopUptime(msg)
+	case "install-glitchtip":
+		a.handleInstallGlitchtip(msg)
+	case "uninstall-glitchtip":
+		a.handleUninstallGlitchtip(msg)
 	default:
 		a.sendError(msg.CommandID, "unknown action: "+msg.Action)
 	}

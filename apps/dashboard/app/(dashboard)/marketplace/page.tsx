@@ -41,6 +41,14 @@ const LockIcon = () => (
     </svg>
 );
 
+const ErrorIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+    </svg>
+);
+
 const FEATURES: Feature[] = [
     {
         id: "umami",
@@ -72,6 +80,16 @@ const FEATURES: Feature[] = [
         borderGlow: "hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)]",
         requiresMinRam: false,
     },
+    {
+        id: "glitchtip",
+        name: "Error Tracking",
+        description: "Sentry-compatible native error tracking. Automatically catch unhandled exceptions, network failures, and stack traces across your entire stack.",
+        tags: ["Errors", "Debugging"],
+        icon: <ErrorIcon />,
+        gradient: "from-red-600/20 via-rose-600/10 to-pink-600/5",
+        borderGlow: "hover:border-red-500/40 hover:shadow-[0_0_30px_rgba(239,68,68,0.15)]",
+        requiresMinRam: true,
+    },
 ];
 
 export default function MarketplacePage() {
@@ -82,7 +100,7 @@ export default function MarketplacePage() {
     const [installing, setInstalling] = useState(false);
     const [uninstalling, setUninstalling] = useState<string | null>(null);
     const [deployingFeatures, setDeployingFeatures] = useState<string[]>([]);
-    const [servers, setServers] = useState<{ id: string; name: string; hasTrafficAnalytics: boolean; hasUptimeMonitoring: boolean }[]>([]);
+    const [servers, setServers] = useState<{ id: string; name: string; hasTrafficAnalytics: boolean; hasUptimeMonitoring: boolean; hasErrorTracking: boolean }[]>([]);
     const [selectedServerId, setSelectedServerId] = useState<string>("");
 
     const refreshServers = (authToken: string) =>
@@ -106,6 +124,7 @@ export default function MarketplacePage() {
                     if (srv) {
                         if (srv.hasTrafficAnalytics) setDeployingFeatures(prev => prev.filter(f => f !== 'umami'));
                         if (srv.hasUptimeMonitoring) setDeployingFeatures(prev => prev.filter(f => f !== 'uptime'));
+                        if (srv.hasErrorTracking) setDeployingFeatures(prev => prev.filter(f => f !== 'glitchtip'));
                     }
                     return current;
                 });
@@ -119,6 +138,7 @@ export default function MarketplacePage() {
     const installedFeatures: string[] = [];
     if (selectedServer?.hasTrafficAnalytics) installedFeatures.push("umami");
     if (selectedServer?.hasUptimeMonitoring) installedFeatures.push("uptime");
+    if (selectedServer?.hasErrorTracking) installedFeatures.push("glitchtip");
 
     const handleInstallClick = (feature: Feature) => {
         if (isFreePlan || feature.comingSoon) return;

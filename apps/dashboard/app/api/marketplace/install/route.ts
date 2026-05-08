@@ -119,6 +119,46 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: true, feature: 'uptime', serverId });
             }
 
+            case 'glitchtip': {
+                if (!serverId) {
+                    return NextResponse.json({ error: 'serverId is required for Error Tracking installation' }, { status: 400 });
+                }
+
+                const server = await prisma.server.findFirst({
+                    where: { id: serverId, organizationId: auth.organizationId },
+                });
+
+                if (!server) {
+                    return NextResponse.json({ error: 'Server not found' }, { status: 404 });
+                }
+
+                if (server.hasErrorTracking) {
+                    return NextResponse.json({ error: 'Error Tracking is already enabled' }, { status: 409 });
+                }
+
+                const { GlitchtipService } = await import('../../../../services/glitchtip.service');
+                
+                try {
+                    // Fire-and-forget: deploy GlitchTip in the background
+                    GlitchtipService.install(serverId, auth.userId).catch((err: Error) => {
+                        console.error(`[Marketplace] GlitchTip deployment failed for server ${serverId}:`, err.message);
+                    });
+
+                    await prisma.auditLog.create({
+                        data: {
+                            action: 'FEATURE_INSTALLED',
+                            organizationId: auth.organizationId,
+                            userId: auth.userId,
+                            metadata: JSON.stringify({ featureId, serverId }),
+                        },
+                    });
+
+                    return NextResponse.json({ success: true, feature: 'glitchtip', serverId, status: 'deploying' });
+                } catch (err: any) {
+                    return NextResponse.json({ error: err.message || 'Failed to install Error Tracking' }, { status: 500 });
+                }
+            }
+
             default:
                 return NextResponse.json({ error: `Unknown feature: ${featureId}` }, { status: 400 });
         }

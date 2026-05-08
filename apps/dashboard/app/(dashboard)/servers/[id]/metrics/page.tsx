@@ -200,7 +200,7 @@ function MetricChart({
                             contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
                             labelStyle={{ color: '#9ca3af' }}
                             itemStyle={{ color: color }}
-                            formatter={(v: number) => [`${v.toFixed(1)}%`, field.toUpperCase()]}
+                            formatter={(v: any) => [typeof v === 'number' ? `${v.toFixed(1)}%` : v, field.toUpperCase()]}
                         />
                         {warningThreshold && (
                             <ReferenceLine y={warningThreshold} stroke="#f59e0b" strokeDasharray="4 4"

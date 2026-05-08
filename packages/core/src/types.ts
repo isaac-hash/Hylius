@@ -37,6 +37,7 @@ export interface ProjectConfig {
     previewId?: string; // e.g. "pr-12"
     dockerComposeYaml?: string; // For templates: raw yaml string to write to server
     analyticsScript?: string; // Pre-built <script> tag for traffic analytics tracking
+    sentryDsn?: string; // Sentry DSN for error tracking
 }
 
 export type TriggerSource = 'cli' | 'dashboard' | 'webhook';

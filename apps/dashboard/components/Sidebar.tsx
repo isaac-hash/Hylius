@@ -85,6 +85,14 @@ const UptimeIcon = () => (
     </svg>
 );
 
+const ErrorIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+    </svg>
+);
+
 const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: <DashboardIcon /> },
     { name: "Stacks", href: "/stacks", icon: <StacksIcon /> },
@@ -92,6 +100,7 @@ const navItems = [
     { name: "Marketplace", href: "/marketplace", icon: <MarketplaceIcon />, badge: "NEW" },
     { name: "Analytics", href: "/analytics", icon: <AnalyticsIcon /> },
     { name: "Uptime", href: "/uptime", icon: <UptimeIcon /> },
+    { name: "Errors", href: "/errors", icon: <ErrorIcon /> },
     { name: "Deployments", href: "/deployments", icon: <DeploymentsIcon /> },
     { name: "Billing", href: "/billing", icon: <BillingIcon /> },
 ];
