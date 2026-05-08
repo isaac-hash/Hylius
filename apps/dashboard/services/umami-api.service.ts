@@ -113,12 +113,16 @@ export async function umamiGetStats(
     });
     if (!res.ok) throw new Error(`Umami getStats failed (${res.status})`);
     const data = await res.json();
+    // Umami v2 returns nested { value, change } objects per metric.
+    // Fallback to raw number for forward-compat with any future schema change.
+    const extract = (field: any): number =>
+        typeof field === 'object' && field !== null ? (field.value ?? 0) : (field ?? 0);
     return {
-        pageviews: data.pageviews ?? 0,
-        visitors: data.visitors ?? 0,
-        visits: data.visits ?? 0,
-        bounces: data.bounces ?? 0,
-        totaltime: data.totaltime ?? 0,
+        pageviews: extract(data.pageviews),
+        visitors: extract(data.visitors),
+        visits: extract(data.visits),
+        bounces: extract(data.bounces),
+        totaltime: extract(data.totaltime),
     };
 }
 

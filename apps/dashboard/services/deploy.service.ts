@@ -155,7 +155,8 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         }
     }
 
-    let envVars: Record<string, string> | undefined = undefined;
+
+    let envVars: Record<string, string> = {};
     if (project.envVars) {
         try {
             envVars = JSON.parse(project.envVars as string);
@@ -165,9 +166,23 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
     }
 
     let dockerComposeYaml: string | undefined = undefined;
-    if (envVars && envVars['_HYLIUS_TEMPLATE_COMPOSE_']) {
+    if (envVars['_HYLIUS_TEMPLATE_COMPOSE_']) {
         dockerComposeYaml = envVars['_HYLIUS_TEMPLATE_COMPOSE_'];
         delete envVars['_HYLIUS_TEMPLATE_COMPOSE_'];
+    }
+
+    // Inject analytics env vars BEFORE building projectConfig so that
+    // projectConfig.env and envVars are always the same object reference.
+    let analyticsScript = '';
+    const analyticsSiteId = (project as any).trafficAnalyticsSiteId as string | null;
+    const analyticsUmamiUrl = (project.server as any).trafficAnalyticsUrl as string | null;
+    if (analyticsSiteId && analyticsUmamiUrl && !isPreview) {
+        const useRelative = project.domains && project.domains.length > 0;
+        const scriptSrc = useRelative ? '/_umami/script.js' : `${analyticsUmamiUrl}/script.js`;
+        const scriptUrl = useRelative ? '/_umami' : analyticsUmamiUrl;
+        envVars['NEXT_PUBLIC_UMAMI_SITE_ID'] = analyticsSiteId;
+        envVars['NEXT_PUBLIC_UMAMI_URL'] = scriptUrl;
+        analyticsScript = `<script defer src="${scriptSrc}" data-website-id="${analyticsSiteId}"></script>`;
     }
 
     const projectConfig: ProjectConfig = {
@@ -180,30 +195,12 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
         // 'dagger' strategy produces a GHCR image just like 'ghcr-pull' — VPS behavior is identical
         deployStrategy: (project.deployStrategy === 'dagger' ? 'ghcr-pull' : project.deployStrategy as any) || 'auto',
         ghcrImage: project.ghcrImage || undefined,
-        env: envVars || {},
+        env: envVars,
         environment: isPreview ? 'PREVIEW' : 'PRODUCTION',
         previewId: isPreview ? `pr-${prNumber}` : undefined,
-        dockerComposeYaml, // Passed to core
+        dockerComposeYaml,
         containerName: (project as any).containerName || undefined,
-        analyticsScript: (() => {
-            const siteId = (project as any).trafficAnalyticsSiteId as string | null;
-            const umamiUrl = (project.server as any).trafficAnalyticsUrl as string | null;
-            if (siteId && umamiUrl && !isPreview) {
-                // Also inject natively into env for frameworks that support it
-                if (!envVars) envVars = {};
-                envVars['NEXT_PUBLIC_UMAMI_SITE_ID'] = siteId;
-                
-                // Use relative path for projects with domains (routed via Caddy proxy)
-                // Fallback to absolute HTTP URL for direct IP access
-                const useRelative = project.domains && project.domains.length > 0;
-                const scriptSrc = useRelative ? '/_umami/script.js' : `${umamiUrl}/script.js`;
-                const scriptUrl = useRelative ? '/_umami' : umamiUrl;
-                
-                envVars['NEXT_PUBLIC_UMAMI_URL'] = scriptUrl;
-                return `<script defer src="${scriptSrc}" data-website-id="${siteId}"></script>`;
-            }
-            return '';
-        })(),
+        analyticsScript,
     } as any;
 
     // Auto-inject URL environment variables
