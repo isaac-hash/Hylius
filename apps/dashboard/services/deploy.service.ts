@@ -433,6 +433,47 @@ async function _executeDeploymentInternal(options: DeployServiceOptions): Promis
             serverId: project.serverId,
             projectId: project.id,
         });
+    } else if (!isPreview && (project.server as any).hasUptimeMonitoring) {
+        // Auto-create or update UptimeMonitor for successful production deployments
+        try {
+            const monitorName = `${project.name} Production`;
+            let endpoint = result.url || '';
+            if (!endpoint && project.domains.length > 0) {
+                endpoint = `https://${project.domains[0].hostname}`;
+            } else if (!endpoint) {
+                endpoint = `http://${project.server.ip}:${projectConfig.env!['PORT'] || '3000'}`;
+            }
+
+            let monitor = await prisma.uptimeMonitor.findUnique({
+                where: { projectId: project.id }
+            });
+
+            if (!monitor) {
+                monitor = await prisma.uptimeMonitor.create({
+                    data: {
+                        name: monitorName,
+                        endpoint,
+                        type: 'HTTP',
+                        interval: 30,
+                        autoHeal: true,
+                        serverId: project.serverId,
+                        projectId: project.id,
+                    }
+                });
+                log(`\n[Uptime] Auto-created Uptime Monitor for ${project.name}\n`);
+            } else if (monitor.endpoint !== endpoint) {
+                monitor = await prisma.uptimeMonitor.update({
+                    where: { id: monitor.id },
+                    data: { endpoint }
+                });
+            }
+
+            const { UptimeService } = await import('./uptime.service');
+            const containerName = projectConfig.containerName || `${project.name}-app`;
+            await UptimeService.syncMonitorToAgent(project.serverId, monitor, containerName);
+        } catch (uptimeErr: any) {
+            log(`\n[Uptime] Warning: Could not configure Uptime Monitor: ${uptimeErr.message}\n`);
+        }
     }
 
     return { ...result, deploymentId: deployment.id };

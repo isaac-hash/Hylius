@@ -23,7 +23,7 @@ export async function POST(request: Request) {
             select: { plan: true },
         });
 
-        if (!org || org.plan === 'FREE') {
+        if (!org || (org.plan === 'FREE' && auth.role !== 'PLATFORM_ADMIN')) {
             return NextResponse.json(
                 { error: 'This feature requires a paid plan. Please upgrade to Pro.' },
                 { status: 403 },
@@ -82,6 +82,41 @@ export async function POST(request: Request) {
                 });
 
                 return NextResponse.json({ success: true, feature: 'pagespeed' });
+            }
+
+            case 'uptime': {
+                if (!serverId) {
+                    return NextResponse.json({ error: 'serverId is required for Uptime Monitoring installation' }, { status: 400 });
+                }
+
+                // Verify ownership
+                const server = await prisma.server.findFirst({
+                    where: { id: serverId, organizationId: auth.organizationId },
+                });
+
+                if (!server) {
+                    return NextResponse.json({ error: 'Server not found' }, { status: 404 });
+                }
+
+                if (server.hasUptimeMonitoring) {
+                    return NextResponse.json({ error: 'Uptime Monitoring is already enabled on this server' }, { status: 409 });
+                }
+
+                await prisma.server.update({
+                    where: { id: serverId },
+                    data: { hasUptimeMonitoring: true }
+                });
+
+                await prisma.auditLog.create({
+                    data: {
+                        action: 'FEATURE_INSTALLED',
+                        organizationId: auth.organizationId,
+                        userId: auth.userId,
+                        metadata: JSON.stringify({ featureId, serverId }),
+                    },
+                });
+
+                return NextResponse.json({ success: true, feature: 'uptime', serverId });
             }
 
             default:

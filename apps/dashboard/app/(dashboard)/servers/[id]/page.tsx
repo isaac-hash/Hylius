@@ -609,12 +609,29 @@ export default function ServerDetailsPage({ params }: { params: Promise<{ id: st
                                     />
 
                                     {/* Live Server Metrics — agent push or SSH poll depending on mode */}
-                                    <ServerMetrics
-                                        serverId={id as string}
-                                        token={token || ''}
-                                        initialMetrics={server.metrics?.[0] || null}
-                                        connectionMode={server.connectionMode}
-                                    />
+                                    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                                        <div className="flex items-center justify-between px-5 pt-4 pb-0">
+                                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                                                Live Metrics
+                                            </h3>
+                                            <Link
+                                                href={`/servers/${id}/metrics`}
+                                                className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                                            >
+                                                View Detailed Metrics
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </Link>
+                                        </div>
+                                        <ServerMetrics
+                                            serverId={id as string}
+                                            token={token || ''}
+                                            initialMetrics={server.metrics?.[0] || null}
+                                            connectionMode={server.connectionMode}
+                                        />
+                                    </div>
+
 
 
                                     {/* Recent Deployments across all projects on this server */}

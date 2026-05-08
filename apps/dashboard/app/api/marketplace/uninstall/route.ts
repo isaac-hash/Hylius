@@ -67,6 +67,50 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: true, feature: 'pagespeed' });
             }
 
+            case 'uptime': {
+                if (!serverId) {
+                    return NextResponse.json({ error: 'serverId is required' }, { status: 400 });
+                }
+
+                // Verify ownership
+                const server = await prisma.server.findFirst({
+                    where: { id: serverId, organizationId: auth.organizationId },
+                });
+
+                if (!server) {
+                    return NextResponse.json({ error: 'Server not found' }, { status: 404 });
+                }
+
+                if (!server.hasUptimeMonitoring) {
+                    return NextResponse.json({ error: 'Uptime Monitoring is not installed on this server' }, { status: 409 });
+                }
+
+                // Remove all monitors from DB and stop them on Agent
+                const { UptimeService } = await import('../../../../services/uptime.service');
+                const monitors = await prisma.uptimeMonitor.findMany({ where: { serverId } });
+                for (const monitor of monitors) {
+                    await UptimeService.stopMonitorOnAgent(serverId, monitor.id);
+                }
+                
+                await prisma.uptimeMonitor.deleteMany({ where: { serverId } });
+
+                await prisma.server.update({
+                    where: { id: serverId },
+                    data: { hasUptimeMonitoring: false }
+                });
+
+                await prisma.auditLog.create({
+                    data: {
+                        action: 'FEATURE_UNINSTALLED',
+                        organizationId: auth.organizationId,
+                        userId: auth.userId,
+                        metadata: JSON.stringify({ featureId, serverId }),
+                    },
+                });
+
+                return NextResponse.json({ success: true, feature: 'uptime', serverId });
+            }
+
             default:
                 return NextResponse.json({ error: `Unknown feature: ${featureId}` }, { status: 400 });
         }

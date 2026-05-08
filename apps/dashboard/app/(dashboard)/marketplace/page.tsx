@@ -71,19 +71,18 @@ const FEATURES: Feature[] = [
         gradient: "from-amber-600/20 via-orange-600/10 to-yellow-600/5",
         borderGlow: "hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)]",
         requiresMinRam: false,
-        comingSoon: true,
     },
 ];
 
 export default function MarketplacePage() {
-    const { token, organization } = useAuth();
-    const isFreePlan = !organization?.plan || organization.plan === "FREE";
+    const { token, organization, user } = useAuth();
+    const isFreePlan = (!organization?.plan || organization.plan === "FREE") && user?.role !== "PLATFORM_ADMIN";
 
     const [installModal, setInstallModal] = useState<{ open: boolean; feature: Feature | null }>({ open: false, feature: null });
     const [installing, setInstalling] = useState(false);
     const [uninstalling, setUninstalling] = useState<string | null>(null);
     const [deployingFeatures, setDeployingFeatures] = useState<string[]>([]);
-    const [servers, setServers] = useState<{ id: string; name: string; hasTrafficAnalytics: boolean }[]>([]);
+    const [servers, setServers] = useState<{ id: string; name: string; hasTrafficAnalytics: boolean; hasUptimeMonitoring: boolean }[]>([]);
     const [selectedServerId, setSelectedServerId] = useState<string>("");
 
     const refreshServers = (authToken: string) =>
@@ -102,11 +101,11 @@ export default function MarketplacePage() {
         if (!token || deployingFeatures.length === 0) return;
         const interval = setInterval(() => {
             refreshServers(token).then(() => {
-                // If the selected server now has analytics, deployment succeeded
                 setServers(current => {
                     const srv = current.find(s => s.id === selectedServerId);
-                    if (srv?.hasTrafficAnalytics) {
-                        setDeployingFeatures(prev => prev.filter(f => f !== 'umami'));
+                    if (srv) {
+                        if (srv.hasTrafficAnalytics) setDeployingFeatures(prev => prev.filter(f => f !== 'umami'));
+                        if (srv.hasUptimeMonitoring) setDeployingFeatures(prev => prev.filter(f => f !== 'uptime'));
                     }
                     return current;
                 });
@@ -117,7 +116,9 @@ export default function MarketplacePage() {
 
     // Derived: which features are installed on the currently-selected server
     const selectedServer = servers.find((s) => s.id === selectedServerId);
-    const installedFeatures: string[] = selectedServer?.hasTrafficAnalytics ? ["umami"] : [];
+    const installedFeatures: string[] = [];
+    if (selectedServer?.hasTrafficAnalytics) installedFeatures.push("umami");
+    if (selectedServer?.hasUptimeMonitoring) installedFeatures.push("uptime");
 
     const handleInstallClick = (feature: Feature) => {
         if (isFreePlan || feature.comingSoon) return;

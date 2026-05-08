@@ -79,12 +79,19 @@ const AnalyticsIcon = () => (
     </svg>
 );
 
+const UptimeIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </svg>
+);
+
 const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: <DashboardIcon /> },
     { name: "Stacks", href: "/stacks", icon: <StacksIcon /> },
     { name: "Templates", href: "/dashboard/templates", icon: <TemplatesIcon />, badge: "✨" },
     { name: "Marketplace", href: "/marketplace", icon: <MarketplaceIcon />, badge: "NEW" },
     { name: "Analytics", href: "/analytics", icon: <AnalyticsIcon /> },
+    { name: "Uptime", href: "/uptime", icon: <UptimeIcon /> },
     { name: "Deployments", href: "/deployments", icon: <DeploymentsIcon /> },
     { name: "Billing", href: "/billing", icon: <BillingIcon /> },
 ];

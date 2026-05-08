@@ -3,6 +3,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { PrismaClient } from '@prisma/client';
 import { AlertService } from './alert.service';
+import { UptimeService } from './uptime.service';
 
 const prisma = new PrismaClient();
 
@@ -24,6 +25,7 @@ interface AgentMessage {
     disk?: number;
     uptime?: number;
     version?: string;
+    uptimeMonitors?: Record<string, string>;
 }
 
 interface PendingCommand {
@@ -91,11 +93,28 @@ class AgentGatewayService {
                         } as any,
                     }).catch(() => {}); // silently ignore if fields don't exist yet
 
+                    // Sync uptime monitors on connect
+                    await UptimeService.syncAllMonitorsForServer(agent.serverId).catch(console.error);
+
                     console.log(`[AgentGateway] Agent authenticated: server ${server.id} (v${msg.version})`);
                     return;
                 }
 
                 if (!agent) return; // Ignore messages before auth
+
+                // ─── Uptime Incident ──────────────────────────────────────
+                if (msg.type === 'uptime_incident') {
+                    const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+                    if (payload && payload.monitorId && payload.status) {
+                        await UptimeService.handleIncident(
+                            payload.monitorId,
+                            payload.status,
+                            payload.error || '',
+                            payload.autoHealed || false
+                        ).catch(console.error);
+                    }
+                    return;
+                }
 
                 // ─── Heartbeat ────────────────────────────────────────────
                 if (msg.type === 'heartbeat') {
@@ -103,6 +122,37 @@ class AgentGatewayService {
                         where: { id: agent.serverId },
                         data: { lastHeartbeatAt: new Date(), status: 'ONLINE' } as any,
                     }).catch(() => {});
+
+                    // Persist snapshot to Metric table for historical charts (Option A)
+                    if (msg.cpu !== undefined && msg.memory !== undefined && msg.disk !== undefined) {
+                        prisma.metric.create({
+                            data: {
+                                serverId: agent.serverId,
+                                cpu: msg.cpu ?? 0,
+                                memory: msg.memory ?? 0,
+                                disk: msg.disk ?? 0,
+                                uptime: msg.uptime ?? 0,
+                            },
+                        }).catch(() => {});
+
+                        // Prune snapshots older than 24h to avoid unbounded growth.
+                        // Hourly aggregates for longer history can be added in a separate cron.
+                        const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                        prisma.metric.deleteMany({
+                            where: { serverId: agent.serverId, createdAt: { lt: cutoff } },
+                        }).catch(() => {});
+                    }
+
+                    // Sync monitor statuses from agent payload
+                    if (msg.uptimeMonitors && typeof msg.uptimeMonitors === 'object') {
+                        const statuses = msg.uptimeMonitors as Record<string, string>;
+                        for (const [monitorId, status] of Object.entries(statuses)) {
+                            (prisma as any).uptimeMonitor.update({
+                                where: { id: monitorId },
+                                data: { status }
+                            }).catch(() => {}); // silently ignore if missing
+                        }
+                    }
 
                     // Broadcast live metrics to any dashboard clients watching this server
                     const io = (global as any).io;

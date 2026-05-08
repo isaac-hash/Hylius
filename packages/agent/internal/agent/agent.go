@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/Hylius-org/hylius-agent/internal/config"
 	"github.com/Hylius-org/hylius-agent/internal/metrics"
+	"github.com/Hylius-org/hylius-agent/internal/uptime"
 )
 
 // Message is the top-level envelope for all WebSocket messages
@@ -32,28 +33,45 @@ type Message struct {
 	Disk     float64 `json:"disk"`
 	Uptime   int64   `json:"uptime"`
 	Version  string  `json:"version,omitempty"`
+	UptimeMonitors map[string]string `json:"uptimeMonitors,omitempty"`
 }
 
 // Agent is the main coordinator
 type Agent struct {
-	cfg     *config.Config
-	version string
-	conn    *websocket.Conn
-	send    chan Message
-	stop    chan struct{}
+	cfg           *config.Config
+	version       string
+	conn          *websocket.Conn
+	send          chan Message
+	stop          chan struct{}
+	uptimeChecker *uptime.Checker
 	// active streaming cancels: commandId → cancel func
 	streams   map[string]func()
 	streamsMu sync.Mutex
 }
 
 func New(cfg *config.Config, version string) *Agent {
-	return &Agent{
+	a := &Agent{
 		cfg:     cfg,
 		version: version,
 		send:    make(chan Message, 256),
 		stop:    make(chan struct{}),
 		streams: make(map[string]func()),
 	}
+
+	a.uptimeChecker = uptime.NewChecker(func(monitorID, status, errorMessage string, autoHealed bool) {
+		payload, _ := json.Marshal(map[string]interface{}{
+			"monitorId":  monitorID,
+			"status":     status,
+			"error":      errorMessage,
+			"autoHealed": autoHealed,
+		})
+		a.send <- Message{
+			Type:    "uptime_incident",
+			Payload: payload,
+		}
+	})
+
+	return a
 }
 
 func (a *Agent) Run() {
@@ -143,13 +161,14 @@ func (a *Agent) sendHeartbeat() {
 		m = &metrics.Snapshot{}
 	}
 	a.send <- Message{
-		Type:     "heartbeat",
-		ServerID: a.cfg.ServerID,
-		CPU:      m.CPU,
-		Memory:   m.Memory,
-		Disk:     m.Disk,
-		Uptime:   m.Uptime,
-		Version:  a.version,
+		Type:           "heartbeat",
+		ServerID:       a.cfg.ServerID,
+		CPU:            m.CPU,
+		Memory:         m.Memory,
+		Disk:           m.Disk,
+		Uptime:         m.Uptime,
+		Version:        a.version,
+		UptimeMonitors: a.uptimeChecker.GetStatuses(),
 	}
 }
 
@@ -206,9 +225,35 @@ func (a *Agent) dispatch(msg Message) {
 		a.handleDestroyDB(msg)
 	case "configure-caddy":
 		a.handleConfigureCaddy(msg)
+	case "start-uptime":
+		a.handleStartUptime(msg)
+	case "stop-uptime":
+		a.handleStopUptime(msg)
 	default:
 		a.sendError(msg.CommandID, "unknown action: "+msg.Action)
 	}
+}
+
+func (a *Agent) handleStartUptime(msg Message) {
+	var m uptime.Monitor
+	if err := json.Unmarshal(msg.Payload, &m); err != nil {
+		a.sendError(msg.CommandID, "invalid payload: "+err.Error())
+		return
+	}
+	a.uptimeChecker.StartMonitor(m)
+	a.sendDone(msg.CommandID, 0)
+}
+
+func (a *Agent) handleStopUptime(msg Message) {
+	var payload struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		a.sendError(msg.CommandID, "invalid payload: "+err.Error())
+		return
+	}
+	a.uptimeChecker.StopMonitor(payload.ID)
+	a.sendDone(msg.CommandID, 0)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
