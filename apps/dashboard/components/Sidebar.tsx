@@ -212,8 +212,56 @@ export default function Sidebar({
                     )}
                 </nav>
 
+                {/* Mascot Animation */}
+                <div className={`mt-auto px-4 pb-4 flex justify-center ${isCollapsed ? "md:hidden" : ""}`}>
+                    <div className="relative group cursor-pointer">
+                        <style dangerouslySetInnerHTML={{__html: `
+                            @keyframes bot-float {
+                                0%, 100% { transform: translateY(0); }
+                                50% { transform: translateY(-5px); }
+                            }
+                            @keyframes bot-blink {
+                                0%, 48%, 52%, 100% { transform: scaleY(1); }
+                                50% { transform: scaleY(0.1); }
+                            }
+                            @keyframes bot-antenna {
+                                0%, 100% { transform: rotate(0deg); }
+                                25% { transform: rotate(10deg); }
+                                75% { transform: rotate(-10deg); }
+                            }
+                        `}} />
+                        <svg width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ animation: 'bot-float 3s ease-in-out infinite' }}>
+                            {/* Body */}
+                            <rect x="16" y="24" width="32" height="28" rx="6" fill="#1e293b" stroke="#475569" strokeWidth="2"/>
+                            {/* Face Screen */}
+                            <rect x="20" y="28" width="24" height="14" rx="3" fill="#0f172a" />
+                            {/* Eyes (Blinking) */}
+                            <g style={{ animation: 'bot-blink 4s infinite', transformOrigin: '50% 35px' }}>
+                                <rect x="24" y="32" width="4" height="4" rx="1" fill="#3b82f6" />
+                                <rect x="36" y="32" width="4" height="4" rx="1" fill="#3b82f6" />
+                            </g>
+                            {/* Smile */}
+                            <path d="M28 38 Q32 40 36 38" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" fill="none" />
+                            {/* Antenna */}
+                            <g style={{ animation: 'bot-antenna 2s ease-in-out infinite', transformOrigin: '32px 24px' }}>
+                                <line x1="32" y1="24" x2="32" y2="12" stroke="#475569" strokeWidth="2" strokeLinecap="round"/>
+                                <circle cx="32" cy="10" r="3" fill="#3b82f6" />
+                            </g>
+                            {/* Legs */}
+                            <line x1="24" y1="52" x2="24" y2="58" stroke="#475569" strokeWidth="2" strokeLinecap="round"/>
+                            <line x1="40" y1="52" x2="40" y2="58" stroke="#475569" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-3 py-1.5 bg-gray-800 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-gray-700 shadow-xl z-50">
+                            All systems nominal! 🚀
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-800"></div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* User Profile / Logout */}
-                <div className="p-4 mt-auto border-t border-white/5">
+                <div className="p-4 border-t border-white/5">
                     <div className={`flex items-center gap-3 px-2 py-3 rounded-2xl ${isCollapsed ? "md:justify-center" : "bg-white/5"}`}>
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center font-bold text-xs shrink-0">
                             {user?.email?.[0].toUpperCase()}
