@@ -6,41 +6,14 @@ interface GlitchtipAuth {
 
 export class GlitchtipApiService {
     
-    private static async getAuthToken(server: any): Promise<string> {
+    private static async request(server: any, endpoint: string, method = 'GET', body?: any) {
         if (!server.errorTrackingUrl || !server.errorTrackingToken) {
             throw new Error('Error tracking not configured for server');
         }
-        
-        // GlitchTip uses the Sentry API format
-        // The token is actually our admin password. Let's get an auth token if needed,
-        // or just use basic auth if the API accepts it.
-        // Actually, let's login to get a session/token.
-        const res = await fetch(`${server.errorTrackingUrl}/api/0/auth/login/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: 'admin@hylius.icu',
-                password: server.errorTrackingToken
-            })
-        });
 
-        if (!res.ok) {
-            throw new Error('Failed to authenticate with GlitchTip API');
-        }
-
-        const data = await res.json();
-        // Return the token if available, else we might need to rely on cookies
-        // Let's assume GlitchTip provides an auth token or we can use Basic Auth.
-        // For simplicity, we'll try to use the user token returned or fallback to Basic Auth.
-        return data.token || Buffer.from(`admin@hylius.icu:${server.errorTrackingToken}`).toString('base64');
-    }
-
-    private static async request(server: any, endpoint: string, method = 'GET', body?: any) {
-        const auth = await this.getAuthToken(server);
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
-            // If it's a base64 string, it's Basic, else Bearer
-            'Authorization': auth.length > 100 ? `Bearer ${auth}` : `Basic ${auth}`
+            'Authorization': `Bearer ${server.errorTrackingToken}`
         };
 
         const res = await fetch(`${server.errorTrackingUrl}/api/0${endpoint}`, {
