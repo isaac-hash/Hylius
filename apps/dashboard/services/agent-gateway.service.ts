@@ -39,11 +39,11 @@ interface ConnectedAgent {
     serverId: string;
     organizationId: string;
     version?: string;
-    pendingCommands: Map<string, PendingCommand>;
 }
 
 class AgentGatewayService {
     private agents = new Map<string, ConnectedAgent>();
+    private serverPendingCommands = new Map<string, Map<string, PendingCommand>>();
     private wss: WebSocketServer | null = null;
 
     attach(wss: WebSocketServer) {
@@ -78,9 +78,12 @@ class AgentGatewayService {
                         serverId: server.id,
                         organizationId: server.organizationId,
                         version: msg.version,
-                        pendingCommands: new Map(),
                     };
                     this.agents.set(server.id, agent);
+                    
+                    if (!this.serverPendingCommands.has(server.id)) {
+                        this.serverPendingCommands.set(server.id, new Map());
+                    }
 
                     // Mark server online
                     await prisma.server.update({
@@ -188,17 +191,20 @@ class AgentGatewayService {
                 }
 
                 // ─── Command results ──────────────────────────────────────
-                if (!msg.commandId || !agent.pendingCommands.has(msg.commandId)) return;
-                const pending = agent.pendingCommands.get(msg.commandId)!;
+                if (!msg.commandId) return;
+                const pendingCmds = this.serverPendingCommands.get(agent.serverId);
+                if (!pendingCmds || !pendingCmds.has(msg.commandId)) return;
+                
+                const pending = pendingCmds.get(msg.commandId)!;
 
                 if (msg.type === 'command_result' && msg.data) {
                     pending.onChunk?.(msg.data);
                 } else if (msg.type === 'command_done') {
                     pending.onDone?.(msg.exitCode ?? 0, msg.data);
-                    agent.pendingCommands.delete(msg.commandId);
+                    pendingCmds.delete(msg.commandId);
                 } else if (msg.type === 'command_error') {
                     pending.onError?.(msg.error ?? 'Unknown error');
-                    agent.pendingCommands.delete(msg.commandId);
+                    pendingCmds.delete(msg.commandId);
                 }
             });
 
@@ -234,7 +240,12 @@ class AgentGatewayService {
                 return reject(new Error(`Agent for server ${serverId} is not connected`));
             }
             const commandId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-            agent.pendingCommands.set(commandId, {
+            let pendingCmds = this.serverPendingCommands.get(serverId);
+            if (!pendingCmds) {
+                pendingCmds = new Map();
+                this.serverPendingCommands.set(serverId, pendingCmds);
+            }
+            pendingCmds.set(commandId, {
                 onDone: (_code, data) => resolve(data ? JSON.parse(data) : null),
                 onError: reject,
             });
@@ -257,7 +268,12 @@ class AgentGatewayService {
                 return reject(new Error(`Agent for server ${serverId} is not connected`));
             }
             const commandId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-            agent.pendingCommands.set(commandId, {
+            let pendingCmds = this.serverPendingCommands.get(serverId);
+            if (!pendingCmds) {
+                pendingCmds = new Map();
+                this.serverPendingCommands.set(serverId, pendingCmds);
+            }
+            pendingCmds.set(commandId, {
                 onChunk,
                 onDone: (exitCode, resultData) => resolve({ exitCode, resultData }),
                 onError: reject,

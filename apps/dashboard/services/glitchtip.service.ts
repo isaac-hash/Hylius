@@ -31,11 +31,13 @@ export class GlitchtipService {
         const domain = `errors-${server.ip.replace(/\./g, '-')}.nip.io`;
 
         // Dispatch to agent
+        console.log(`[GlitchTip Service] Sending install-glitchtip command to agent for server ${serverId}...`);
         await agentGateway.sendCommand(serverId, 'install-glitchtip', {
             domain,
             secretKey,
             adminPass
         });
+        console.log(`[GlitchTip Service] Command successful! Updating database for server ${serverId}...`);
 
         // Save to DB
         await prisma.server.update({
@@ -46,6 +48,7 @@ export class GlitchtipService {
                 errorTrackingToken: adminPass, // We store the admin pass to use for API calls
             }
         });
+        console.log(`[GlitchTip Service] Database updated successfully for server ${serverId}.`);
     }
 
     /**

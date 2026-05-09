@@ -66,7 +66,7 @@ services:
       PORT: 8000
       GLITCHTIP_DOMAIN: https://%s
       DEFAULT_FROM_EMAIL: hylius@%s
-      EMAIL_URL: console://
+      EMAIL_URL: consolemail://
     restart: unless-stopped
   worker:
     image: glitchtip/glitchtip:v4.0
