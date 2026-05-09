@@ -103,12 +103,32 @@ All for the same ₦13,500/month. On Render, that same stack would easily run �
 
 Most managed platforms — Render, Railway, Pxxl — give you a one-click database experience. Convenient, yes. But your database ends up on their infrastructure, in their region, at their price.
 
-With Hylius, one-click database provisioning deploys Postgres, Redis, or MongoDB(coming soon) directly onto your VPS as an orchestrated container. Your data never leaves your server. Backups go to storage you control. And there's no separate database line item — it runs on the same VPS you're already paying for.
+With Hylius, one-click database provisioning deploys PostgreSQL or Redis directly onto your VPS as an orchestrated container. Your data never leaves your server. Backups go to storage you control. And there's no separate database line item — it runs on the same VPS you're already paying for.
+
+Even better, Hylius manages the networking for you. When you link a database to a project, Hylius automatically securely injects the `DATABASE_URL` and `REDIS_URL` into your project's environment variables at runtime. It just works.
 
 <!-- SCREENSHOT: Add the Hylius database provisioning screen / one-click DB setup UI here -->
 ![Hylius dashboard showing database provisioning screen / one-click DB setup UI](/blog/blog-db-prov.png)
 
 For Nigerian businesses with data residency concerns — especially fintechs, health apps, and anything handling user PII — this matters beyond just cost.
+
+---
+
+## Built-in Observability (Without the Sentry/Vercel Premium)
+
+The hidden cost of scaling isn't just compute—it's observability. Vercel Analytics costs $14/month per 25k events. Sentry charges a premium the moment your app gets traction.
+
+Hylius flips this model with the **Hylius Marketplace**. 
+From your dashboard, you can 1-click install open-source observability platforms directly onto your server:
+
+1. **Traffic Analytics (Umami):** A privacy-friendly Google Analytics alternative.
+2. **Error Tracking (GlitchTip):** A 100% Sentry API-compatible error tracking backend.
+
+Once installed, Hylius natively integrates them into your deployment pipeline. Every time you deploy an app, Hylius automatically:
+- Injects the Umami tracking script into your website.
+- Generates a unique Sentry project DSN and auto-injects it into your backend environment variables as `SENTRY_DSN`.
+
+You get a full-fledged analytics and error tracking dashboard built directly into Hylius, hosted on your own metal, with absolutely zero usage limits.
 
 ---
 

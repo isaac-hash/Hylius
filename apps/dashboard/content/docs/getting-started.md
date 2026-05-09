@@ -8,10 +8,10 @@ Hylius is a self-hosted deployment platform that lets you deploy any application
 
 Hylius gives you two ways to deploy:
 
-- **Hylius Dashboard** — a web UI where you connect servers, import GitHub repos, trigger deploys, and manage env vars visually. The dashboard installs a lightweight **Hylius Agent** on your VPS to securely orchestrate deployments over WebSockets without requiring ongoing SSH access.
+- **Hylius Dashboard** — a web UI where you connect servers, deploy 1-click starter templates, import GitHub repos, trigger deploys, and install Marketplace addons like Traffic Analytics and Error Tracking. The dashboard installs a lightweight **Hylius Agent** on your VPS to securely orchestrate deployments over WebSockets without requiring ongoing SSH access.
 - **Hylius CLI** — a command-line tool for provisioning, deploying, and generating CI/CD pipelines. The CLI connects to your VPS directly over **SSH**.
 
-Regardless of the method, Hylius clones your repo, builds a Docker image (or uses Railpack if you have no Dockerfile), and runs it — with zero-downtime atomic deploys. Every deployment is versioned and symlink-swapped, so rollbacks are instant.
+Regardless of the method, Hylius handles the heavy lifting: it provisions managed databases, clones your repo, builds a Docker image (or uses Railpack if you have no Dockerfile), and runs it — with zero-downtime atomic deploys. Every deployment is versioned and symlink-swapped, so rollbacks are instant.
 
 ---
 
@@ -102,6 +102,8 @@ Hylius auto-detects your project type using [Railpack](https://railpack.com) and
 | **Go** | `go.mod` |
 | **Java** | `pom.xml` |
 | **Generic PHP** | `composer.json` |
+
+You can also bypass detection entirely by deploying one of our **1-click Templates** directly from the Dashboard. We offer pre-configured starter kits for Laravel + Postgres, Next.js + Redis, and more.
 
 If Hylius detects no framework, it will prompt Docker's built-in `docker init` command to guide configuration.
 

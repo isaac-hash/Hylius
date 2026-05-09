@@ -20,6 +20,10 @@ The sidebar navigation includes:
 | Section | Description |
 |---------|-------------|
 | **Dashboard** | Your servers and projects overview |
+| **Templates** | 1-click deploy starter kits (Next.js, Laravel, etc.) |
+| **Marketplace** | Install platform-level addons like Analytics and Error Tracking |
+| **Traffic Analytics** | View visitor stats and pageviews across your domains |
+| **Error Tracking** | View and debug runtime exceptions in your deployed apps |
 | **Deployments** | Trigger deploys, view live logs, and browse history |
 | **Billing** | Manage your plan, payment methods, and invoices |
 
@@ -64,7 +68,7 @@ You only need to provision once per server.
 
 ## 2. Adding a Project
 
-Each project represents one application deployed to one server. You can add projects manually or import them directly from GitHub.
+Each project represents one application deployed to one server. You can add projects manually, import them directly from GitHub, or use a 1-click Template.
 
 ### Manual Mode
 
@@ -88,6 +92,16 @@ Select a repo and Hylius will auto-fill:
 - Repository URL (the git clone URL)
 - Branch (the default branch)
 - Deploy path (`/var/www/<repo-name>`)
+
+### Deploy from a Template
+
+Click the **Templates** link in the sidebar to browse our collection of official starter kits. Templates allow you to spin up fully-configured applications with zero setup.
+
+When you deploy a template (like "Laravel + Postgres" or "Next.js + Redis"):
+1. Hylius automatically clones the template repository.
+2. It provisions the required Managed Databases (e.g., PostgreSQL) on your server.
+3. It securely links the database to your new project and injects the necessary environment variables (`DATABASE_URL`, `REDIS_URL`, etc.).
+4. It triggers an immediate deployment.
 
 ### Deployment Strategy
 
@@ -161,7 +175,10 @@ Manage custom domains for your projects through the **Domain Manager**. Configur
 
 ### Databases
 
-The **Database Manager** lets you provision and manage databases for your projects.
+The **Database Manager** lets you provision and manage databases for your projects. You can deploy **PostgreSQL** or **Redis** with a single click.
+
+**Automatic Credential Injection:**
+When you link a Managed Database to a project in the dashboard, Hylius automatically manages the networking. During deployment, the dashboard securely injects the `DATABASE_URL` (or `REDIS_URL`) and associated connection variables directly into your project's container environment. Your code will automatically connect to the database via internal Docker networking without any manual `.env` file configuration!
 
 ### Monitoring & Metrics
 
@@ -177,7 +194,28 @@ View real-time container logs from any running project using the built-in **Proj
 
 ---
 
-## 5. GitHub Integration
+## 5. Marketplace & Observability
+
+The Hylius **Marketplace** allows you to install platform-level tools directly onto your VPS to supercharge your hosted applications. Currently, you can install:
+
+- **Traffic Analytics (Umami):** A privacy-friendly alternative to Google Analytics.
+- **Error Tracking (GlitchTip):** A 100% Sentry API-compatible error monitoring platform.
+
+### How it Works
+1. Navigate to the **Marketplace** in the sidebar.
+2. Click **Install** on a feature. Hylius will provision the necessary containers (like Umami or GlitchTip) directly on your VPS.
+3. Once installed, the feature is active for your server!
+
+### Zero-Config Integration
+When you deploy an application to a server that has Marketplace features installed, Hylius automatically wires them up:
+- **Traffic Analytics:** Hylius automatically injects the Umami tracking script (`<script defer ...>`) into your project's HTML responses, and the traffic data immediately appears in your **Analytics** tab.
+- **Error Tracking:** Hylius automatically registers your project in the GlitchTip database, retrieves a unique Sentry DSN, and injects it into your project's runtime environment as `SENTRY_DSN`. Any runtime exceptions thrown by your app will seamlessly appear in your **Errors** tab.
+
+The integration requires no personal access tokens — it uses the GitHub App's installation token, which is automatically managed.
+
+---
+
+## 6. GitHub Integration
 
 Hylius integrates with GitHub via a GitHub App. This enables:
 
@@ -196,7 +234,7 @@ The integration requires no personal access tokens — it uses the GitHub App's 
 
 ---
 
-## 6. API Tokens
+## 7. API Tokens
 
 The Dashboard provides an API token system for authenticating CI/CD pipelines and webhooks:
 

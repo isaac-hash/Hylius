@@ -135,4 +135,8 @@ Once provisioning is complete, you'll see:
 You can now deploy your apps using: hylius deploy
 ```
 
-Your server is now ready. Head to the [Deployment Guide](./deploying.md) to ship your first app.
+Your server is now ready. 
+
+**Pro Tip:** Before deploying your first app, head over to the **Marketplace** in the Dashboard to 1-click install platform-level tools like Traffic Analytics (Umami) and Error Tracking (GlitchTip) onto your new server. Any apps you deploy afterwards will automatically be integrated with them!
+
+Head to the [Deployment Guide](./deploying.md) to ship your first app.
