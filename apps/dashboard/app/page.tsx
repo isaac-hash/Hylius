@@ -40,8 +40,8 @@ export default function LandingPage() {
             <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? "glass py-3" : "py-6"}`}>
                 <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
                     <div className="flex items-center gap-2 group cursor-pointer">
-                        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold shadow-[0_0_20px_rgba(37,99,235,0.4)] group-hover:scale-110 transition-transform">
-                            <span className="text-xl">H</span>
+                        <div className="w-10 h-10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <img src="/Hylius-Logo-9.png" alt="Hylius Logo" className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]" />
                         </div>
                         <span className="font-display font-bold text-2xl tracking-tight">Hylius</span>
                     </div>
@@ -312,8 +312,8 @@ export default function LandingPage() {
             <footer className="py-20 border-t border-white/5">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:row items-center justify-between gap-8 md:flex-row">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold shadow-lg">
-                            <span className="text-lg">H</span>
+                        <div className="w-8 h-8 flex items-center justify-center">
+                            <img src="/Hylius-Logo-9.png" alt="Hylius Logo" className="w-full h-full object-contain" />
                         </div>
                         <span className="font-display font-bold text-xl tracking-tight">Hylius</span>
                     </div>

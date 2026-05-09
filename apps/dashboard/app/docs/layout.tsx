@@ -33,8 +33,8 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       {/* Logo */}
       <div className="p-5 border-b border-white/10">
         <Link href="/" className="flex items-center gap-3 text-white">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-base shadow-[0_0_20px_rgba(37,99,235,0.4)]">
-            H
+          <div className="w-8 h-8 flex items-center justify-center shrink-0">
+            <img src="/Hylius-Logo-9.png" alt="Hylius Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="font-bold text-sm leading-tight text-white mb-0.5 font-display">Hylius</div>

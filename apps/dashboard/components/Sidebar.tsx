@@ -136,8 +136,8 @@ export default function Sidebar({
                 {/* Logo Section */}
                 <div className="p-6 flex items-center justify-between mb-4">
                     <Link href="/" className="flex items-center gap-3 group">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold shadow-[0_0_15px_rgba(37,99,235,0.4)] group-hover:scale-105 transition-transform shrink-0">
-                            <span className="text-white text-lg">H</span>
+                        <div className="w-8 h-8 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                            <img src="/Hylius-Logo-9.png" alt="Hylius Logo" className="w-full h-full object-contain" />
                         </div>
                         <span className={`font-display font-bold text-xl tracking-tight animate-reveal ${isCollapsed ? "md:hidden" : "block"}`}>
                             Hylius
